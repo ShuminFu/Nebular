@@ -1,0 +1,5 @@
+/playground/.env
+/playground/BING_API_KEY.txt
+/playground/tmp/
+/Nebular-dev/.idea/
+.aider*
