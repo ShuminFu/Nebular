@@ -1,3 +1,6 @@
+"""
+To investigate directly calling LLM with openai packages (from azure)
+"""
 import os
 from openai import AzureOpenAI
 os.environ["AZURE_OPENAI_ENDPOINT"] = "https://azureai-codegen-prototype-aiservices2124583531.openai.azure.com/"

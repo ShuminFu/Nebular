@@ -1,4 +1,7 @@
 # path/filename: coffee_distribution_pulp.py
+"""
+Official example of using pulp by calling LLMs
+"""
 import pulp
 import time
 
