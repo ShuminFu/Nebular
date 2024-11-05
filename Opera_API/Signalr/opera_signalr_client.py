@@ -83,9 +83,10 @@ class OperaSignalRClient:
     async def connect(self):
         """建立SignalR连接"""
         try:
+            self.logger.debug("开始建立连接...")
             await self.client.run()
         except Exception as e:
-            self.logger.error(f"连接失败: {str(e)}")
+            self.logger.error(f"连接失败: {str(e)}", exc_info=True)
             raise
 
     async def set_bot_id(self, bot_id: UUID):
@@ -164,3 +165,23 @@ class OperaSignalRClient:
                     "MentionedStaffIds") else None
             )
             await self.callbacks["on_message_received"](msg_args)
+
+    # 在OperaSignalRClient类中添加重试机制
+    async def connect_with_retry(self, max_retries=3, retry_delay=5):
+        for attempt in range(max_retries):
+            try:
+                await self.connect()
+                return
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise
+                self.logger.error(f"连接失败，{retry_delay}秒后重试: {str(e)}")
+                await asyncio.sleep(retry_delay)
+
+    # 添加心跳检测
+    async def check_health(self):
+        while True:
+            if not self.client.connection.connected:
+                self.logger.warning("连接已断开，尝试重连")
+                await self.connect_with_retry()
+            await asyncio.sleep(30)  # 每30秒检查一次
