@@ -20,8 +20,9 @@ url = "https://mirrors.cloud.tencent.com/pypi/simple/"
 priority = "primary"
 
 
+
 [tool.poetry.group.dev.dependencies]
-promptflow-tracing = "^1.16.1"
+promptflow = "^1.16.1"
 
 [build-system]
 requires = ["poetry-core"]
