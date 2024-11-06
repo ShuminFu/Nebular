@@ -33,6 +33,32 @@ async def get_all_dialogues(opera_id: UUID):
     """
     pass
 
+@router.get("/{dialogue_index}", response_model=Dialogue)
+async def get_dialogue(opera_id: UUID, dialogue_index: int):
+    """
+    获取指定对话
+    
+    参数:
+        opera_id (UUID): Opera ID
+        dialogue_index (int): 对话索引
+        
+    返回:
+        Dialogue: 对话信息，包含:
+            - index (int): 对话索引
+            - time (datetime): 对话时间
+            - stage_index (int, optional): 场幕索引
+            - staff_id (UUID, optional): 职员ID
+            - is_narratage (bool): 是否为旁白
+            - is_whisper (bool): 是否为悄悄话
+            - text (str): 对话内容
+            - tags (str, optional): 标签
+            - mentioned_staff_ids (List[UUID], optional): 提到的职员ID列表
+            
+    错误:
+        404: 找不到指定的Opera或对话
+    """
+    pass
+
 @router.post("/Get", response_model=List[Dialogue])
 async def get_filtered_dialogues(opera_id: UUID, filter: Optional[DialogueForFilter] = None):
     """
@@ -65,11 +91,6 @@ async def get_filtered_dialogues(opera_id: UUID, filter: Optional[DialogueForFil
     错误:
         404: 找不到指定的Opera
     """
-    pass
-
-@router.get("/{dialogue_index}", response_model=Dialogue)
-async def get_dialogue(opera_id: UUID, dialogue_index: int):
-    """获取指定对话"""
     pass
 
 @router.post("/", response_model=Dialogue)

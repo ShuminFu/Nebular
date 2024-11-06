@@ -8,11 +8,11 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = ">=3.12, <3.13"
 fastapi = "^0.115.2"
-gradio = "^5.1.0"
 autogen = "^0.3.1"
 flaml = {extras = ["automl"], version = "^2.3.1"}
 pysignalr = "^1.0.0"
 loguru = "^0.7.2"
+uvicorn = "^0.32.0"
 
 [[tool.poetry.source]]
 name = "tencent"
@@ -25,6 +25,7 @@ priority = "primary"
 promptflow = "^1.16.1"
 pytest = "^8.3.3"
 pytest-asyncio = "^0.24.0"
+aider-chat = "^0.62.1"
 
 [build-system]
 requires = ["poetry-core"]

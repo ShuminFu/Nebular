@@ -150,11 +150,14 @@ async def get_staff_by_name(
 ):
     """
     获取指定Name的职员
-    
+
     参数:
         opera_id (UUID): Opera ID
         name (str): 职员Name
         is_on_stage (bool, optional): 当指定且为true时，只处理OnStage的职员
+
+    返回:
+        List[Staff]: 职员列表
     """
     pass
 
@@ -166,11 +169,14 @@ async def get_staff_by_name_like(
 ):
     """
     获取指定Name的职员（模糊匹配）
-    
+
     参数:
         opera_id (UUID): Opera ID
         name_like (str): 职员Name以Like方式匹配
         is_on_stage (bool, optional): 当指定且为true时，只处理OnStage的职员
+
+    返回:
+        List[Staff]: 职员列表
     """
     pass
 

@@ -10,13 +10,30 @@ router = APIRouter(
 
 @router.get("/", response_model=List[Resource])
 async def get_all_resources(opera_id: UUID):
-    """获取所有资源文件"""
+    """
+    获取所有资源文件
+    
+    参数:
+        opera_id (UUID): Opera ID
+        
+    返回:
+        List[Resource]: 资源列表，每个资源包含:
+            - id (UUID): 资源ID
+            - name (str): 资源名称
+            - description (str): 资源描述
+            - mime_type (str): MIME类型
+            - last_update_time (datetime): 最后更新时间
+            - last_update_staff_name (str): 最后更新者名称
+            
+    错误:
+        404: 找不到指定的Opera
+    """
     pass
 
 @router.post("/Get", response_model=List[Resource])
 async def get_filtered_resources(opera_id: UUID, filter: Optional[ResourceForFilter] = None):
     """
-    按条件获取资源文件
+    按条件获取资源文件列表
     
     参数:
         opera_id (UUID): Opera ID
@@ -31,7 +48,7 @@ async def get_filtered_resources(opera_id: UUID, filter: Optional[ResourceForFil
             - last_update_staff_name_like (str, optional): 模糊匹配最后更新者名称
             
     返回:
-        List[Resource]: 资源列表
+        List[Resource]: 符合条件的资源列表
     """
     pass
 
@@ -61,14 +78,8 @@ async def create_resource(opera_id: UUID, resource: ResourceForCreation):
             - temp_file_id (UUID): 临时文件ID
 
     返回:
-        Resource: 创建的资源信息，包含:
-            - id (UUID): 资源ID
-            - name (str): 资源名称
-            - description (str): 资源描述
-            - mime_type (str): MIME类型
-            - last_update_time (datetime): 最后更新时间
-            - last_update_staff_name (str): 最后更新者名称
-
+        Resource: 创建的资源信息
+        
     错误:
         404: 找不到指定的Opera
         400: 创建失败，可能原因:
@@ -89,7 +100,7 @@ async def download_resource(opera_id: UUID, resource_id: UUID):
         resource_id (UUID): 资源文件ID
         
     返回:
-        bytes: 文件流
+        bytes: 文件内容流
         
     错误:
         404: 找不到指定的Opera或资源文件
@@ -101,20 +112,23 @@ async def update_resource(opera_id: UUID, resource_id: UUID, resource: ResourceF
     """
     更新资源文件
     
-    注意: 如需更新资源文件，应先将文件上传为临时文件
+    注意:
+        如需更新资源文件内容，应先将文件上传为临时文件
 
     参数:
         opera_id (UUID): Opera ID
         resource_id (UUID): 资源ID
         resource (ResourceForUpdate): 资源更新信息
-            - name: 资源名称(可选)
-            - description: 资源描述(可选)
-            - mime_type: MIME类型(可选)
-            - last_update_staff_name: 最后更新者名称
-            - temp_file_id: 临时文件ID(可选)
+            - name (str, optional): 资源名称
+            - description (str, optional): 资源描述
+            - mime_type (str, optional): MIME类型
+            - last_update_staff_name (str): 最后更新者名称
+            - temp_file_id (UUID, optional): 临时文件ID
 
     返回:
         204: 更新成功
+        
+    错误:
         404: 找不到指定的Opera或资源
         400: 更新失败时返回错误信息
     """
@@ -134,5 +148,6 @@ async def delete_resource(opera_id: UUID, resource_id: UUID):
 
     错误:
         404: 找不到指定的Opera或资源文件
+        400: 删除失败时返回错误信息
     """
     pass

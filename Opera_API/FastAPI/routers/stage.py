@@ -17,7 +17,7 @@ async def get_all_stages(opera_id: UUID):
         opera_id (UUID): Opera ID
         
     返回:
-        List[Stage]: 场幕列表
+        List[Stage]: 场幕列表，每个场幕包含:
             - index (int): 场幕索引
             - name (str): 场幕名称
             

@@ -11,11 +11,11 @@ router = APIRouter(
 @router.post("/", response_model=TempFile)
 async def upload_temp_file(id: Optional[UUID] = None, file: bytes = Body(...)):
     """
-        上传临时文件
+    上传临时文件
 
     注意:
-    1. 临时文件目录在每次Opera启动时将被清空
-    2. 当临时文件被作为资源文件使用时，会被移出临时文件目录
+        1. 临时文件目录在每次Opera启动时将被清空
+        2. 当临时文件被作为资源文件使用时，会被移出临时文件目录
 
     参数:
         id (UUID, optional): 临时文件ID。指定时附加数据到已存在的临时文件，不指定时创建新文件
@@ -29,7 +29,7 @@ async def upload_temp_file(id: Optional[UUID] = None, file: bytes = Body(...)):
     错误:
         404: 指定的临时文件不存在
         400: 上传失败时返回错误信息
-        """
+    """
     pass
 
 @router.post("/{temp_file_id}", response_model=TempFile)
