@@ -4,37 +4,37 @@ from datetime import datetime
 from uuid import UUID
 from enum import IntEnum
 import json
-from pydantic.alias_generators import  to_camel,to_pascal, to_snake
+from pydantic.alias_generators import to_camel, to_pascal, to_snake
 
-# def to_camel(string: str) -> str:
-#     """将下划线命名转换为大驼峰命名"""
-#     words = string.split('_')
-#     return ''.join(word.capitalize() for word in words)
 
 class CamelBaseModel(BaseModel):
     """基础模型类，自动将所有字段转换为大驼峰（序列化时），小驼峰（验证构建时）"""
+
     class Config:
         alias_generator = AliasGenerator(
             validation_alias=lambda field_name: to_camel(field_name),
             serialization_alias=lambda field_name: to_pascal(field_name),
         )
         populate_by_name = True
-        
+
     def model_dump(self, **kwargs):
         """重写model_dump方法，确保UUID被正确序列化"""
+
         def convert_uuid(obj):
             if isinstance(obj, UUID):
                 return str(obj)
             return obj
-            
+
         data = super().model_dump(**kwargs)
         return {k: convert_uuid(v) for k, v in data.items()}
+
 
 # 维护状态枚举
 class MaintenanceState(IntEnum):
     NORMAL = 0
     CREATING = 1
     DELETING = 2
+
 
 # Bot相关模型
 class Bot(CamelBaseModel):
@@ -47,6 +47,7 @@ class Bot(CamelBaseModel):
     default_roles: Optional[str] = None
     default_permissions: Optional[str] = None
 
+
 class BotForCreation(CamelBaseModel):
     name: str
     description: Optional[str] = None
@@ -54,6 +55,7 @@ class BotForCreation(CamelBaseModel):
     default_tags: Optional[str] = None
     default_roles: Optional[str] = None
     default_permissions: Optional[str] = None
+
 
 class BotForUpdate(CamelBaseModel):
     name: Optional[str] = None
@@ -68,12 +70,13 @@ class BotForUpdate(CamelBaseModel):
     is_default_permissions_updated: bool
     default_permissions: Optional[str] = None
 
+
 # Opera相关模型
 class OperaBase(CamelBaseModel):
     """Opera基础模型，包含共同的字段"""
     name: str = Field(..., description="Opera名称")
     description: Optional[str] = Field(None, description="Opera描述")
-    
+
     @field_validator('name')
     @classmethod
     def name_not_empty(cls, v):
@@ -81,11 +84,12 @@ class OperaBase(CamelBaseModel):
             raise ValueError('名称不能为空')
         return v.strip()
 
+
 class OperaForCreation(OperaBase):
     """Opera创建请求模型"""
     parent_id: Optional[UUID] = Field(None, description="父Opera ID")
     database_name: Optional[str] = Field(None, description="数据库名称")
-    
+
     def model_dump(self, **kwargs):
         """重写model_dump方法，自动生成database_name"""
         data = super().model_dump(**kwargs)
@@ -105,18 +109,20 @@ class OperaForCreation(OperaBase):
             }
         }
 
+
 class OperaForUpdate(CamelBaseModel):
     """Opera更新请求模型"""
     name: Optional[str] = Field(None, description="Opera名称")
     is_description_updated: bool = Field(..., description="是否更新描述")
     description: Optional[str] = Field(None, description="Opera描述")
-    
+
     @field_validator('name')
     @classmethod
     def name_not_empty_if_present(cls, v):
         if v is not None and not v.strip():
             raise ValueError('如果提供名称，则不能为空')
         return v.strip() if v else v
+
 
 class Opera(OperaBase):
     """Opera响应模型"""
@@ -127,12 +133,14 @@ class Opera(OperaBase):
     class Config:
         from_attributes = True
 
+
 class OperaWithMaintenanceState(Opera):
     """带维护状态的Opera响应模型"""
     maintenance_state: MaintenanceState = Field(
         MaintenanceState.NORMAL,
         description="维护状态: 0=正常, 1=创建中, 2=删除中"
     )
+
 
 # Resource相关模型
 class Resource(CamelBaseModel):
@@ -143,6 +151,7 @@ class Resource(CamelBaseModel):
     last_update_time: datetime
     last_update_staff_name: str
 
+
 class ResourceForCreation(CamelBaseModel):
     name: str
     description: str
@@ -150,12 +159,14 @@ class ResourceForCreation(CamelBaseModel):
     last_update_staff_name: str
     temp_file_id: UUID
 
+
 class ResourceForUpdate(CamelBaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     mime_type: Optional[str] = None
     last_update_staff_name: str
     temp_file_id: Optional[UUID] = None
+
 
 class ResourceForFilter(CamelBaseModel):
     name: Optional[str] = None
@@ -166,6 +177,7 @@ class ResourceForFilter(CamelBaseModel):
     last_update_time_not_after: Optional[datetime] = None
     last_update_staff_name: Optional[str] = None
     last_update_staff_name_like: Optional[str] = None
+
 
 # Dialogue相关模型
 class Dialogue(CamelBaseModel):
@@ -179,6 +191,7 @@ class Dialogue(CamelBaseModel):
     tags: Optional[str] = None
     mentioned_staff_ids: Optional[List[UUID]] = None
 
+
 class DialogueForCreation(CamelBaseModel):
     is_stage_index_null: bool
     staff_id: Optional[UUID] = None
@@ -187,6 +200,7 @@ class DialogueForCreation(CamelBaseModel):
     text: str
     tags: Optional[str] = None
     mentioned_staff_ids: Optional[List[UUID]] = None
+
 
 class DialogueForFilter(CamelBaseModel):
     index_not_before: Optional[int] = None
@@ -198,11 +212,12 @@ class DialogueForFilter(CamelBaseModel):
     includes_for_staff_id_only: Optional[UUID] = None
     includes_staff_id_null: bool
 
+
 # Staff相关模型
 class JsonParameterModel(CamelBaseModel):
     """包含 JSON 参数字段的基础模型"""
     parameter: str = Field(..., description="参数 (JSON格式)")
-    
+
     @field_validator('parameter')
     @classmethod
     def validate_parameter(cls, v):
@@ -213,10 +228,11 @@ class JsonParameterModel(CamelBaseModel):
         except json.JSONDecodeError:
             raise ValueError("参数必须是有效的JSON格式")
 
+
 class OptionalJsonParameterModel(CamelBaseModel):
     """包含可选 JSON 参数字段的基础模型"""
     parameter: Optional[str] = Field(None, description="参数 (JSON格式)")
-    
+
     @field_validator('parameter')
     @classmethod
     def validate_parameter(cls, v):
@@ -226,6 +242,7 @@ class OptionalJsonParameterModel(CamelBaseModel):
             return v
         except json.JSONDecodeError:
             raise ValueError("参数必须是有效的JSON格式")
+
 
 class Staff(JsonParameterModel, CamelBaseModel):
     id: UUID
@@ -236,6 +253,7 @@ class Staff(JsonParameterModel, CamelBaseModel):
     roles: str
     permissions: str
 
+
 class StaffForCreation(JsonParameterModel, CamelBaseModel):
     bot_id: UUID
     name: str
@@ -244,8 +262,10 @@ class StaffForCreation(JsonParameterModel, CamelBaseModel):
     roles: str
     permissions: str
 
+
 class StaffForUpdate(OptionalJsonParameterModel, CamelBaseModel):
     is_on_stage: Optional[bool] = None
+
 
 class StaffForFilter(CamelBaseModel):
     """Staff筛选条件模型"""
@@ -263,6 +283,8 @@ class StaffForFilter(CamelBaseModel):
                 "isOnStage": True
             }
         }
+
+
 # StaffInvitation相关模型
 class StaffInvitation(JsonParameterModel, CamelBaseModel):
     id: UUID
@@ -271,11 +293,13 @@ class StaffInvitation(JsonParameterModel, CamelBaseModel):
     roles: str
     permissions: str
 
+
 class StaffInvitationForCreation(JsonParameterModel, CamelBaseModel):
     bot_id: UUID
     tags: str
     roles: str
     permissions: str
+
 
 class StaffInvitationForAcceptance(OptionalJsonParameterModel, CamelBaseModel):
     name: str
@@ -284,24 +308,28 @@ class StaffInvitationForAcceptance(OptionalJsonParameterModel, CamelBaseModel):
     roles: Optional[str] = None
     permissions: Optional[str] = None
 
+
 # Stage相关模型
 class Stage(CamelBaseModel):
     index: int
     name: str
 
+
 class StageForCreation(CamelBaseModel):
     name: str
+
 
 # TempFile相关模型
 class TempFile(CamelBaseModel):
     id: UUID
     length: int
 
+
 # Property相关模型
 class OperaProperty(CamelBaseModel):
     properties: Dict[str, str]
 
+
 class OperaPropertyForUpdate(CamelBaseModel):
     properties: Optional[Dict[str, str]] = None
-    properties_to_remove: Optional[List[str]] = None 
-
+    properties_to_remove: Optional[List[str]] = None

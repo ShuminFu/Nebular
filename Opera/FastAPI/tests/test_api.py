@@ -1,6 +1,4 @@
 import requests
-import uuid
-from datetime import datetime
 import pytest
 import json
 from models import (
@@ -14,10 +12,8 @@ from models import (
 
 BASE_URL = "http://opera.nti56.com"
 
+
 class TestOperaAPI:
-    def __init__(self):
-
-
     def setup_class(self):
         self.session = requests.Session()
         # 用于存储测试过程中创建的资源ID
@@ -154,8 +150,6 @@ class TestOperaAPI:
         response = self.session.put(url, json=data)
         assert response.status_code == 204
 
-
-
     def test_11_get_opera(self):
         """测试获取Opera详情"""
         url = f"{BASE_URL}/Opera/{self.test_opera_id}"
@@ -283,5 +277,7 @@ class TestOperaAPI:
             url = f"{BASE_URL}/Opera/{self.test_opera_id}"
             response = self.session.delete(url)
             assert response.status_code == 204
+
+
 if __name__ == "__main__":
-    pytest.main(["-v", "test_api.py"]) 
+    pytest.main(["-v", "test_api.py"])

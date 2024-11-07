@@ -8,6 +8,7 @@ router = APIRouter(
     tags=["Staff"]
 )
 
+
 @router.get("/", response_model=List[Staff])
 async def get_all_staff(opera_id: UUID):
     """
@@ -32,6 +33,7 @@ async def get_all_staff(opera_id: UUID):
     """
     pass
 
+
 @router.post("/Get", response_model=List[Staff])
 async def get_filtered_staff(opera_id: UUID, filter: Optional[StaffForFilter] = None):
     """
@@ -46,6 +48,7 @@ async def get_filtered_staff(opera_id: UUID, filter: Optional[StaffForFilter] = 
             - is_on_stage (bool, optional): 是否在台上
     """
     pass
+
 
 @router.get("/{staff_id}", response_model=Staff)
 async def get_staff(opera_id: UUID, staff_id: UUID):
@@ -72,6 +75,7 @@ async def get_staff(opera_id: UUID, staff_id: UUID):
     """
     pass
 
+
 @router.put("/{staff_id}", status_code=204)
 async def update_staff(opera_id: UUID, staff_id: UUID, staff: StaffForUpdate):
     """
@@ -93,6 +97,7 @@ async def update_staff(opera_id: UUID, staff_id: UUID, staff: StaffForUpdate):
     """
     pass
 
+
 @router.delete("/{staff_id}", status_code=204)
 async def delete_staff(opera_id: UUID, staff_id: UUID):
     """
@@ -110,6 +115,7 @@ async def delete_staff(opera_id: UUID, staff_id: UUID):
         400: 删除失败时返回错误信息
     """
     pass
+
 
 @router.get("/{staff_id}/Update")
 async def update_staff_by_get(
@@ -134,19 +140,20 @@ async def update_staff_by_get(
     """
     if not opera_id or not staff_id:
         raise HTTPException(status_code=404, detail="Opera或职员不存在")
-    
+
     # 如果没有需要更新的参数，返回304
     if is_on_stage is None and parameter is None:
         return HTTPException(status_code=304, detail="无需修改")
-    
+
     # 模拟更新成功
     return None
 
+
 @router.get("/ByName", response_model=List[Staff])
 async def get_staff_by_name(
-    opera_id: UUID,
-    name: str,
-    is_on_stage: Optional[bool] = None
+        opera_id: UUID,
+        name: str,
+        is_on_stage: Optional[bool] = None
 ):
     """
     获取指定Name的职员
@@ -161,11 +168,12 @@ async def get_staff_by_name(
     """
     pass
 
+
 @router.get("/ByNameLike", response_model=List[Staff])
 async def get_staff_by_name_like(
-    opera_id: UUID,
-    name_like: str,
-    is_on_stage: Optional[bool] = None
+        opera_id: UUID,
+        name_like: str,
+        is_on_stage: Optional[bool] = None
 ):
     """
     获取指定Name的职员（模糊匹配）
@@ -179,6 +187,7 @@ async def get_staff_by_name_like(
         List[Staff]: 职员列表
     """
     pass
+
 
 @router.post("/", response_model=Staff)
 async def create_staff(opera_id: UUID, staff: StaffForCreation):
