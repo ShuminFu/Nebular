@@ -1,6 +1,6 @@
 import autogen
 # please ensure you have a json config file
-env_or_file = "/home/shumin/PycharmProjects/Nebular/configs/OAI_COMPATIBLE_CFG.json"
+env_or_file = "/playground/configs/OAI_COMPATIBLE_CFG.json"
 
 # filters the configs by models (you can filter by other keys as well).
 config_list = autogen.config_list_from_json(
