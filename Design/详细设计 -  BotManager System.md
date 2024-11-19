@@ -219,3 +219,11 @@ class MessageSyncService:
                     await self.opera_client.batch_sync(batch)
             await asyncio.sleep(self.sync_interval)
 ```
+
+重构 见 [[详细设计V2]]
+
+- 核心层(core/)处理基础抽象和管理
+
+- 适配层(adapters/)处理不同框架的适配
+
+- 集成层(integration/)处理与外部系统的交互
