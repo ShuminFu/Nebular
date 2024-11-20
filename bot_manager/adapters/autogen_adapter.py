@@ -4,8 +4,21 @@ from bot_manager.core.interfaces import IBot, IBotAdapter
 
 class AutogenBotAdapter(IBotAdapter):
     async def adapt(self, config: Dict[str, Any]) -> IBot:
-        bot_type = config.get("bot_type", "assistant")
+        # 从配置文件加载 LLM 配置
+        config_list = autogen.config_list_from_json(
+            "config/OAI_COMPATIBLE_CFG.json",
+            filter_dict={
+                "model": {
+                    "gpt-4o",
+                    "gpt-4o-mini",
+                },
+            },
+        )
         
+        llm_config = {"config_list": config_list, "cache_seed": 42}
+        config["llm_config"] = llm_config  # 注入 LLM 配置
+        
+        bot_type = config.get("bot_type", "assistant")
         if bot_type == "user_proxy":
             bot = await self._create_user_proxy(config)
         else:

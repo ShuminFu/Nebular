@@ -1,6 +1,7 @@
 from typing import List, Dict, Optional
 from dataclasses import dataclass
 from bot_manager.core.interfaces import IAgent
+from bot_manager.adapters.autogen_adapter import AutogenBotAdapter
 
 @dataclass
 class Message:
@@ -115,3 +116,37 @@ class ConversationManager:
         """获取对应框架的适配器"""
         # 实现适配器获取逻辑
         pass
+
+    async def create_two_bot_conversation(self, bot1_config: Dict, bot2_config: Dict) -> str:
+        """创建两个 Bot 之间的对话"""
+        conv_id = self._generate_conv_id()
+        
+        # 创建两个 bot
+        adapter = AutogenBotAdapter()
+        bot1 = await adapter.adapt(bot1_config)
+        bot2 = await adapter.adapt(bot2_config)
+        
+        # 存储到会话管理器
+        self._conversations[conv_id] = {
+            bot1_config["name"]: bot1,
+            bot2_config["name"]: bot2
+        }
+        
+        return conv_id
+
+    async def start_conversation(self, conv_id: str, initial_message: str, 
+                               from_bot: str, to_bot: str) -> List[str]:
+        """启动两个 bot 之间的对话"""
+        if conv_id not in self._conversations:
+            raise ValueError(f"Conversation {conv_id} not found")
+        
+        bots = self._conversations[conv_id]
+        if from_bot not in bots or to_bot not in bots:
+            raise ValueError("Bot not found in conversation")
+        
+        responses = []
+        # 发送初始消息
+        response = await self.send_message(conv_id, initial_message, from_bot, to_bot)
+        responses.extend(response)
+        
+        return responses
