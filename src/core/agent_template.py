@@ -24,7 +24,7 @@ class AgentTemplate:
         self.framework_type = framework_type
         self.capabilities = capabilities
     
-    def apply_to_agent(self, agent: 'Agent') -> None:
+    def apply_to_agent(self, agent: 'Agent') -> None: # type: ignore
         """
         将模板配置应用到Agent实例
         

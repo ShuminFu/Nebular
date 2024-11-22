@@ -25,7 +25,12 @@ priority = "primary"
 promptflow = "^1.16.1"
 pytest = "^8.3.3"
 pytest-asyncio = "^0.24.0"
-aider-chat = "^0.62.1"
+ipykernel = "^6.29.5"
+
+
+[tool.poetry.group.crewai.dependencies]
+crewai = "^0.80.0"
+crewai-tools = "^0.14.0"
 
 [build-system]
 requires = ["poetry-core"]

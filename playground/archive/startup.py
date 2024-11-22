@@ -14,3 +14,4 @@ user_proxy.initiate_chat(
     message="Tell me a joke about NVDA and TESLA stock prices.",
 )
 
+assistant.DEFAULT_SYSTEM_MESSAGE
