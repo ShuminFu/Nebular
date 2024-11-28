@@ -2,7 +2,7 @@ from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 
 # Uncomment the following line to use an example of a custom tool
-from tools.custom_tool import MyCustomTool
+from tools.template_tool import MyCustomTool
 from crewai import LLM
 
 
