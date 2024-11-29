@@ -62,18 +62,56 @@ class BotTool(BaseTool):
     1. 创建Bot: {'action': 'create', 'data': {'name': '新Bot', 'description': '描述'}}
     2. 获取所有Bot: {'action': 'get_all'}
     3. 获取单个Bot: {'action': 'get', 'bot_id': 'uuid'}
-    4. 更新Bot: {'action': 'update', 'bot_id': 'uuid', 'data': {'isDescriptionUpdated': True, 'description': '新描述'}}
+    4. 更新Bot: {
+        'action': 'update', 
+        'bot_id': 'uuid', 
+        'data': {
+            'name': '新名称',  # 可选
+            'isDescriptionUpdated': True,
+            'description': '新描述',  # 如果isDescriptionUpdated为True则必填
+            'isCallShellOnOperaStartedUpdated': False,
+            'isDefaultTagsUpdated': False,
+            'isDefaultRolesUpdated': False,
+            'isDefaultPermissionsUpdated': False
+        }
+    }    
     5. 删除Bot: {'action': 'delete', 'bot_id': 'uuid'}
     """
     args_schema: Type[BaseModel] = BotToolSchema
     base_url: str = "http://opera.nti56.com/Bot"
 
     def _make_request(self, method: str, url: str, json=None) -> dict:
-        """发送HTTP请求的通用方法"""
+        """发送HTTP请求的通用方法
+        
+        Returns:
+            dict: 包含响应数据和状态码的字典
+        """
         with httpx.Client() as client:
             response = client.request(method, url, json=json)
             response.raise_for_status()
-            return response.json() if response.text else None
+            return {
+                'status_code': response.status_code,
+                'data': response.json() if response.text else None
+            }
+
+    def _preprocess_data(self, data: dict) -> dict:
+        """预处理输入数据，确保布尔值正确转换"""
+        if not data:
+            return data
+
+        processed = {}
+        for key, value in data.items():
+            if isinstance(value, str):
+                # 处理字符串形式的布尔值
+                if value.lower() == 'true':
+                    processed[key] = True
+                elif value.lower() == 'false':
+                    processed[key] = False
+                else:
+                    processed[key] = value
+            else:
+                processed[key] = value
+        return processed
 
     def _run(self, **kwargs) -> str:
         try:
@@ -86,18 +124,25 @@ class BotTool(BaseTool):
             bot_id = kwargs.get("bot_id")
             data = kwargs.get("data")
 
+            # 添加数据预处理
+            # if data:
+            # data = self._preprocess_data(data)
+
             if action == "get_all":
-                return str(self._make_request("GET", self.base_url))
+                result = self._make_request("GET", self.base_url)
+                return f"状态码: {result['status_code']}, 数据: {str(result['data'])}"
 
             elif action == "get":
                 if not bot_id:
                     raise ValueError("获取Bot需要提供bot_id")
-                return str(self._make_request("GET", f"{self.base_url}/{bot_id}"))
+                result = self._make_request("GET", f"{self.base_url}/{bot_id}")
+                return f"状态码: {result['status_code']}, 数据: {str(result['data'])}"
 
             elif action == "create":
                 if not data:
                     raise ValueError("创建Bot需要提供data")
-                return str(self._make_request("POST", self.base_url, json=data.model_dump()))
+                result = self._make_request("POST", self.base_url, json=data.model_dump())
+                return f"状态码: {result['status_code']}, 数据: {str(result['data'])}"
 
             elif action == "update":
                 if not bot_id or not data:
@@ -107,13 +152,13 @@ class BotTool(BaseTool):
                     f"{self.base_url}/{bot_id}",
                     json=data.model_dump(by_alias=True)
                 )
-                return "Bot更新成功" if result is None else str(result)
+                return f"状态码: {result['status_code']}, " + ("Bot更新成功" if result['data'] is None else f"数据: {str(result['data'])}")
 
             elif action == "delete":
                 if not bot_id:
                     raise ValueError("删除Bot需要提供bot_id")
-                self._make_request("DELETE", f"{self.base_url}/{bot_id}")
-                return "Bot删除成功"
+                result = self._make_request("DELETE", f"{self.base_url}/{bot_id}")
+                return f"状态码: {result['status_code']}, Bot删除成功"
 
             else:
                 raise ValueError(f"不支持的操作: {action}")
