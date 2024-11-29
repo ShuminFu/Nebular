@@ -8,6 +8,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from pysignalr.messages import CompletionMessage
 import sys
+from Opera.Signalr.opera_message_processor import OperaMessageProcessor
 
 # 配置日志
 logger.configure(
@@ -58,7 +59,9 @@ class OperaSignalRClient:
         self.url = url
         self.client = SignalRClient(self.url)
         self.bot_id: Optional[UUID] = None
-        self.snitch_mode: bool = True
+        self.snitch_mode: bool = False
+        self._connected = False
+        self.message_processor = OperaMessageProcessor()
 
         # 设置基本回调
         self.client.on_open(self._on_open)
@@ -96,6 +99,7 @@ class OperaSignalRClient:
 
     async def _on_open(self) -> None:
         logger.info("已连接到服务器")
+        self._connected = True
         # 重新设置之前的状态
         if self.bot_id:
             await self.set_bot_id(self.bot_id)
@@ -104,6 +108,7 @@ class OperaSignalRClient:
 
     async def _on_close(self) -> None:
         logger.info("与服务器断开连接")
+        self._connected = False
 
     async def _on_error(self, message: CompletionMessage) -> None:
         logger.error(f"发生错误: {message.error}")
@@ -197,6 +202,7 @@ class OperaSignalRClient:
             )
             logger.debug(f"Opera创建详情: ID={opera_args.opera_id}, 名称={opera_args.name}, "
                         f"父ID={opera_args.parent_id}, 数据库={opera_args.database_name}")
+            await self.message_processor.handle_opera_created(opera_args)
             await self._execute_callback(
                 "on_opera_created",
                 self.callbacks["on_opera_created"], 
@@ -268,6 +274,7 @@ class OperaSignalRClient:
                         f"发送者ID={msg_args.sender_staff_id}, "
                         f"接收者数量={len(msg_args.receiver_staff_ids)}, "
                         f"消息内容={msg_args.text[:100]}...")  # 只显示前100个字符
+            await self.message_processor.handle_message(msg_args)
             await self._execute_callback("on_message_received", self.callbacks["on_message_received"], msg_args)
         else:
             logger.warning("收到消息事件，但未设置处理回调")
@@ -336,3 +343,13 @@ class OperaSignalRClient:
             }
         
         return summary
+
+    def is_connected(self) -> bool:
+        """检查是否已连接"""
+        return self._connected
+        
+    async def disconnect(self):
+        """主动断开连接"""
+        if self.client:
+            await self.client.stop()
+            self._connected = False
