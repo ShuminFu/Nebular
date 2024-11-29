@@ -31,7 +31,7 @@ tasks = [
         1. 名称为 'TestOpera'
         2. 描述为 '这是一个测试用Opera'
         3. 不设置父Opera（作为根节点）
-        4. 让系统自动生成数据库名称
+        4. 使用一个狂拽酷炫的数据库名
         """,
         expected_output="成功创建Opera，并返回Opera的详细信息",
         agent=opera_manager
@@ -56,20 +56,20 @@ tasks = [
     Task(
         description="""获取特定Opera的信息：
         1. 使用第一个任务创建的Opera ID
-        2. 如果没有具体ID，可以使用一个示例ID：'11111111-1111-1111-1111-111111111111'
+        2. 如果没有具体ID，可以使用一个示例ID：'c2c74b9b-b37d-47c1-9502-aaa490eca794'
         """,
         expected_output="返回指定Opera的详细信息",
         agent=opera_manager
     ),
 
-    Task(
-        description="""删除之前创建的Opera：
-        1. 使用第一个任务创建的Opera ID
-        2. 如果没有具体ID，可以使用示例ID：'11111111-1111-1111-1111-111111111111'
-        """,
-        expected_output="成功删除指定的Opera",
-        agent=opera_manager
-    )
+    # Task(
+    #     description="""删除之前创建的Opera：
+    #     1. 使用第一个任务创建的Opera ID
+    #     2. 如果没有具体ID，可以使用一个示例ID：'c2c74b9b-b37d-47c1-9502-aaa490eca794'
+    #     """,
+    #     expected_output="成功删除指定的Opera",
+    #     agent=opera_manager
+    # )
 ]
 
 # 创建和运行Crew

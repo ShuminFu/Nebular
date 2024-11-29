@@ -30,4 +30,4 @@
 /playground/tutorial_11_MemGPT.py
 /playground/tutorial_12_OptiGuide.py
 /.idea/vcs.xml
-.idea
+.idea!/.vscode/

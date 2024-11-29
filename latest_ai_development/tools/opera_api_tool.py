@@ -20,7 +20,7 @@ class OperaToolSchema(BaseModel):
             name: str,
             description?: str,
             parentId?: UUID,
-            databaseName?: str
+            databaseName: str
         }
         - update: 使用OperaForUpdate模型 {
             name?: str,
@@ -57,7 +57,7 @@ class OperaTool(BaseTool):
             'name': '新Opera', 
             'description': '描述',
             'parentId': 'uuid',  # 可选
-            'databaseName': 'db_name'  # 可选，会自动生成
+            'databaseName': 'db_name' 
         }
     }
     2. 获取所有Opera: {
@@ -121,7 +121,7 @@ class OperaTool(BaseTool):
             elif action == "create":
                 if not data:
                     raise ValueError("创建Opera需要提供data")
-                result = self._make_request("POST", self.base_url, json=data.model_dump())
+                result = self._make_request("POST", self.base_url, json=data.model_dump(by_alias=True))
                 return f"状态码: {result['status_code']}, 数据: {str(result['data'])}"
 
             elif action == "update":
