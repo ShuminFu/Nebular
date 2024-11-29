@@ -50,7 +50,7 @@ tasks = [
         description="""基于上一个创建任务返回的Bot ID，或者是'e822fd9b-a360-4eb7-b217-c4f86f2dcee6'。更新该Bot的信息：
         1. 更新描述为 '这是更新后的测试Bot'
         2. 更新默认标签为 'updated,test',
-        3. 所有r  bot_tool.pytrue, false都请你使用字符串表示或者使用双引号包括起来，比如"True","False"
+        3. 所有true, false都请你使用字符串表示或者使用双引号包括起来，比如"True","False"
         """,
         expected_output="成功更新Bot信息，并返回更新后的详细信息",
         agent=bot_manager
