@@ -1,9 +1,8 @@
 from typing import Type, Optional, Dict, Any, Union
 from uuid import UUID
-import httpx
 from pydantic import BaseModel, Field, field_validator, ValidationError
 from Opera.FastAPI.models import Bot, BotForCreation, BotForUpdate
-from crewai_tools.tools.base_tool import BaseTool
+from .base_api_tool import BaseApiTool
 
 
 class BotToolSchema(BaseModel):
@@ -54,7 +53,7 @@ class BotToolSchema(BaseModel):
             raise ValueError(f"数据验证失败: {str(e)}")
 
 
-class BotTool(BaseTool):
+class BotTool(BaseApiTool):
     name: str = "Bot Manager"
     description: str = """管理Bot的通用工具，支持创建、查询、更新和删除操作。
     
@@ -80,39 +79,6 @@ class BotTool(BaseTool):
     args_schema: Type[BaseModel] = BotToolSchema
     base_url: str = "http://opera.nti56.com/Bot"
 
-    def _make_request(self, method: str, url: str, json=None) -> dict:
-        """发送HTTP请求的通用方法
-        
-        Returns:
-            dict: 包含响应数据和状态码的字典
-        """
-        with httpx.Client() as client:
-            response = client.request(method, url, json=json)
-            response.raise_for_status()
-            return {
-                'status_code': response.status_code,
-                'data': response.json() if response.text else None
-            }
-
-    def _preprocess_data(self, data: dict) -> dict:
-        """预处理输入数据，确保布尔值正确转换"""
-        if not data:
-            return data
-
-        processed = {}
-        for key, value in data.items():
-            if isinstance(value, str):
-                # 处理字符串形式的布尔值
-                if value.lower() == 'true':
-                    processed[key] = True
-                elif value.lower() == 'false':
-                    processed[key] = False
-                else:
-                    processed[key] = value
-            else:
-                processed[key] = value
-        return processed
-
     def _run(self, **kwargs) -> str:
         try:
             # 如果输入是字符串，尝试解析为字典
@@ -130,19 +96,19 @@ class BotTool(BaseTool):
 
             if action == "get_all":
                 result = self._make_request("GET", self.base_url)
-                return f"状态码: {result['status_code']}, 数据: {str(result['data'])}"
+                return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 
             elif action == "get":
                 if not bot_id:
                     raise ValueError("获取Bot需要提供bot_id")
                 result = self._make_request("GET", f"{self.base_url}/{bot_id}")
-                return f"状态码: {result['status_code']}, 数据: {str(result['data'])}"
+                return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 
             elif action == "create":
                 if not data:
                     raise ValueError("创建Bot需要提供data")
                 result = self._make_request("POST", self.base_url, json=data.model_dump(by_alias=True))
-                return f"状态码: {result['status_code']}, 数据: {str(result['data'])}"
+                return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 
             elif action == "update":
                 if not bot_id or not data:
@@ -152,7 +118,8 @@ class BotTool(BaseTool):
                     f"{self.base_url}/{bot_id}",
                     json=data.model_dump(by_alias=True)
                 )
-                return f"状态码: {result['status_code']}, " + ("Bot更新成功" if result['data'] is None else f"数据: {str(result['data'])}")
+                return f"状态码: {result['status_code']}, " + (
+                    "Bot更新成功" if result['data'] is None else f"详细内容: {str(result['data'])}")
 
             elif action == "delete":
                 if not bot_id:
