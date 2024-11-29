@@ -1,5 +1,5 @@
 from crewai import Agent, Task, Crew,LLM
-from examples.latest_ai_development.tools.bot_api_tool import BotTool
+from latest_ai_development.tools.bot_api_tool import BotTool
 
 llm_oneapi = LLM(
     model="gpt-4o",
