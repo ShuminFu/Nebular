@@ -1,6 +1,7 @@
 import asyncio
 from Opera.Signalr.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 from loguru import logger
+import sys
 
 
 async def message_handler(message: MessageReceivedArgs):
@@ -37,4 +38,10 @@ async def main():
 
 
 if __name__ == "__main__":
+    # 配置logger，添加进程名称
+    logger.remove()  # 移除默认的处理器
+    logger.add(
+        sink=sys.stderr,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>simple_repeater</cyan>:{function}:{line} - {message}",
+    )
     asyncio.run(main())
