@@ -8,7 +8,6 @@ from datetime import datetime
 from dataclasses import dataclass
 from pysignalr.messages import CompletionMessage
 import sys
-from Opera.Signalr.opera_message_processor import OperaMessageProcessor
 
 # 配置日志
 logger.configure(
@@ -53,7 +52,6 @@ class MessageReceivedArgs:
     tags: Optional[str]
     mentioned_staff_ids: Optional[List[UUID]]
 
-
 class OperaSignalRClient:
     def __init__(self, url: str = "http://opera.nti56.com/signalRService"):
         self.url = url
@@ -61,7 +59,6 @@ class OperaSignalRClient:
         self.bot_id: Optional[UUID] = None
         self.snitch_mode: bool = False
         self._connected = False
-        self.message_processor = OperaMessageProcessor()
 
         # 设置基本回调
         self.client.on_open(self._on_open)
@@ -255,6 +252,7 @@ class OperaSignalRClient:
             logger.warning("收到Stage变更事件，但未设置处理回调")
 
     async def _handle_message_received(self, args: Dict[str, Any]) -> None:
+        """处理接收到的消息"""
         logger.info(f"收到消息事件: {json.dumps(args, ensure_ascii=False)}")
         if self.callbacks["on_message_received"]:
             msg_args = MessageReceivedArgs(
@@ -274,7 +272,6 @@ class OperaSignalRClient:
                         f"发送者ID={msg_args.sender_staff_id}, "
                         f"接收者数量={len(msg_args.receiver_staff_ids)}, "
                         f"消息内容={msg_args.text[:100]}...")  # 只显示前100个字符
-            await self.message_processor.handle_message(msg_args)
             await self._execute_callback("on_message_received", self.callbacks["on_message_received"], msg_args)
         else:
             logger.warning("收到消息事件，但未设置处理回调")
