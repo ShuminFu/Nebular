@@ -8,6 +8,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from pysignalr.messages import CompletionMessage
 import sys
+from opera_message_router import MessageRouter
 
 # 配置日志
 logger.configure(
@@ -53,12 +54,13 @@ class MessageReceivedArgs:
     mentioned_staff_ids: Optional[List[UUID]]
 
 class OperaSignalRClient:
-    def __init__(self, url: str = "http://opera.nti56.com/signalRService"):
+    def __init__(self, url: str = "http://opera.nti56.com/signalRService", message_router: MessageRouter = None):
         self.url = url
         self.client = SignalRClient(self.url)
         self.bot_id: Optional[UUID] = None
         self.snitch_mode: bool = False
         self._connected = False
+        self.message_router = message_router or MessageRouter()
 
         # 设置基本回调
         self.client.on_open(self._on_open)
@@ -253,28 +255,21 @@ class OperaSignalRClient:
 
     async def _handle_message_received(self, args: Dict[str, Any]) -> None:
         """处理接收到的消息"""
-        logger.info(f"收到消息事件: {json.dumps(args, ensure_ascii=False)}")
-        if self.callbacks["on_message_received"]:
-            msg_args = MessageReceivedArgs(
-                opera_id=UUID(args["OperaId"]),
-                receiver_staff_ids=[UUID(x) for x in args["ReceiverStaffIds"]],
-                index=args["Index"],
-                time=datetime.fromisoformat(args["Time"]),
-                stage_index=args.get("StageIndex"),
-                sender_staff_id=UUID(args["SenderStaffId"]) if args.get("SenderStaffId") else None,
-                is_narratage=args["IsNarratage"],
-                is_whisper=args["IsWhisper"],
-                text=args["Text"],
-                tags=args.get("Tags"),
-                mentioned_staff_ids=[UUID(x) for x in args["MentionedStaffIds"]] if args.get("MentionedStaffIds") else None
-            )
-            logger.debug(f"消息详情: Opera ID={msg_args.opera_id}, "
-                        f"发送者ID={msg_args.sender_staff_id}, "
-                        f"接收者数量={len(msg_args.receiver_staff_ids)}, "
-                        f"消息内容={msg_args.text[:100]}...")  # 只显示前100个字符
-            await self._execute_callback("on_message_received", self.callbacks["on_message_received"], msg_args)
-        else:
-            logger.warning("收到消息事件，但未设置处理回调")
+        try:
+            # 构造更完整的路由消息
+            route_message = {
+                'type': 'message',
+                'bot_id': self.bot_id,
+                'staff_id': UUID(args["SenderStaffId"]) if args.get("SenderStaffId") else None,
+                'opera_id': UUID(args["OperaId"]),
+                'content': args,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # 通过路由分发消息
+            await self.message_router.route_message(route_message)
+        except Exception as e:
+            logger.exception(f"消息路由失败: {e}")
 
     # 在OperaSignalRClient类中添加重试机制
     async def connect_with_retry(self, max_retries=3, retry_delay=5):

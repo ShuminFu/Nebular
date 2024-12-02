@@ -5,7 +5,10 @@ import asyncio
 import multiprocessing
 from crewai import Agent, Task, Crew
 from loguru import logger
+
+from Opera.Signalr.opera_message_router import MessageRouter
 from Opera.Signalr.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
+from datetime import datetime
 
 
 @dataclass
@@ -85,78 +88,76 @@ class CrewRunner:
         self.client = None
         self.crew = None
         self.is_running = True
-        self.reconnect_delay = 5  # 重连延迟秒数
+        self.reconnect_delay = 5
+        self.message_queue = None  # 用于接收路由消息的队列
+        self.message_router = None
         
     async def setup(self):
         """初始化设置"""
         self.crew = self._setup_crew()
-        self.client = OperaSignalRClient()
+        self.client = OperaSignalRClient(message_router=self.message_router)
+        if not self.message_router:
+            self.message_router = MessageRouter()
         
-        # 设置SignalR回调
-        self.client.set_callback("on_hello", self._handle_hello)
-        self.client.set_callback("on_message_received", self._handle_message)
-        self.client.set_callback("on_system_shutdown", self._handle_shutdown)
+        # 获取消息队列
+        self.message_queue = await self.message_router.subscribe(
+            subscriber_id=UUID.uuid4(),
+            bot_id=self.crew_id,
+            opera_ids={self.opera_id}
+        )
         
+        # SignalR连接
+        await self.client.connect()
+        await self.client.set_bot_id(self.crew_id)
+        
+        if self.config.get('as_staff', False):
+            await self.client.set_snitch_mode(True)
+            await self._register_as_staff()
+    
     async def run(self):
         """运行Crew的主循环"""
-        await self.setup()
-        
-        while self.is_running:
-            try:
-                # 建立连接
-                await self.client.connect()
-                
-                # 注册Bot身份
-                await self.client.set_bot_id(self.crew_id)
-                
-                # 如果需要作为Staff身份
-                if self.config.get('as_staff', False):
-                    await self.client.set_snitch_mode(True)
-                    await self._register_as_staff()
-                
-                # 等待连接关闭
-                while self.client.is_connected():
-                    await asyncio.sleep(1)
-                
-                # 如果还在运行但连接断开，则准备重连
-                if self.is_running:
-                    logger.warning(f"Crew {self.crew_id} 连接断开，{self.reconnect_delay}秒后重连")
-                    await asyncio.sleep(self.reconnect_delay)
-                    
-            except Exception as e:
-                logger.exception(f"Crew {self.crew_id} 运行出错: {e}")
-                if self.is_running:
-                    await asyncio.sleep(self.reconnect_delay)
-                    
-    async def _handle_hello(self):
-        """处理Hello回调"""
-        logger.info(f"Crew {self.crew_id} 收到Hello回调，连接成功")
-        
-    async def _handle_shutdown(self):
-        """处理系统关闭信号"""
-        logger.info(f"Crew {self.crew_id} 收到系统关闭信号")
-        self.is_running = False
-        
-    async def _handle_message(self, message: MessageReceivedArgs):
-        """处理接收到的消息"""
         try:
-            # 更新Crew任务
-            for task in self.crew.tasks:
-                task.description = f"处理消息: {message.text}\n上下文: {task.description}"
+            await self.setup()
             
-            # 执行Crew任务
-            result = await self.crew.kickoff()
-            
-            # 处理结果
-            await self._handle_result(result)
-            
+            while self.is_running:
+                try:
+                    # 检查SignalR连接状态
+                    if not self.client.is_connected():
+                        logger.warning(f"Crew {self.crew_id} SignalR连接断开，尝试重连")
+                        await self.client.connect()
+                        continue
+                    
+                    # 等待并处理消息
+                    try:
+                        async with asyncio.timeout(5):  # 5秒超时，用于定期检查连接状态
+                            message = await self.message_queue.get()
+                            if message['type'] == 'message':
+                                content = message['content']
+                                message_args = MessageReceivedArgs(
+                                    opera_id=content['OperaId'],
+                                    receiver_staff_ids=content['ReceiverStaffIds'],
+                                    index=content['Index'],
+                                    time=datetime.fromisoformat(content['Time']),
+                                    stage_index=content.get('StageIndex'),
+                                    sender_staff_id=content.get('SenderStaffId'),
+                                    is_narratage=content['IsNarratage'],
+                                    is_whisper=content['IsWhisper'],
+                                    text=content['Text'],
+                                    tags=content.get('Tags'),
+                                    mentioned_staff_ids=content.get('MentionedStaffIds')
+                                )
+                                await self._handle_message(message_args)
+                    except asyncio.TimeoutError:
+                        continue  # 超时后继续循环，检查连接状态
+                        
+                except Exception as e:
+                    logger.exception(f"消息处理出错: {e}")
+                    await asyncio.sleep(self.reconnect_delay)
+                    
         except Exception as e:
-            logger.error(f"消息处理出错: {e}")
-            
-    async def stop(self):
-        """停止Crew运行"""
-        self.is_running = False
-        if self.client:
+            logger.exception(f"Crew运行出错: {e}")
+        finally:
+            self.is_running = False
             await self.client.disconnect()
     
     def _setup_crew(self) -> Crew:
@@ -195,6 +196,28 @@ class CrewRunner:
         # TODO: 实现Staff注册逻辑
         pass
         
+    async def _handle_message(self, message: MessageReceivedArgs):
+        """处理接收到的消息"""
+        try:
+            # 更新Crew任务
+            for task in self.crew.tasks:
+                task.description = f"处理消息: {message.text}\n上下文: {task.description}"
+            
+            # 执行Crew任务
+            result = await self.crew.kickoff()
+            
+            # 处理结果
+            await self._handle_result(result)
+            
+        except Exception as e:
+            logger.error(f"消息处理出错: {e}")
+            
+    async def stop(self):
+        """停止Crew运行"""
+        self.is_running = False
+        if self.client:
+            await self.client.disconnect()
+    
     async def _handle_result(self, result: str):
         """处理Crew执行结果"""
         # TODO: 实现结果处理逻辑，例如发送回复消息
