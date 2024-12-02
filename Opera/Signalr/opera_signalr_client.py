@@ -8,7 +8,6 @@ from datetime import datetime
 from dataclasses import dataclass
 from pysignalr.messages import CompletionMessage
 import sys
-from opera_message_router import MessageRouter
 
 # 配置日志
 logger.configure(
@@ -54,13 +53,14 @@ class MessageReceivedArgs:
     mentioned_staff_ids: Optional[List[UUID]]
 
 class OperaSignalRClient:
-    def __init__(self, url: str = "http://opera.nti56.com/signalRService", message_router: MessageRouter = None):
+    def __init__(self, 
+                 url: str = "http://opera.nti56.com/signalRService", 
+                 bot_id: Optional[str] = None):
         self.url = url
         self.client = SignalRClient(self.url)
-        self.bot_id: Optional[UUID] = None
+        self.bot_id = UUID(bot_id) if bot_id else None
         self.snitch_mode: bool = False
         self._connected = False
-        self.message_router = message_router or MessageRouter()
 
         # 设置基本回调
         self.client.on_open(self._on_open)
@@ -95,11 +95,12 @@ class OperaSignalRClient:
         
         # 设置回调超时时间(秒)
         self.callback_timeout = 30
+        self._connection_task = None
 
     async def _on_open(self) -> None:
         logger.info("已连接到服务器")
         self._connected = True
-        # 重新设置之前的状态
+        # 如果有bot_id，自动设置
         if self.bot_id:
             await self.set_bot_id(self.bot_id)
         if self.snitch_mode:
@@ -116,10 +117,28 @@ class OperaSignalRClient:
         """建立SignalR连接"""
         try:
             logger.debug("开始建立连接...")
-            await self.client.run()
+            self._connection_task = asyncio.create_task(self.client.run())
+            await asyncio.sleep(0.1)  # 给予连接初始化的时间
         except Exception as e:
             logger.exception(f"连接失败: {str(e)}")
             raise
+
+    async def disconnect(self):
+        """安全地断开连接"""
+        try:
+            if self._connection_task:
+                # 先停止 SignalR 客户端
+                await self.client.stop()
+                # 取消连接任务
+                self._connection_task.cancel()
+                try:
+                    await self._connection_task
+                except asyncio.CancelledError:
+                    pass
+                self._connection_task = None
+            self._connected = False
+        except Exception as e:
+            logger.exception(f"断开连接时出错: {e}")
 
     async def set_bot_id(self, bot_id: UUID):
         """设置Bot ID"""
@@ -255,21 +274,28 @@ class OperaSignalRClient:
 
     async def _handle_message_received(self, args: Dict[str, Any]) -> None:
         """处理接收到的消息"""
-        try:
-            # 构造更完整的路由消息
-            route_message = {
-                'type': 'message',
-                'bot_id': self.bot_id,
-                'staff_id': UUID(args["SenderStaffId"]) if args.get("SenderStaffId") else None,
-                'opera_id': UUID(args["OperaId"]),
-                'content': args,
-                'timestamp': datetime.now().isoformat()
-            }
-            
-            # 通过路由分发消息
-            await self.message_router.route_message(route_message)
-        except Exception as e:
-            logger.exception(f"消息路由失败: {e}")
+        logger.info(f"收到消息: {json.dumps(args, ensure_ascii=False)}")
+        if self.callbacks["on_message_received"]:
+            message_args = MessageReceivedArgs(
+                opera_id=UUID(args["OperaId"]),
+                receiver_staff_ids=[UUID(id_str) for id_str in args["ReceiverStaffIds"]],
+                index=args["Index"],
+                time=datetime.fromisoformat(args["Time"]),
+                stage_index=args.get("StageIndex"),
+                sender_staff_id=UUID(args["SenderStaffId"]) if args.get("SenderStaffId") else None,
+                is_narratage=args["IsNarratage"],
+                is_whisper=args["IsWhisper"],
+                text=args["Text"],
+                tags=args.get("Tags"),
+                mentioned_staff_ids=[UUID(id_str) for id_str in args.get("MentionedStaffIds", [])] if args.get("MentionedStaffIds") else None
+            )
+            await self._execute_callback(
+                "on_message_received", 
+                self.callbacks["on_message_received"], 
+                message_args
+            )
+        else:
+            logger.warning("收到消息，但未设置处理回调")
 
     # 在OperaSignalRClient类中添加重试机制
     async def connect_with_retry(self, max_retries=3, retry_delay=5):
@@ -338,8 +364,7 @@ class OperaSignalRClient:
 
     def is_connected(self) -> bool:
         """检查是否已连接"""
-        return self._connected
-        
+        return self._connected        
     async def disconnect(self):
         """主动断开连接"""
         if self.client:

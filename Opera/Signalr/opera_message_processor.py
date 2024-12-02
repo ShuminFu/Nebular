@@ -5,10 +5,9 @@ import asyncio
 import multiprocessing
 from crewai import Agent, Task, Crew
 from loguru import logger
-
-from Opera.Signalr.opera_message_router import MessageRouter
-from Opera.Signalr.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 from datetime import datetime
+
+from Opera.Signalr.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 
 
 @dataclass
@@ -18,7 +17,7 @@ class CrewProcessInfo:
     crew_id: UUID
     opera_id: UUID
     roles: List[str]
-    staff_id: Optional[UUID] = None  # 如果作为Staff，则有staff_id
+    staff_id: Optional[UUID] = None
 
 
 class CrewManager:
@@ -26,18 +25,23 @@ class CrewManager:
     
     def __init__(self):
         self.crew_processes: Dict[UUID, CrewProcessInfo] = {}
+        self.client = OperaSignalRClient()
+        
+    async def start(self):
+        """启动CrewManager"""
+        # 设置消息处理回调
+        self.client.set_callback("on_message_received", self._handle_message)
+        await self.client.connect()
         
     async def start_crew_process(self, crew_config: dict, opera_id: UUID) -> UUID:
         """启动新的Crew进程"""
         crew_id = UUID.uuid4()
         
-        # 创建进程
         process = multiprocessing.Process(
             target=self._run_crew_process,
             args=(crew_config, opera_id, crew_id)
         )
         
-        # 记录进程信息
         self.crew_processes[crew_id] = CrewProcessInfo(
             process=process,
             crew_id=crew_id,
@@ -45,7 +49,6 @@ class CrewManager:
             roles=crew_config.get('roles', [])
         )
         
-        # 启动进程
         process.start()
         logger.info(f"已启动Crew进程: {crew_id}")
         
@@ -54,15 +57,9 @@ class CrewManager:
     def _run_crew_process(self, crew_config: dict, opera_id: UUID, crew_id: UUID):
         """在新进程中运行Crew"""
         try:
-            # 设置进程级的日志
             logger.add(f"logs/crew_{crew_id}.log")
-            
-            # 创建和运行Crew
             crew_runner = CrewRunner(crew_config, opera_id, crew_id)
-            
-            # 运行事件循环
             asyncio.run(crew_runner.run())
-            
         except Exception as e:
             logger.exception(f"Crew进程运行出错: {e}")
         finally:
@@ -76,6 +73,13 @@ class CrewManager:
             info.process.join()
             del self.crew_processes[crew_id]
             logger.info(f"已停止Crew进程: {crew_id}")
+            
+    async def _handle_message(self, message: MessageReceivedArgs):
+        """处理接收到的消息，分发给相应的Crew"""
+        for crew_id, info in self.crew_processes.items():
+            if info.opera_id == message.opera_id:
+                # 将消息转换为Crew任务
+                await self._update_crew_tasks(crew_id, message)
 
 
 class CrewRunner:
@@ -85,30 +89,14 @@ class CrewRunner:
         self.config = config
         self.opera_id = opera_id
         self.crew_id = crew_id
-        self.client = None
+        self.client = OperaSignalRClient(bot_id=str(crew_id))
         self.crew = None
         self.is_running = True
-        self.reconnect_delay = 5
-        self.message_queue = None  # 用于接收路由消息的队列
-        self.message_router = None
         
     async def setup(self):
         """初始化设置"""
         self.crew = self._setup_crew()
-        self.client = OperaSignalRClient(message_router=self.message_router)
-        if not self.message_router:
-            self.message_router = MessageRouter()
-        
-        # 获取消息队列
-        self.message_queue = await self.message_router.subscribe(
-            subscriber_id=UUID.uuid4(),
-            bot_id=self.crew_id,
-            opera_ids={self.opera_id}
-        )
-        
-        # SignalR连接
         await self.client.connect()
-        await self.client.set_bot_id(self.crew_id)
         
         if self.config.get('as_staff', False):
             await self.client.set_snitch_mode(True)
@@ -119,41 +107,13 @@ class CrewRunner:
         try:
             await self.setup()
             
+            # 设置消息处理回调
+            self.client.set_callback("on_message_received", self._handle_message)
+            
+            # 保持进程运行
             while self.is_running:
-                try:
-                    # 检查SignalR连接状态
-                    if not self.client.is_connected():
-                        logger.warning(f"Crew {self.crew_id} SignalR连接断开，尝试重连")
-                        await self.client.connect()
-                        continue
-                    
-                    # 等待并处理消息
-                    try:
-                        async with asyncio.timeout(5):  # 5秒超时，用于定期检查连接状态
-                            message = await self.message_queue.get()
-                            if message['type'] == 'message':
-                                content = message['content']
-                                message_args = MessageReceivedArgs(
-                                    opera_id=content['OperaId'],
-                                    receiver_staff_ids=content['ReceiverStaffIds'],
-                                    index=content['Index'],
-                                    time=datetime.fromisoformat(content['Time']),
-                                    stage_index=content.get('StageIndex'),
-                                    sender_staff_id=content.get('SenderStaffId'),
-                                    is_narratage=content['IsNarratage'],
-                                    is_whisper=content['IsWhisper'],
-                                    text=content['Text'],
-                                    tags=content.get('Tags'),
-                                    mentioned_staff_ids=content.get('MentionedStaffIds')
-                                )
-                                await self._handle_message(message_args)
-                    except asyncio.TimeoutError:
-                        continue  # 超时后继续循环，检查连接状态
-                        
-                except Exception as e:
-                    logger.exception(f"消息处理出错: {e}")
-                    await asyncio.sleep(self.reconnect_delay)
-                    
+                await asyncio.sleep(1)
+                
         except Exception as e:
             logger.exception(f"Crew运行出错: {e}")
         finally:
@@ -165,7 +125,6 @@ class CrewRunner:
         agents = []
         tasks = []
         
-        # 根据配置创建Agent和Task
         for agent_config in self.config.get('agents', []):
             agent = Agent(
                 name=agent_config['name'],
@@ -176,7 +135,6 @@ class CrewRunner:
             )
             agents.append(agent)
             
-            # 为每个Agent创建对应的Task
             if 'task' in agent_config:
                 task = Task(
                     description=agent_config['task'],
@@ -190,11 +148,6 @@ class CrewRunner:
             process=self.config.get('process', 'sequential'),
             verbose=True
         )
-    
-    async def _register_as_staff(self):
-        """注册为Opera的Staff"""
-        # TODO: 实现Staff注册逻辑
-        pass
         
     async def _handle_message(self, message: MessageReceivedArgs):
         """处理接收到的消息"""
