@@ -1,4 +1,4 @@
-from latest_ai_development.tools.bot_api_tool import BotTool,BotToolSchema
+from ai_core.tools.bot_api_tool import BotTool,BotToolSchema
 
 
 def test_bot_tool():
