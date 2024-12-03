@@ -32,6 +32,7 @@ async def main():
     try:
         while True:
             await asyncio.sleep(1)
+            # TODO 是不是不应该在这里保持运行？不然即便signalr挂了，也不知道Bot挂了。
     except KeyboardInterrupt:
         await client.disconnect()
         logger.info("Bot已停止")
