@@ -4,7 +4,8 @@ from crewai.project import CrewBase, agent, crew, task
 # Uncomment the following line to use an example of a custom tool
 from tools.template_tool import MyCustomTool
 from crewai import LLM
-
+from dotenv import load_dotenv
+load_dotenv("config/.env")
 
 # Check our tools documentations for more information on how to use them
 # from crewai_tools import SerperDevTool
@@ -13,6 +14,8 @@ llm_oneapi = LLM(
     api_key="sk-LiZdw3jCJJ4UYver9e86625c0c6043B69820DfE3B99bA736",
     base_url="http://10.1.11.55:3000/v1"
 )
+
+from ai_core.config.config import llm
 # @CrewBase
 # class LatestAiDevelopment:
 # 	"""LatestAiDevelopment crew"""
@@ -67,7 +70,7 @@ coding_agent = Agent(
     goal="Analyze data and provide insights using Python",
     backstory="You are an experienced data analyst with strong Python skills.",
     allow_code_execution=True,
-	llm=llm_oneapi,
+	llm=llm,
 	verbose=True
 )
 

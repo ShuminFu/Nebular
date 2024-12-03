@@ -10,6 +10,7 @@ from datetime import datetime
 from Opera.Signalr.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 from ai_core.tools.bot_api_tool import BotTool
 from ai_core.tools.staff_invitation_tool import StaffInvitationTool, AcceptInvitationTool
+from ai_core.config.config import INIT_CREW_MANAGER, INIT_CREW_MANAGER_TASK, llm
 
 
 @dataclass
@@ -184,7 +185,7 @@ class CrewRunner:
         finally:
             self.is_running = False
             await self.client.disconnect()
-            # TODO 意外错误时，不一定能够执行到这一步。最好是能够用上signalr来让CrewManager知道是否存活。并且参考signalr的重连
+            # TODO 意外错误时，不一定能够执行到这一步。最好是能够用上signalr接收心跳消息来让CrewManager知道是否存活。并且参考signalr的重连
 
     def _setup_crew(self) -> Crew:
         """根据配置设置Crew"""
@@ -247,12 +248,15 @@ class CrewRunner:
         return {
             "agents": [
                 {
+                    **INIT_CREW_MANAGER,  # 继承基础配置
                     "name": "Bot Creator",
-                    "role": "系统初始化专家",
-                    "goal": "创建新的Bot实例",
-                    "backstory": "我负责创建和初始化新的Bot实例",
-                    "tools": [BotTool()],  # 添加创建Bot的Tool
-                    "task": "创建一个新的Bot实例并返回其ID"
+                    "tools": [self.bot_tool],
+                }
+            ],
+            "tasks": [
+                {
+                    **INIT_CREW_MANAGER_TASK,  # 继承基础任务配置
+                    "description": "创建一个新的Bot实例并返回其ID"
                 }
             ],
             "process": "sequential"
@@ -284,17 +288,15 @@ class CrewRunner:
 
         for agent_config in config['agents']:
             agent = Agent(
-                name=agent_config['name'],
-                role=agent_config['role'],
-                goal=agent_config['goal'],
-                backstory=agent_config['backstory'],
-                tools=agent_config['tools']
+                llm=llm,  # 使用统一的LLM配置
+                **agent_config
             )
             agents.append(agent)
 
+        for task_config in config['tasks']:
             task = Task(
-                description=agent_config['task'],
-                agent=agent
+                agent=agents[0],  # 假设只有一个agent
+                **task_config
             )
             tasks.append(task)
 
