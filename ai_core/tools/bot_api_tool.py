@@ -1,7 +1,7 @@
 from typing import Type, Optional, Dict, Any, Union
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, ValidationError
-from Opera.FastAPI.models import Bot, BotForCreation, BotForUpdate
+from Opera.FastAPI.models import BotForCreation, BotForUpdate
 from .base_api_tool import BaseApiTool
 
 
@@ -38,6 +38,7 @@ class BotToolSchema(BaseModel):
     )
 
     @field_validator('data')
+    @classmethod
     def validate_data(cls, v, values):
         action = values.data.get('action')
         if not v:

@@ -1,16 +1,24 @@
-from crewai import LLM, Agent, Crew, Task
-from crewai_tools.tools.serper_dev_tool.serper_dev_tool import SerperDevTool
-from dotenv import load_dotenv
-
-from tools.bot_api_tool import BotTool
-
-load_dotenv(".env")
 import os
+from crewai import LLM, Agent, Crew, Task
+
+from dotenv import load_dotenv
+from pathlib import Path
+
+from ai_core.tools.bot_api_tool import BotTool
+
+env_path = Path(__file__).parent / '.env'
+load_dotenv(env_path)
+
 llm = LLM(
     model="azure/gpt-4o",
     api_key=os.environ.get("AZURE_API_KEY"),
     base_url=os.environ.get("AZURE_API_BASE")
 )
+# llm = LLM(
+#     model="gpt-4o",
+#     api_key=os.environ.get("OPENAI_API_KEY"),
+#     base_url=os.environ.get("http://10.1.11.55:3000/v1")
+# )
 
 INIT_CREW_MANAGER = {
     "role": "Bot管理员, Staff邀请发送者",
@@ -28,7 +36,7 @@ INIT_CREW_MANAGER = {
     "respect_context_window": True,
     "use_system_prompt": True
 }
-INIT_CREW_MANAGER_TASK ={
+INIT_CREW_MANAGER_TASK = {
     "description": """
     作为Bot管理员，你需要视任务情况进行以下工作：
     1. 管理Bot生命周期：创建、更新、查询和删除Bot
@@ -40,8 +48,14 @@ INIT_CREW_MANAGER_TASK ={
     "expected_output": "根据任务返回对应的信息，比如创建Bot得到的响应详情或者发送邀请得到的响应详情",
 }
 
-TEMPLATE_USAGE=Agent(
+TEMPLATE_USAGE = Agent(
     tools=[BotTool()],
     llm=llm,
     **INIT_CREW_MANAGER
 )
+if __name__ == "__main__":
+    crew = Crew(
+        agents=[TEMPLATE_USAGE],
+        tasks=[Task(**INIT_CREW_MANAGER_TASK)]
+    )
+    crew.kickoff()

@@ -30,6 +30,7 @@ class OperaToolSchema(BaseModel):
     )
 
     @field_validator('data')
+    @classmethod
     def validate_data(cls, v, values):
         action = values.data.get('action')
         if not v:

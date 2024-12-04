@@ -1,20 +1,32 @@
-from pysignalr.client import SignalRClient
+"""Opera SignalR 客户端模块，用于处理与Opera服务器的实时通信。
+
+提供了与Opera服务器建立SignalR连接、处理各种实时事件（如剧本创建、消息接收等）的功能。
+支持自动重连、健康检查和各种回调机制。
+"""
+
 from typing import Optional, List, Callable, Any, Dict
 from uuid import UUID
 import json
 import asyncio
-from loguru import logger
+import sys
 from datetime import datetime
 from dataclasses import dataclass
+
+from pysignalr.client import SignalRClient
 from pysignalr.messages import CompletionMessage
-import sys
+from loguru import logger
 
 # 配置日志
 logger.configure(
     handlers=[
         {
             "sink": sys.stdout,
-            "format": "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+            "format": (
+                "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+                "<level>{level: <8}</level> | "
+                "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+                "<level>{message}</level>"
+            ),
             "level": "INFO",
         },
         {
@@ -22,7 +34,10 @@ logger.configure(
             "rotation": "500 MB",
             "retention": "10 days",
             "compression": "zip",
-            "format": "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+            "format": (
+                "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
+                "{name}:{function}:{line} - {message}"
+            ),
             "level": "DEBUG",
         }
     ]
@@ -52,9 +67,10 @@ class MessageReceivedArgs:
     tags: Optional[str]
     mentioned_staff_ids: Optional[List[UUID]]
 
+
 class OperaSignalRClient:
-    def __init__(self, 
-                 url: str = "http://opera.nti56.com/signalRService", 
+    def __init__(self,
+                 url: str = "http://opera.nti56.com/signalRService",
                  bot_id: Optional[str] = None):
         self.url = url
         self.client = SignalRClient(self.url)
@@ -87,12 +103,12 @@ class OperaSignalRClient:
             "on_message_received": None
         }
 
-        # 添加回调状态追踪
+        # 添加回调状追踪
         self.callback_stats = {
             name: {"success": 0, "error": 0, "last_execution": None}
             for name in self.callbacks.keys()
         }
-        
+
         # 设置回调超时时间(秒)
         self.callback_timeout = 30
         self._connection_task = None
@@ -157,14 +173,14 @@ class OperaSignalRClient:
         self.callbacks[event_name] = callback
 
     async def _execute_callback(
-        self, 
-        callback_name: str, 
-        callback: Callable, 
-        *args, 
+        self,
+        callback_name: str,
+        callback: Callable,
+        *args,
         **kwargs
     ) -> None:
         """安全地执行回调函数
-        
+
         Args:
             callback_name: 回调函数名称
             callback: 回调函数
@@ -173,22 +189,23 @@ class OperaSignalRClient:
         """
         if not callback:
             return
-            
+
         try:
             # 添加超时控制
             async with asyncio.timeout(self.callback_timeout):
                 await callback(*args, **kwargs)
-                
+
             # 更新统计
             self.callback_stats[callback_name]["success"] += 1
-            self.callback_stats[callback_name]["last_execution"] = datetime.now()
-            
+            self.callback_stats[callback_name]["last_execution"] = datetime.now(
+            )
+
         except asyncio.TimeoutError:
             logger.error(
                 f"回调 {callback_name} 执行超时 (>{self.callback_timeout}秒)"
             )
             self.callback_stats[callback_name]["error"] += 1
-            
+
         except Exception as e:
             logger.exception(f"回调 {callback_name} 执行出错")
             self.callback_stats[callback_name]["error"] += 1
@@ -213,17 +230,18 @@ class OperaSignalRClient:
         if self.callbacks["on_opera_created"]:
             opera_args = OperaCreatedArgs(
                 opera_id=UUID(args["operaId"]),
-                parent_id=UUID(args["parentId"]) if args.get("parentId") else None,
+                parent_id=UUID(args["parentId"]) if args.get(
+                    "parentId") else None,
                 name=args["name"],
                 description=args.get("description"),
                 database_name=args["databaseName"]
             )
             logger.debug(f"Opera创建详情: ID={opera_args.opera_id}, 名称={opera_args.name}, "
-                        f"父ID={opera_args.parent_id}, 数据库={opera_args.database_name}")
+                         f"父ID={opera_args.parent_id}, 数据库={opera_args.database_name}")
             await self.message_processor.handle_opera_created(opera_args)
             await self._execute_callback(
                 "on_opera_created",
-                self.callbacks["on_opera_created"], 
+                self.callbacks["on_opera_created"],
                 opera_args
             )
         else:
@@ -250,9 +268,9 @@ class OperaSignalRClient:
                 "permissions": args["permissions"]
             }
             logger.debug(f"Staff邀请详情: Opera ID={invite_data['opera_id']}, "
-                        f"邀请ID={invite_data['invitation_id']}, "
-                        f"角色={invite_data['roles']}, "
-                        f"权限={invite_data['permissions']}")
+                         f"邀请ID={invite_data['invitation_id']}, "
+                         f"角色={invite_data['roles']}, "
+                         f"权限={invite_data['permissions']}")
             await self._execute_callback("on_staff_invited", self.callbacks["on_staff_invited"], invite_data)
         else:
             logger.warning("收到Staff邀请事件，但未设置处理回调")
@@ -266,8 +284,8 @@ class OperaSignalRClient:
                 "stage_name": args["stageName"]
             }
             logger.debug(f"Stage变更详情: Opera ID={stage_data['opera_id']}, "
-                        f"阶段索引={stage_data['stage_index']}, "
-                        f"阶段名称={stage_data['stage_name']}")
+                         f"阶段索引={stage_data['stage_index']}, "
+                         f"阶段名称={stage_data['stage_name']}")
             await self._execute_callback("on_stage_changed", self.callbacks["on_stage_changed"], stage_data)
         else:
             logger.warning("收到Stage变更事件，但未设置处理回调")
@@ -278,20 +296,23 @@ class OperaSignalRClient:
         if self.callbacks["on_message_received"]:
             message_args = MessageReceivedArgs(
                 opera_id=UUID(args[0]["operaId"]),
-                receiver_staff_ids=[UUID(id_str) for id_str in args[0]["receiverStaffIds"]],
+                receiver_staff_ids=[UUID(id_str)
+                                    for id_str in args[0]["receiverStaffIds"]],
                 index=args[0]["index"],
                 time=datetime.fromisoformat(args[0]["time"]),
                 stage_index=args[0].get("stageIndex"),
-                sender_staff_id=UUID(args[0]["senderStaffId"]) if args[0].get("senderStaffId") else None,
+                sender_staff_id=UUID(args[0]["senderStaffId"]) if args[0].get(
+                    "senderStaffId") else None,
                 is_narratage=args[0]["isNarratage"],
                 is_whisper=args[0]["isWhisper"],
                 text=args[0]["text"],
                 tags=args[0].get("tags"),
-                mentioned_staff_ids=[UUID(id_str) for id_str in args[0].get("mentionedStaffIds", [])] if args[0].get("mentionedStaffIds") else None
+                mentioned_staff_ids=[UUID(id_str) for id_str in args[0].get(
+                    "mentionedStaffIds", [])] if args[0].get("mentionedStaffIds") else None
             )
             await self._execute_callback(
-                "on_message_received", 
-                self.callbacks["on_message_received"], 
+                "on_message_received",
+                self.callbacks["on_message_received"],
                 message_args
             )
         else:
@@ -330,9 +351,10 @@ class OperaSignalRClient:
             total = stats["success"] + stats["error"]
             if total > 0:
                 success_rate = (stats["success"] / total) * 100
-                
-            last_exec = stats["last_execution"].strftime("%Y-%m-%d %H:%M:%S") if stats["last_execution"] else "从未执行"
-            
+
+            last_exec = stats["last_execution"].strftime(
+                "%Y-%m-%d %H:%M:%S") if stats["last_execution"] else "从未执行"
+
             logger.info(
                 f"回调 {name}:\n"
                 f"  成功次数: {stats['success']}\n"
@@ -348,23 +370,24 @@ class OperaSignalRClient:
             "total_error": 0,
             "callback_details": {}
         }
-        
+
         for name, stats in self.callback_stats.items():
             summary["total_success"] += stats["success"]
             summary["total_error"] += stats["error"]
             summary["callback_details"][name] = {
                 "success_count": stats["success"],
                 "error_count": stats["error"],
-                "success_rate": 0 if (stats["success"] + stats["error"]) == 0 else 
-                              (stats["success"] / (stats["success"] + stats["error"])) * 100,
+                "success_rate": 0 if (stats["success"] + stats["error"]) == 0 else
+                (stats["success"] / (stats["success"] + stats["error"])) * 100,
                 "last_execution": stats["last_execution"]
             }
-        
+
         return summary
 
     def is_connected(self) -> bool:
         """检查是否已连接"""
-        return self._connected        
+        return self._connected
+
     async def disconnect(self):
         """主动断开连接"""
         if self.client:

@@ -10,7 +10,7 @@ from datetime import datetime
 from Opera.Signalr.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 from ai_core.tools.bot_api_tool import BotTool
 from ai_core.tools.staff_invitation_tool import StaffInvitationTool, AcceptInvitationTool
-from ai_core.config.config import INIT_CREW_MANAGER, INIT_CREW_MANAGER_TASK, llm
+from ai_core.configs.config import INIT_CREW_MANAGER, INIT_CREW_MANAGER_TASK, llm
 
 
 @dataclass

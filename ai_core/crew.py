@@ -5,7 +5,7 @@ from crewai.project import CrewBase, agent, crew, task
 from tools.template_tool import MyCustomTool
 from crewai import LLM
 from dotenv import load_dotenv
-load_dotenv("config/.env")
+# load_dotenv("configs/.env")
 
 # Check our tools documentations for more information on how to use them
 # from crewai_tools import SerperDevTool
@@ -15,7 +15,7 @@ llm_oneapi = LLM(
     base_url="http://10.1.11.55:3000/v1"
 )
 
-from ai_core.config.config import llm
+from ai_core.configs.config import llm
 # @CrewBase
 # class LatestAiDevelopment:
 # 	"""LatestAiDevelopment crew"""
