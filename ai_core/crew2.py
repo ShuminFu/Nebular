@@ -1,4 +1,3 @@
-import asyncio
 from crewai import Crew, Agent, Task
 from crewai import LLM
 
