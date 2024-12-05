@@ -80,7 +80,7 @@ class BotTool(BaseApiTool):
     args_schema: Type[BaseModel] = BotToolSchema
     base_url: str = "http://opera.nti56.com/Bot"
 
-    def _run(self, **kwargs) -> str:
+    def _run(self, *args, **kwargs) -> str:
         try:
             # 如果输入是字符串，尝试解析为字典
             if isinstance(kwargs, str):

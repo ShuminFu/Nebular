@@ -33,7 +33,7 @@ class BaseApiTool(BaseTool):
                 'data': response.json() if response.text else None
             }
 
-    def _run(self, **kwargs) -> str:
+    def _run(self, *args, **kwargs) -> str:
         """BaseTool要求的抽象方法实现
         
         子类应该重写这个方法来实现具体的业务逻辑

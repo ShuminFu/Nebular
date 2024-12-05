@@ -99,7 +99,7 @@ class StaffTool(BaseApiTool):
         """获取基础URL"""
         return f"http://opera.nti56.com/Opera/{opera_id}/Staff"
 
-    def _run(self, **kwargs) -> str:
+    def _run(self, *args, **kwargs) -> str:
         try:
             # 如果输入是字符串，尝试解析为字典
             if isinstance(kwargs, str):

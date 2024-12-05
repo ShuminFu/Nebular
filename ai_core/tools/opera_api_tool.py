@@ -1,7 +1,7 @@
 from typing import Type, Optional, Dict, Any, Union
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, ValidationError
-from Opera.FastAPI.models import Opera, OperaForCreation, OperaForUpdate, OperaWithMaintenanceState
+from Opera.FastAPI.models import OperaForCreation, OperaForUpdate 
 from .base_api_tool import BaseApiTool
 
 
@@ -85,7 +85,7 @@ class OperaTool(BaseApiTool):
     args_schema: Type[BaseModel] = OperaToolSchema
     base_url: str = "http://opera.nti56.com/Opera"
 
-    def _run(self, **kwargs) -> str:
+    def _run(self, *args, **kwargs) -> str:
         try:
             # 如果输入是字符串，尝试解析为字典
             if isinstance(kwargs, str):
