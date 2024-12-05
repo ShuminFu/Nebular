@@ -1,7 +1,7 @@
 import requests
 import pytest
 import json
-from models import (
+from Opera.FastAPI.models import (
     OperaForCreation, BotForCreation, StaffForCreation,
     StageForCreation, DialogueForCreation, StaffInvitationForCreation,
     ResourceForCreation, OperaPropertyForUpdate,

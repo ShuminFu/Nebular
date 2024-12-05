@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from typing import List, Optional
 from uuid import UUID
-from models import Resource, ResourceForCreation, ResourceForUpdate, ResourceForFilter
+from Opera.FastAPI.models import Resource, ResourceForCreation, ResourceForUpdate, ResourceForFilter
 
 router = APIRouter(
     prefix="/Opera/{opera_id}/Resource",

@@ -33,7 +33,7 @@ tasks = [
         3. 不是旁白（is_narratage为false）
         4. 不是悄悄话（is_whisper为false）
         5. 有场景索引（is_stage_index_null为false）
-        6. 对话内容为'这是一个测试对话'
+        6. 对话内容为即兴发挥生成，但是要表明是dialogue tool生成的。
         7. 标签为'test,demo'
         8. 提到的Staff IDs为['c2a71833-4403-4d08-8ef6-23e6327832b2']""",
         expected_output="成功创建对话，并返回对话的详细信息",

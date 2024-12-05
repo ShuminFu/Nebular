@@ -1,10 +1,16 @@
+"""Opera FastAPI 应用的数据模型定义。
+
+包含了所有与Opera相关的Pydantic模型，用于请求和响应的数据验证与序列化。
+包括Bot、Opera、Resource、TempFile等相关模型。
+"""
+
 from pydantic import BaseModel, Field, field_validator, AliasGenerator
 from typing import List, Optional, Dict
 from datetime import datetime
 from uuid import UUID
 from enum import IntEnum
 import json
-from pydantic.alias_generators import to_camel, to_pascal, to_snake
+from pydantic.alias_generators import to_camel, to_pascal
 
 
 class CamelBaseModel(BaseModel):
@@ -99,7 +105,7 @@ class OperaForCreation(OperaBase):
         if not data.get('database_name'):
             # 生成格式: opera_{name}_{timestamp}
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            safe_name = ''.join(c if c.isalnum() else '_' for c in self.name.lower())
+            safe_name = ''.join(c if c.isalnum() else '_' for c in str(self.name).lower())
             data['database_name'] = f"opera_{safe_name}_{timestamp}"
         return data
 
@@ -180,6 +186,30 @@ class ResourceForFilter(CamelBaseModel):
     last_update_time_not_after: Optional[datetime] = None
     last_update_staff_name: Optional[str] = None
     last_update_staff_name_like: Optional[str] = None
+
+
+# TempFile相关模型
+class TempFile(CamelBaseModel):
+    """临时文件响应模型"""
+    id: UUID = Field(..., description="临时文件ID")
+    length: int = Field(..., description="文件长度（字节）")
+
+
+class TempFileForUpload(CamelBaseModel):
+    """临时文件上传请求模型"""
+    content: bytes = Field(..., description="文件数据块")
+    temp_file_id: Optional[UUID] = Field(None, description="临时文件ID（可选，指定则追加到已有文件）")
+
+
+class TempFileForAppend(CamelBaseModel):
+    """临时文件追加请求模型"""
+    content: bytes = Field(..., description="要追加的文件数据块")
+    temp_file_id: UUID = Field(..., description="目标临时文件ID")
+
+
+class TempFileForDelete(CamelBaseModel):
+    """临时文件删除请求模型"""
+    temp_file_id: UUID = Field(..., description="要删除的临时文件ID")
 
 
 # Dialogue相关模型
@@ -320,12 +350,6 @@ class Stage(CamelBaseModel):
 
 class StageForCreation(CamelBaseModel):
     name: str
-
-
-# TempFile相关模型
-class TempFile(CamelBaseModel):
-    id: UUID
-    length: int
 
 
 # Property相关模型

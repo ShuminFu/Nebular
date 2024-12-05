@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any, Type
+from typing import Optional, Dict, Any, Type, Literal
 import httpx
 from pydantic import BaseModel
 from crewai_tools.tools.base_tool import BaseTool
@@ -13,7 +13,9 @@ class BaseApiTool(BaseTool):
     base_url: str = ""  # 子类需要覆盖这个属性
 
     def _make_request(self, method: str, url: str, json: Optional[Dict[str, Any]] = None,
-                      params: Optional[Dict[str, Any]] = None) -> dict:
+                      params: Optional[Dict[str, Any]] = None, 
+                      content: Optional[bytes] = None,
+                      response_type: Literal['json', 'binary'] = 'json') -> dict:
         """发送HTTP请求的通用方法
 
         Args:
@@ -21,17 +23,30 @@ class BaseApiTool(BaseTool):
             url: 请求URL
             json: 请求体数据（可选）
             params: URL参数（可选）
+            content: 原始二进制内容（可选）
+            response_type: 响应类型，'json'用于JSON响应，'binary'用于文件流响应
 
         Returns:
-            dict: 包含响应数据和状态码的字典
+            dict: 包含响应数据和状态码的字典。
+                 对于JSON响应，返回解析后的JSON数据
+                 对于二进制响应，返回原始字节数据
         """
         with httpx.Client() as client:
-            response = client.request(method, url, json=json, params=params)
+            response = client.request(method, url, json=json, params=params, content=content)
             response.raise_for_status()
-            return {
-                'status_code': response.status_code,
-                'data': response.json() if response.text else None
-            }
+            
+            if response_type == 'binary':
+                return {
+                    'status_code': response.status_code,
+                    'data': response.content,
+                    'content_type': response.headers.get('content-type'),
+                    'content_disposition': response.headers.get('content-disposition')
+                }
+            else:
+                return {
+                    'status_code': response.status_code,
+                    'data': response.json() if response.text else None
+                }
 
     def _run(self, *args, **kwargs) -> str:
         """BaseTool要求的抽象方法实现

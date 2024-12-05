@@ -1,12 +1,12 @@
 """Resource API工具使用示例，展示了如何使用ResourceApiTool进行资源的创建、查询、更新等操作。"""
 from uuid import UUID
 from crewai import Agent, Task, Crew
-from ai_core.tools.resource_api_tool import ResourceApiTool
+from ai_core.tools.resource_api_tool import ResourceTool
 from ai_core.configs.config import llm
 
 
 # 创建Resource管理工具
-resource_tool = ResourceApiTool()
+resource_tool = ResourceTool()
 
 # 创建管理Resource的Agent
 resource_manager = Agent(
@@ -27,32 +27,32 @@ resource_manager = Agent(
 
 # 测试用的Opera ID和临时文件ID
 OPERA_ID = UUID("96028f82-9f76-4372-976c-f0c5a054db79")
-TEMP_FILE_ID = UUID("7c80efe6-a18a-43f5-8bc8-853a29d78bd7")
+TEMP_FILE_ID = UUID("60aba5b4-e7cd-415e-bf0f-56d3d9d35774")
 
 # 定义任务
 tasks = [
-    Task(
-        description=f"""创建一个新的资源文件，要求：
-        1. Opera ID为'{OPERA_ID}'
-        2. 临时文件ID为'{TEMP_FILE_ID}'
-        3. 名称为'测试文档.txt'
-        4. 描述为'这是一个用于测试的文本文件'
-        5. MIME类型为'text/plain'
-        6. 最后更新者名称为'测试人员'""",
-        expected_output="成功创建资源文件，并返回资源的详细信息",
-        agent=resource_manager
-    ),
+    # Task(
+    #     description=f"""创建一个新的资源文件，要求：
+    #     1. Opera ID为'{OPERA_ID}'
+    #     2. 临时文件ID为'{TEMP_FILE_ID}'
+    #     3. 名称为'测试文档.txt'
+    #     4. 描述为即兴发挥生成，但是要表明是resource tool生成的。
+    #     5. MIME类型为'text/plain'
+    #     6. lastUpdateStaffName为'resource tool'""",
+    #     expected_output="成功创建资源文件，并返回资源的详细信息",
+    #     agent=resource_manager
+    # ),
 
-    Task(
-        description=f"""获取所有资源文件列表，Opera ID为'{OPERA_ID}'""",
-        expected_output="返回系统中所有资源文件的列表，确认其中包含刚刚创建的资源",
-        agent=resource_manager
-    ),
+    # Task(
+    #     description=f"""获取所有资源文件列表，Opera ID为'{OPERA_ID}'""",
+    #     expected_output="返回系统中所有资源文件的列表，确认其中包含刚刚创建的资源",
+    #     agent=resource_manager
+    # ),
 
     Task(
         description=f"""按条件过滤资源文件，要求：
         1. Opera ID为'{OPERA_ID}'
-        2. 名称包含'测试'
+        2. 名称为'manualupdate'
         3. MIME类型为'text/plain'""",
         expected_output="返回符合条件的资源文件列表",
         agent=resource_manager

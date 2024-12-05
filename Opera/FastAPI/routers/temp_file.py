@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Body
 from typing import Optional
 from uuid import UUID
-from models import TempFile
+from Opera.FastAPI.models import TempFile
 
 router = APIRouter(
     prefix="/TempFile",

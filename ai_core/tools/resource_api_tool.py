@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, ValidationError
 from Opera.FastAPI.models import Resource, ResourceForCreation, ResourceForUpdate, ResourceForFilter
-from .base_api_tool import BaseApiTool
+from ai_core.tools.base_api_tool import BaseApiTool
 
 
 class ResourceToolSchema(BaseModel):
@@ -52,7 +52,11 @@ class ResourceTool(BaseApiTool):
         'action': 'create',
         'opera_id': 'uuid',
         'data': {
-            # ResourceForCreation的字段
+            'name': '测试资源',
+            'description': '这是一个测试资源文件',
+            'mime_type': 'application/pdf',
+            'last_update_staff_name': '张三',
+            'temp_file_id': 'uuid'  # 上传文件后得到的临时文件ID
         }
     }
     2. 获取所有资源: {
@@ -68,7 +72,14 @@ class ResourceTool(BaseApiTool):
         'action': 'get_filtered',
         'opera_id': 'uuid',
         'data': {
-            # ResourceForFilter的字段
+            'name': '测试资源',  # 精确匹配名称
+            'name_like': '测试',  # 模糊匹配名称
+            'mime_type': 'application/pdf',  # 精确匹配类型
+            'mime_type_like': 'application',  # 模糊匹配类型
+            'last_update_time_not_before': '2024-01-01T00:00:00',  # 更新时间范围
+            'last_update_time_not_after': '2024-12-31T23:59:59',
+            'last_update_staff_name': '张三',  # 精确匹配更新人
+            'last_update_staff_name_like': '张'  # 模糊匹配更新人
         }
     }
     5. 更新资源: {
@@ -76,7 +87,11 @@ class ResourceTool(BaseApiTool):
         'opera_id': 'uuid',
         'resource_id': 'uuid',
         'data': {
-            # ResourceForUpdate的字段
+            'name': '新资源名称',  # 可选
+            'description': '新的描述',  # 可选
+            'mime_type': 'application/pdf',  # 可选
+            'last_update_staff_name': '李四',  # 必填
+            'temp_file_id': 'uuid'  # 可选，如果需要更新文件内容
         }
     }
     6. 删除资源: {
@@ -126,7 +141,7 @@ class ResourceTool(BaseApiTool):
                 result = self._make_request(
                     "POST",
                     f"{base_url}/Get",
-                    json=data.model_dump(exclude_none=True)
+                    json=data.model_dump(by_alias=True)
                 )
                 return [Resource(**item) for item in result['data']]
 
@@ -136,7 +151,7 @@ class ResourceTool(BaseApiTool):
                 result = self._make_request(
                     "POST",
                     base_url,
-                    json=data.model_dump()
+                    json=data.model_dump(by_alias=True)
                 )
                 return Resource(**result['data'])
 
@@ -146,7 +161,7 @@ class ResourceTool(BaseApiTool):
                 self._make_request(
                     "PUT",
                     f"{base_url}/{resource_id}",
-                    json=data.model_dump(exclude_none=True)
+                    json=data.model_dump(by_alias=True)
                 )
                 return None
 
@@ -162,7 +177,7 @@ class ResourceTool(BaseApiTool):
                 # 注意：下载操作可能需要特殊处理，因为基类的_make_request假设响应是JSON
                 # 这里可能需要在基类中添加支持或使用自定义实现
                 result = self._make_request(
-                    "GET", f"{base_url}/{resource_id}/Download")
+                    "GET", f"{base_url}/{resource_id}/Download", response_type='binary')
                 return result['data']
 
             else:
