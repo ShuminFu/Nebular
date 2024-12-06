@@ -3,9 +3,9 @@
 此模块提供了Opera属性管理相关的API调用功能，包括获取所有属性、获取指定属性和更新属性等操作。
 """
 
-from typing import Type, Optional
+from typing import Type, Optional, Dict, Any, Union
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, ValidationError
 
 from Opera.FastAPI.models import OperaPropertyForUpdate
 from .base_api_tool import BaseApiTool
@@ -17,10 +17,24 @@ class PropertyToolSchema(BaseModel):
     opera_id: UUID = Field(..., description="Opera的UUID")
     key: Optional[str] = Field(None, description="属性键名，用于get_by_key操作")
     force: Optional[bool] = Field(None, description="是否强制穿透缓存，从数据库读取")
-    data: Optional[OperaPropertyForUpdate] = Field(
+    data: Optional[Union[Dict[str, Any], OperaPropertyForUpdate]] = Field(
         None,
         description="属性更新数据，用于update操作"
     )
+
+    @field_validator('data')
+    @classmethod
+    def validate_data(cls, v, values):
+        if not v:
+            return v
+
+        action = values.data.get('action')
+        try:
+            if action == 'update':
+                return OperaPropertyForUpdate(**v)
+            return v
+        except ValidationError as e:
+            raise ValueError(f"数据验证失败: {str(e)}") from e
 
 
 class PropertyTool(BaseApiTool):
@@ -91,7 +105,7 @@ class PropertyTool(BaseApiTool):
                 result = self._make_request(
                     "PUT",
                     base_url,
-                    json=data.model_dump(exclude_none=True)
+                    json=data.model_dump(by_alias=True)
                 )
                 return f"状态码: {result['status_code']}, " + (
                     "属性更新成功" if result['status_code'] == 204 else f"详细内容: {str(result['data'])}")

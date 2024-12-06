@@ -1,8 +1,8 @@
 """Stage管理API工具模块，提供Stage的创建、查询等功能。"""
 
-from typing import Type, Optional
+from typing import Type, Optional, Dict, Any, Union
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, ValidationError
 from Opera.FastAPI.models import StageForCreation
 from .base_api_tool import BaseApiTool
 
@@ -13,7 +13,24 @@ class StageToolSchema(BaseModel):
     opera_id: UUID = Field(..., description="Opera的UUID")
     stage_index: Optional[int] = Field(None, description="场幕索引，仅用于get_by_index操作")
     force: Optional[bool] = Field(None, description="是否强制穿透缓存，仅用于get_current操作")
-    data: Optional[StageForCreation] = Field(None, description="Stage的创建数据，仅用于create操作")
+    data: Optional[Union[Dict[str, Any], StageForCreation]] = Field(
+        None,
+        description="Stage的创建数据，仅用于create操作"
+    )
+
+    @field_validator('data')
+    @classmethod
+    def validate_data(cls, v, values):
+        if not v:
+            return v
+
+        action = values.data.get('action')
+        try:
+            if action == 'create':
+                return StageForCreation(**v)
+            return v
+        except ValidationError as e:
+            raise ValueError(f"数据验证失败: {str(e)}") from e
 
 
 class StageTool(BaseApiTool):
