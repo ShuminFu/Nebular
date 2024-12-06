@@ -1,9 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import (
+from Opera.FastAPI.routers import (
     bot, opera, staff, resource, 
     dialogue, invitation, stage, 
-    temp_file, property
+    temp_file, opera_property
 )
 
 app = FastAPI(
@@ -33,7 +33,7 @@ routers = [
     invitation.router,
     stage.router,
     temp_file.router,
-    property.router
+    opera_property.router
 ]
 
 for router in routers:

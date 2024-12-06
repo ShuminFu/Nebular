@@ -1,11 +1,12 @@
+# pylint: skip-file
 from fastapi import APIRouter, HTTPException
 from typing import Optional
 from uuid import UUID
-from models import OperaProperty, OperaPropertyForUpdate
+from Opera.FastAPI.models import OperaProperty, OperaPropertyForUpdate
 
 router = APIRouter(
     prefix="/Opera/{opera_id}/Property",
-    tags=["Property"]
+    tags=["OperaProperty"]
 )
 
 @router.get("/", response_model=OperaProperty)
