@@ -1,3 +1,5 @@
+"""对话管理API工具模块，提供对话的创建、查询和过滤等功能。"""
+
 from typing import Type, Optional, Dict, Any, Union
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, ValidationError

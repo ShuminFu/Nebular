@@ -1,3 +1,5 @@
+"""Opera管理API工具模块，提供Opera的创建、查询、更新和删除等功能。"""
+
 from typing import Type, Optional, Dict, Any, Union
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, ValidationError

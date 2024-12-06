@@ -1,3 +1,5 @@
+"""Staff管理API工具模块，提供Staff的创建、查询、更新、删除和高级过滤等功能。"""
+
 from typing import Type, Optional, Dict, Any, Union
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, ValidationError

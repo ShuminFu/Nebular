@@ -1,3 +1,9 @@
+"""Bot管理API工具模块，提供Bot的CRUD操作接口。
+
+该模块实现了Bot的创建、读取、更新和删除等管理功能，
+通过RESTful API与Bot服务进行交互，支持各种Bot配置的管理操作。
+"""
+
 from typing import Type, Optional, Dict, Any, Union
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, ValidationError

@@ -1,3 +1,9 @@
+"""提供基于HTTP的API工具基类，用于构建各种API集成工具。
+
+该模块实现了一个通用的API工具基类，提供了标准化的HTTP请求处理功能，
+支持JSON和二进制响应，可用于构建特定API的工具类。
+"""
+
 from typing import Optional, Dict, Any, Type, Literal
 import httpx
 from pydantic import BaseModel
