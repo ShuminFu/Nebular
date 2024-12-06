@@ -69,9 +69,7 @@ class MessageReceivedArgs:
 
 
 class OperaSignalRClient:
-    def __init__(self,
-                 url: str = "http://opera.nti56.com/signalRService",
-                 bot_id: Optional[str] = None):
+    def __init__(self, url: str = "http://opera.nti56.com/signalRService", bot_id: Optional[str] = None):
         self.url = url
         self.client = SignalRClient(self.url)
         self.bot_id = UUID(bot_id) if bot_id else None
@@ -106,7 +104,7 @@ class OperaSignalRClient:
         # 添加回调状追踪
         self.callback_stats = {
             name: {"success": 0, "error": 0, "last_execution": None}
-            for name in self.callbacks.keys()
+            for name in self.callbacks
         }
 
         # 设置回调超时时间(秒)
@@ -143,9 +141,7 @@ class OperaSignalRClient:
         """安全地断开连接"""
         try:
             if self._connection_task:
-                # 先停止 SignalR 客户端
-                await self.client.stop()
-                # 取消连接任务
+                # 直接取消连接任务
                 self._connection_task.cancel()
                 try:
                     await self._connection_task
@@ -206,13 +202,13 @@ class OperaSignalRClient:
             )
             self.callback_stats[callback_name]["error"] += 1
 
-        except Exception as e:
+        except Exception as _:
             logger.exception(f"回调 {callback_name} 执行出错")
             self.callback_stats[callback_name]["error"] += 1
 
     # 内部处理方法
     async def _handle_hello(self, *args) -> None:
-        logger.info(f"Hello!")
+        logger.info("Hello!")
         if self.callbacks["on_hello"]:
             await self._execute_callback("on_hello", self.callbacks["on_hello"])
         else:
@@ -333,7 +329,7 @@ class OperaSignalRClient:
     # 添加心跳检测
     async def check_health(self):
         while True:
-            if not self.client.connection.connected:
+            if not self.is_connected():
                 logger.warning("连接已断开，尝试重连")
                 await self.connect_with_retry()
             await asyncio.sleep(30)  # 每30秒检查一次
@@ -387,9 +383,3 @@ class OperaSignalRClient:
     def is_connected(self) -> bool:
         """检查是否已连接"""
         return self._connected
-
-    async def disconnect(self):
-        """主动断开连接"""
-        if self.client:
-            await self.client.stop()
-            self._connected = False
