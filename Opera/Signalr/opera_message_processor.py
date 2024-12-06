@@ -9,7 +9,7 @@ from loguru import logger
 from Opera.Signalr.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 from ai_core.tools.bot_api_tool import BotTool
 from ai_core.tools.staff_invitation_api_tool import StaffInvitationTool
-from ai_core.configs.config import INIT_CREW_MANAGER, INIT_CREW_MANAGER_TASK, llm
+from ai_core.configs.config import INIT_CREW_MANAGER, INIT_CREW_MANAGER_TASK, llm, TEMPLATE_USAGE
 
 
 @dataclass
@@ -28,17 +28,14 @@ class CrewManager:
     def __init__(self):
         self.bot_id = None
         self.client = None
-        self.crew_processes: Dict[UUID, CrewProcessInfo] = {}  # bot_id -> CrewProcessInfo
-        self.bot_tool = BotTool()
-        self.staff_invitation_tool = StaffInvitationTool()
+        # bot_id -> CrewProcessInfo
+        self.crew_processes: Dict[UUID, CrewProcessInfo] = {}
 
     async def start(self):
         """启动CrewManager"""
-        # 创建初始Crew来获取Bot ID
         # TODO 支持灵活配置
-        init_crew_config = self._generate_init_crew_config()
-        crew = self._setup_init_crew(init_crew_config)
-
+        # crew 可以直接导入config.py中的Crew，或者**解码INIT_CREW_MANAGER字典来创建。
+        crew = Crew(agents=[TEMPLATE_USAGE], tasks=[Task(**INIT_CREW_MANAGER_TASK)])
         result = await crew.kickoff()
         self.bot_id = UUID(result['bot_id'])
 
@@ -51,43 +48,8 @@ class CrewManager:
 
     async def create_bot_and_crew(self, opera_id: UUID, roles: List[str]) -> UUID:
         """创建新的Bot和对应的Crew"""
-        # 1. 创建Bot和发送邀请的Crew配置
-        bot_creation_config = {
-            "agents": [
-                {
-                    "name": "Bot Creator",
-                    "role": "Bot创建专家",
-                    "goal": "创建新的Opera Bot",
-                    "backstory": "我负责创建新的Opera Bot实例",
-                    "tools": [BotTool()],
-                    "task": f"创建一个新的Bot，名称为'Opera Bot {opera_id}'，描述为'Bot for Opera {opera_id}'"
-                },
-                {
-                    "name": "Staff Inviter",
-                    "role": "Staff邀请专家",
-                    "goal": "创建Staff邀请",
-                    "backstory": "我负责为Bot创建Staff邀请",
-                    "tools": [StaffInvitationTool()],
-                    "task": f"为新创建的Bot创建Opera {opera_id}的Staff邀请，角色为{roles}"
-                }
-            ],
-            "process": "sequential"
-        }
-
-        # 创建Crew来处理Bot创建和邀请
-        setup_crew = self._setup_crew(bot_creation_config)
-        result = await setup_crew.kickoff()
-        bot_id = UUID(result['bot_id'])
-
-        # 2. 启动Bot的主Crew进程
-        crew_config = self._generate_bot_crew_config()
-        await self.start_crew_process(
-            crew_config=crew_config,
-            bot_id=bot_id
-        )
-
-        logger.info(f"已完成Bot {bot_id}的创建和邀请流程")
-        return bot_id
+        # 这里调用创建Bot的API，获取Bot_ID.
+        # 通过Crew生成一份Runner的crew_config,用于后续的进程启动。需要一个生成crew_config的工具以及完善的示例。
 
     async def start_crew_process(self, crew_config: dict, bot_id: UUID) -> None:
         """启动新的Crew进程"""
@@ -165,7 +127,8 @@ class CrewRunner:
         await self.client.connect()
 
         # 设置Staff邀请处理回调
-        self.client.set_callback("on_staff_invited", self._handle_staff_invitation)
+        self.client.set_callback(
+            "on_staff_invited", self._handle_staff_invitation)
 
     async def run(self):
         """运行Crew的主循环"""
@@ -173,7 +136,8 @@ class CrewRunner:
             await self.setup()
 
             # 设置消息处理回调
-            self.client.set_callback("on_message_received", self._handle_message)
+            self.client.set_callback(
+                "on_message_received", self._handle_message)
 
             # 保持进程运行
             while self.is_running:
@@ -220,7 +184,8 @@ class CrewRunner:
         try:
             # 更新Crew任务
             for task in self.crew.tasks:
-                task.description = f"处理消息: {message.text}\n上下文: {task.description}"
+                task.description = f"处理消息: {
+                    message.text}\n上下文: {task.description}"
 
             # 执行Crew任务
             result = await self.crew.kickoff()
@@ -249,7 +214,7 @@ class CrewRunner:
                 {
                     **INIT_CREW_MANAGER,  # 继承基础配置
                     "name": "Bot Creator",
-                    "tools": [self.bot_tool],
+                    "tools": [BotTool()],
                 }
             ],
             "tasks": [
@@ -307,23 +272,6 @@ class CrewRunner:
 
     async def _handle_staff_invitation(self, invitation_data: dict):
         """处理Staff邀请"""
-        # 创建处理邀请的Crew配置
-        invitation_handler_config = {
-            "agents": [
-                {
-                    "name": "Invitation Handler",
-                    "role": "邀请处理专家",
-                    "goal": "处理Staff邀请",
-                    "backstory": "我负责处理和接受Staff邀请",
-                    "tools": [StaffInvitationTool()],
-                    "task": f"接受邀请ID为{invitation_data['invitation_id']}的Staff邀请"
-                }
-            ],
-            "process": "sequential"
-        }
-
-        # 创建临时Crew来处理邀请
-        invitation_crew = self._setup_crew(invitation_handler_config)
-        await invitation_crew.kickoff()
-
-        logger.info(f"Bot {self.bot_id} 已处理Opera {invitation_data['opera_id']}的Staff邀请")
+        # TODO 这里改为无脑接受邀请
+        logger.info(f"Bot {self.bot_id} 已处理Opera {
+                    invitation_data['opera_id']}的Staff邀请")

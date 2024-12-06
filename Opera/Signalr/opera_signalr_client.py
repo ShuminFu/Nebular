@@ -162,6 +162,15 @@ class OperaSignalRClient:
         self.snitch_mode = enabled
         await self.client.send("SetSnitchMode", [enabled])
 
+    async def send(self, method: str, args: list):
+        """发送消息到SignalR服务器
+        
+        Args:
+            method: 要调用的方法名
+            args: 参数列表
+        """
+        await self.client.send(method, args)
+
     def set_callback(self, event_name: str, callback: Callable):
         """设置回调函数"""
         if event_name not in self.callbacks:
