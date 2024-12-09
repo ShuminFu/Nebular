@@ -9,7 +9,7 @@ from loguru import logger
 from Opera.Signalr.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 from ai_core.tools.bot_api_tool import BotTool
 from ai_core.tools.staff_invitation_api_tool import StaffInvitationTool
-from ai_core.configs.config import INIT_CREW_MANAGER, INIT_CREW_MANAGER_TASK, llm, TEMPLATE_USAGE
+from ai_core.configs.config import DEFAULT_CREW_MANAGER_PROMPT, CREW_MANAGER_INIT, llm, DEFAULT_CREW_MANAGER
 
 
 @dataclass
@@ -33,9 +33,8 @@ class CrewManager:
 
     async def start(self):
         """启动CrewManager"""
-        # TODO 支持灵活配置
-        # crew 可以直接导入config.py中的Crew，或者**解码INIT_CREW_MANAGER字典来创建。
-        crew = Crew(agents=[TEMPLATE_USAGE], tasks=[Task(**INIT_CREW_MANAGER_TASK)])
+        # crew 可以直接导入config.py中的Crew，或者对模板字典解包
+        crew = Crew(agents=[DEFAULT_CREW_MANAGER], tasks=[Task(**CREW_MANAGER_INIT,agent=DEFAULT_CREW_MANAGER)])
         result = await crew.kickoff()
         self.bot_id = UUID(result['bot_id'])
 
@@ -148,7 +147,7 @@ class CrewRunner:
         finally:
             self.is_running = False
             await self.client.disconnect()
-            # TODO 意外错误时，不一定能够执行到这一步。最好是能够用上signalr接收心跳消息来让CrewManager知道是否存活。并且参考signalr的重连
+            # TODO: 意外错误时，不一定能够执行到这一步。最好是能够用上signalr接收心跳消息来让CrewManager知道是否存活。并且参考signalr的重连
 
     def _setup_crew(self) -> Crew:
         """根据配置设置Crew"""
@@ -212,14 +211,14 @@ class CrewRunner:
         return {
             "agents": [
                 {
-                    **INIT_CREW_MANAGER,  # 继承基础配置
+                    **DEFAULT_CREW_MANAGER_PROMPT,  # 继承基础配置
                     "name": "Bot Creator",
                     "tools": [BotTool()],
                 }
             ],
             "tasks": [
                 {
-                    **INIT_CREW_MANAGER_TASK,  # 继承基础任务配置
+                    **CREW_MANAGER_INIT,  # 继承基础任务配置
                     "description": "创建一个新的Bot实例并返回其ID"
                 }
             ],

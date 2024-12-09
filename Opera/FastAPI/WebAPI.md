@@ -3,7 +3,7 @@ Bot管理：http://opera.nti56.com/Bot
 功能：获取所有Bot。
 方法：Get
 地址：/
-返回值：List<Bot>，其中Bot包含属性：Guid Id，string Name，string? Description，bool IsActive，string? CallShellOnOperaStarted，string? DefaultTag，string? DefaultRoles，string? DefaultPermissions。
+返回值：List<Bot>，其中Bot包含属性：Guid Id，string Name，string? Description，bool IsActive，string? CallShellOnOperaStarted，string? DefaultTags，string? DefaultRoles，string? DefaultPermissions。
 
 功能：返回指定Bot。
 方法：Get
@@ -27,18 +27,29 @@ Body参数：BotForUpdate bot，其中bot包含属性：string? Name（为null�
 地址：/{botId}
 返回值：成功返回204；失败返回错误信息。
 
+功能：获得Bot在所有Opera（缓存中记录）的Staff与StaffInvitation。此方法不会导致对应的Opera被缓存，也不会读取对应的缓存数据。
+方法：Get
+地址：/{botId}/GetAllStaffs
+参数：bool? needOperaInfo，是否包含Opera Name与Description，默认false；int? needStaffs，包含Staff的数据内容（0不包含，1只包含Id，2包含Id与Parameter，3包含所有字段），默认1；int? needStaffInvitations，包含StaffInvitation的数据内容（同Staff），默认1。注：如needStaffs与needStaffInvitations均为0，则会返回空记录，并不会执行查询。
+返回值：StaffsOfOpera集合，其中StaffsOfOpera包含属性：Guid OperaId，Guid? OperaParentId，string? OperaName，string? OperaDescription，List<Staff>? Staffs，List<StaffInvitation>? StaffInvitations；其中Staff包含属性：Guid Id，string? Name，string? Parameter，bool? IsOnStage，string? Tags，string? Roles，string? Permissions；其中StaffInvitation包含属性：Guid Id，string? Parameter，string? Tags，string? Roles，string? Permissions。
+
 --------
 
 Opera管理：http://opera.nti56.com/Opera
 
+功能：重新加载数据库中的Opera记录到缓存。
+方法：Get
+地址：/ReloadOperas
+
 功能：获取所有Opera。
 方法：Get
 地址：/
-参数：Guid? parentId，父Opera。当不指定时，返回以根为父节点的Opera。
+参数：Guid? parentId，父Opera（当不指定时，返回以根为父节点的Opera）；bool? ignoreCache，忽略缓存，默认值为否。当使用缓存时，不会返回MaintenanceState非0的记录。
 返回值：List<OperaWithMaintenanceState>，其中OperaWithMaintenanceState包含属性：Guid Id，Guid? ParentId，string Name，string? Description，string DatabaseName，int MaintenanceState。MaintenanceState为0表示状态正常；MaintenanceState为1表示正在创建；MaintenanceState为2表示正在删除。
 
 功能：获取指定Opera。
 方法：Get
+参数：bool? ignoreCache，忽略缓存，默认值为否。当使用缓存时，不会返回MaintenanceState非0的记录。
 地址：/{operaId}
 返回值：OperaWithMaintenanceState，属性同上；当找不到时，返回404。
 
@@ -163,7 +174,7 @@ Body参数：StaffInvitationForCreation staffInvitation，其中staffInvitation�
 
 功能：接受职员邀请。
 方法：Post
-地址：/{staffInvitationId}/Accpet
+地址：/{staffInvitationId}/Accept
 Body参数：StaffInvitationForAcceptance staffInvitation，其中staffInvitation包含属性：string Name，string? Parameter，bool IsOnStage，string? Tags，string? Roles，string? Permission。可选属性如未指定则使用邀请中的值。
 返回值：成功返回创建的职员Id；失败返回错误信息；当找不到时，返回404；当指定的Opera不存在时，返回404。
 注：此功能的ETag为职员Id，而非职员邀请Id。
@@ -285,6 +296,11 @@ Body参数：DialogueForFilter? filter，其中filter包含属性：int? IndexNo
 地址：/
 Body参数：DialogueForCreation dialogue，其中dialogue包含属性：bool IsStageIndexNull，Guid? StaffId，bool IsNarratage，bool IsWhisper，string Text，string? Tags，List<Guid>? MentionedStaffIds。
 返回值：创建的Dialogue，属性同上；失败返回错误信息；当指定的Opera不存在时，返回404。
+
+功能：获取当前最后对话的Index值。
+方法：Get
+地址：/LatestIndex
+返回值：成功时返回Index；无对话时返回0；当指定的Opera不存在时，返回404。
 
 --------
 

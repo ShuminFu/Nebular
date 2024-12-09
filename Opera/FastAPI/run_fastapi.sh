@@ -1,0 +1,1 @@
+PYTHONPATH=/home/shumin/PycharmProjects/Nebular/ /home/shumin/.cache/pypoetry/virtualenvs/poetry-nebular-Ds1HTFbK-py3.12/bin/python /home/shumin/PycharmProjects/Nebular/Opera/FastAPI/main.py 9001 > output.log 2>&1 &

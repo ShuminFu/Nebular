@@ -13,9 +13,9 @@ from .base_api_tool import BaseApiTool
 
 class BotToolSchema(BaseModel):
     """Bot工具的基础输入模式"""
-    action: str = Field(..., description="操作类型: create/get/get_all/update/delete")
+    action: str = Field(..., description="操作类型: create/get/get_all/update/delete/get_all_staffs")
     bot_id: Optional[UUID] = Field(None,
-                                   description="Bot的UUID，仅用于get/update/delete操作，create/get_all/操作不需要该字段")
+                                   description="Bot的UUID，仅用于get/update/delete/get_all_staffs操作，create/get_all操作不需要该字段")
     data: Optional[Union[Dict[str, Any], BotForCreation, BotForUpdate]] = Field(
         None,
         description="""Bot的数据，根据action类型使用不同的数据模型:
@@ -82,6 +82,15 @@ class BotTool(BaseApiTool):
         }
     }    
     5. 删除Bot: {'action': 'delete', 'bot_id': 'uuid'}
+    6. 获取Bot的所有Staff: {
+        'action': 'get_all_staffs',
+        'bot_id': 'uuid',
+        'data': {
+            'need_opera_info': False,
+            'need_staffs': 1,
+            'need_staff_invitations': 1
+        }
+    }
     """
     args_schema: Type[BaseModel] = BotToolSchema
     base_url: str = "http://opera.nti56.com/Bot"
@@ -97,11 +106,24 @@ class BotTool(BaseApiTool):
             bot_id = kwargs.get("bot_id")
             data = kwargs.get("data")
 
-            # 添加数据预处理
-            # if data:
-            # data = self._preprocess_data(data)
+            if action == "get_all_staffs":
+                if not bot_id:
+                    raise ValueError("获取Bot的Staff信息需要提供bot_id")
+                
+                params = {
+                    'need_opera_info': data.get('need_opera_info', False),
+                    'need_staffs': data.get('need_staffs', 1),
+                    'need_staff_invitations': data.get('need_staff_invitations', 1)
+                }
+                
+                result = self._make_request(
+                    "GET", 
+                    f"{self.base_url}/{bot_id}/GetAllStaffs",
+                    params=params
+                )
+                return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 
-            if action == "get_all":
+            elif action == "get_all":
                 result = self._make_request("GET", self.base_url)
                 return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 

@@ -1,7 +1,7 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Query
 from typing import List, Optional
 from uuid import UUID
-from models import Bot, BotForCreation, BotForUpdate
+from models import Bot, BotForCreation, BotForUpdate, StaffsOfOpera
 
 router = APIRouter(
     prefix="/Bot",
@@ -82,4 +82,32 @@ async def delete_bot(bot_id: UUID):
         404: 找不到指定的Bot
         400: 删除失败时返回错误信息
     """
+    pass
+
+@router.get("/{bot_id}/GetAllStaffs", response_model=List[StaffsOfOpera])
+async def get_all_staffs(
+    bot_id: UUID,
+    need_opera_info: Optional[bool] = Query(False, description="是否包含Opera Name与Description"),
+    need_staffs: Optional[int] = Query(1, description="包含Staff的数据内容（0不包含，1只包含Id，2包含Id与Parameter，3包含所有字段）", ge=0, le=3),
+    need_staff_invitations: Optional[int] = Query(1, description="包含StaffInvitation的数据内容（0不包含，1只包含Id，2包含Id与Parameter，3包含所有字段）", ge=0, le=3)
+):
+    """
+    获得Bot在所有Opera（缓存中记录）的Staff与StaffInvitation。
+    此方法不会导致对应的Opera被缓存，也不会读取对应的缓存数据。
+
+    Args:
+        bot_id: Bot ID
+        need_opera_info: 是否包含Opera Name与Description，默认false
+        need_staffs: 包含Staff的数据内容（0不包含，1只包含Id，2包含Id与Parameter，3包含所有字段），默认1
+        need_staff_invitations: 包含StaffInvitation的数据内容（同Staff），默认1
+
+    Returns:
+        返回StaffsOfOpera列表，每个StaffsOfOpera包含Opera信息和相关的Staff、StaffInvitation信息
+
+    Raises:
+        404: 找不到指定的Bot
+        400: 如果need_staffs与need_staff_invitations均为0，或其他错误情况
+    """
+    if need_staffs == 0 and need_staff_invitations == 0:
+        return []
     pass

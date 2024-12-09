@@ -46,13 +46,24 @@ tasks = [
     #     agent=bot_manager
     # ),
 
+    # Task(
+    #     description="""基于上一个创建任务返回的Bot ID，或者是'e822fd9b-a360-4eb7-b217-c4f86f2dcee6'。更新该Bot的信息：
+    #     1. 更新描述为 '这是更新后的测试Bot'
+    #     2. 更新默认标签为 'updated,test',
+    #     3. 所有true, false都请你使用字符串表示或者使用双引号包括起来，比如"True","False"
+    #     """,
+    #     expected_output="成功更新Bot信息，并返回更新后的详细信息",
+    #     agent=bot_manager
+    # ),
+
     Task(
-        description="""基于上一个创建任务返回的Bot ID，或者是'e822fd9b-a360-4eb7-b217-c4f86f2dcee6'。更新该Bot的信息：
-        1. 更新描述为 '这是更新后的测试Bot'
-        2. 更新默认标签为 'updated,test',
-        3. 所有true, false都请你使用字符串表示或者使用双引号包括起来，比如"True","False"
+        description="""获取Bot '894c1763-22b2-418c-9a18-3c40b88d28bc' 的所有Staff信息：
+        1. 需要包含Opera的名称和描述信息
+        2. Staff信息需要包含Id和Parameter
+        3. StaffInvitation信息只需要包含Id
+        4. 所有true, false都请你使用字符串表示或者使用双引号包括起来，比如"True","False"
         """,
-        expected_output="成功更新Bot信息，并返回更新后的详细信息",
+        expected_output="返回该Bot在所有Opera中的Staff和StaffInvitation信息",
         agent=bot_manager
     )
 ]

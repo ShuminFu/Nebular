@@ -20,7 +20,7 @@ llm = LLM(
 #     base_url=os.environ.get("http://10.1.11.55:3000/v1")
 # )
 
-INIT_CREW_MANAGER = {
+DEFAULT_CREW_MANAGER_PROMPT = {
     "role": "Bot管理员, Staff邀请发送者",
     "goal": "管理和维护系统中的Bot, 在需要的时候发送Opera邀请给正确的Bot",
     "backstory": """你是一个专业的Bot管理员，负责创建、更新、查询和删除Bot。同时你根据负责根据Opera给Bot发送对应的Staff邀请。
@@ -36,26 +36,29 @@ INIT_CREW_MANAGER = {
     "respect_context_window": True,
     "use_system_prompt": True
 }
-INIT_CREW_MANAGER_TASK = {
+# ps: can be modified later by Task()[0].description
+CREW_MANAGER_INIT = {
     "description": """
-    作为Bot管理员，你需要视任务情况进行以下工作：
-    1. 管理Bot生命周期：创建、更新、查询和删除Bot
-    2. 处理Opera Staff邀请：根据需求向指定Bot发送邀请
-    3. 监控Bot状态：确保Bot正常运行并记录异常情况
-    4. 维护Bot配置：确保配置信息准确且最新
-    5. 执行权限控制：管理Bot的访问权限和操作限制
+    查询所有Bot列表中名为BotManager的Bot
     """,
-    "expected_output": "根据任务返回对应的信息，比如创建Bot得到的响应详情或者发送邀请得到的响应详情",
+    "expected_output": "返回Bot ID以及其他详情",
 }
 
-TEMPLATE_USAGE = Agent(
+GET_SUB_BOTS_BY_TAG = {
+    "description":"""
+    根据这个Bot的TAG 分析出所有的子Bot的ID
+    """,
+    "expected_output":"返回所有子Bot的ID列表"
+}
+
+DEFAULT_CREW_MANAGER = Agent(
     tools=[BotTool()],
     llm=llm,
-    **INIT_CREW_MANAGER
+    **DEFAULT_CREW_MANAGER_PROMPT
 )
 if __name__ == "__main__":
     crew = Crew(
-        agents=[TEMPLATE_USAGE],
-        tasks=[Task(**INIT_CREW_MANAGER_TASK)]
+        agents=[DEFAULT_CREW_MANAGER],
+        tasks=[Task(**CREW_MANAGER_INIT)]
     )
     crew.kickoff()

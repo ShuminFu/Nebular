@@ -81,6 +81,8 @@ class BotForUpdate(CamelBaseModel):
 
 
 # Opera相关模型
+
+
 class OperaBase(CamelBaseModel):
     """Opera基础模型，包含共同的字段"""
     name: str = Field(..., description="Opera名称")
@@ -105,7 +107,8 @@ class OperaForCreation(OperaBase):
         if not data.get('database_name'):
             # 生成格式: opera_{name}_{timestamp}
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            safe_name = ''.join(c if c.isalnum() else '_' for c in str(self.name).lower())
+            safe_name = ''.join(
+                c if c.isalnum() else '_' for c in str(self.name).lower())
             data['database_name'] = f"opera_{safe_name}_{timestamp}"
         return data
 
@@ -198,7 +201,8 @@ class TempFile(CamelBaseModel):
 class TempFileForUpload(CamelBaseModel):
     """临时文件上传请求模型"""
     content: bytes = Field(..., description="文件数据块")
-    temp_file_id: Optional[UUID] = Field(None, description="临时文件ID（可选，指定则追加到已有文件）")
+    temp_file_id: Optional[UUID] = Field(
+        None, description="临时文件ID（可选，指定则追加到已有文件）")
 
 
 class TempFileForAppend(CamelBaseModel):
@@ -246,7 +250,14 @@ class DialogueForFilter(CamelBaseModel):
     includes_staff_id_null: bool
 
 
+class DialogueContext(CamelBaseModel):
+    current_dialogue_index: int
+    relevant_dialogues: List[int] = Field(default_factory=list)
+    task_queue: List[int] = Field(default_factory=list)
+
 # Staff相关模型
+
+
 class JsonParameterModel(CamelBaseModel):
     """包含 JSON 参数字段的基础模型"""
     parameter: str = Field(..., description="参数 (JSON格式)")
@@ -341,8 +352,21 @@ class StaffInvitationForAcceptance(OptionalJsonParameterModel, CamelBaseModel):
     roles: Optional[str] = None
     permissions: Optional[str] = None
 
+# 通过BotID查询StaffsOfOpera的响应模型
+
+
+class StaffsOfOpera(CamelBaseModel):
+    """Opera中的Staff和StaffInvitation信息"""
+    opera_id: UUID
+    opera_parent_id: Optional[UUID] = None
+    opera_name: Optional[str] = None
+    opera_description: Optional[str] = None
+    staffs: Optional[List[Staff]] = None
+    staff_invitations: Optional[List[StaffInvitation]] = None
 
 # Stage相关模型
+
+
 class Stage(CamelBaseModel):
     index: int
     name: str
