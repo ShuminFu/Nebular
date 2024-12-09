@@ -26,47 +26,53 @@ dialogue_manager = Agent(
 
 # 定义任务
 tasks = [
+    # Task(
+    #     description="""创建一个新的对话，要求：
+    #     1. Opera ID为'96028f82-9f76-4372-976c-f0c5a054db79'
+    #     2. Staff ID为'ab01d4f7-bbf1-44aa-a55b-cbc7d62fbfbc'
+    #     3. 不是旁白（is_narratage为false）
+    #     4. 不是悄悄话（is_whisper为false）
+    #     5. 有场景索引（is_stage_index_null为false）
+    #     6. 对话内容为即兴发挥生成，但是要表明是dialogue tool生成的。
+    #     7. 标签为'test,demo'
+    #     8. 提到的Staff IDs为['c2a71833-4403-4d08-8ef6-23e6327832b2']""",
+    #     expected_output="成功创建对话，并返回对话的详细信息",
+    #     agent=dialogue_manager
+    # ),
+
     Task(
-        description="""创建一个新的对话，要求：
-        1. Opera ID为'96028f82-9f76-4372-976c-f0c5a054db79'
-        2. Staff ID为'ab01d4f7-bbf1-44aa-a55b-cbc7d62fbfbc'
-        3. 不是旁白（is_narratage为false）
-        4. 不是悄悄话（is_whisper为false）
-        5. 有场景索引（is_stage_index_null为false）
-        6. 对话内容为即兴发挥生成，但是要表明是dialogue tool生成的。
-        7. 标签为'test,demo'
-        8. 提到的Staff IDs为['c2a71833-4403-4d08-8ef6-23e6327832b2']""",
-        expected_output="成功创建对话，并返回对话的详细信息",
+        description="""获取最新对话的索引值，Opera ID为'96028f82-9f76-4372-976c-f0c5a054db79'""",
+        expected_output="返回最新对话的索引值，如果没有对话则返回0",
         agent=dialogue_manager
     ),
 
-    Task(
-        description="""获取所有对话列表，Opera ID为'96028f82-9f76-4372-976c-f0c5a054db79'""",
-        expected_output="返回系统中所有对话的列表，确认其中有刚刚创建的对话",
-        agent=dialogue_manager
-    ),
+    # Task(
+    #     description="""获取所有对话列表，Opera ID为'96028f82-9f76-4372-976c-f0c5a054db79'""",
+    #     expected_output="返回系统中所有对话的列表，确认其中有刚刚创建的对话",
+    #     agent=dialogue_manager
+    # ),
 
-    Task(
-        description="""按条件过滤查询对话，要求：
-        1. Opera ID为'96028f82-9f76-4372-976c-f0c5a054db79'
-        2. 索引范围：1-20
-        3. 返回记录数上限：100
-        4. 包含场景索引为1的对话
-        5. 包含无场景索引的对话（includes_stage_index_null为true）
-        6. 包含旁白（includes_narratage为true）
-        7. 只包含指定Staff的对话（includes_for_staff_id_only为'7c80efe6-a18a-43f5-8bc8-853a29d78bd7'）
-        8. 包含无Staff的对话（includes_staff_id_null为true）""",
-        expected_output="返回符合条件的对话列表",
-        agent=dialogue_manager
-    ),
+    # Task(
+    #     description="""按条件过滤查询对话，要求：
+    #     1. Opera ID为'96028f82-9f76-4372-976c-f0c5a054db79'
+    #     2. 索引范围：1-20
+    #     3. 返回记录数上限：100
+    #     4. 包含场景索引为1的对话
+    #     5. 包含无场景索引的对话（includes_stage_index_null为true）
+    #     6. 包含旁白（includes_narratage为true）
+    #     7. 只包含指定Staff的对话（includes_for_staff_id_only为'7c80efe6-a18a-43f5-8bc8-853a29d78bd7'）
+    #     8. 包含无Staff的对话（includes_staff_id_null为true）""",
+    #     expected_output="返回符合条件的对话列表",
+    #     agent=dialogue_manager
+    # ),
 
-    Task(
-        description="""获取指定索引的对话：
-        1. Opera ID为'96028f82-9f76-4372-976c-f0c5a054db79'
-        2. 对话索引为1""",
-        expected_output="返回指定索引对话的详细信息",
-        agent=dialogue_manager
-    )
+    # Task(
+    #     description="""获取指定索引的对话：
+    #     1. Opera ID为'96028f82-9f76-4372-976c-f0c5a054db79'
+    #     2. 对话索引为1""",
+    #     expected_output="返回指定索引对话的详细信息",
+    #     agent=dialogue_manager
+    # )
 ]
 
 # 创建和运行Crew

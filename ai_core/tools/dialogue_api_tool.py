@@ -9,7 +9,7 @@ from .base_api_tool import BaseApiTool
 
 class DialogueToolSchema(BaseModel):
     """Dialogue工具的基础输入模式"""
-    action: str = Field(..., description="操作类型: create/get/get_all/get_filtered")
+    action: str = Field(..., description="操作类型: create/get/get_all/get_filtered/get_latest_index")
     opera_id: UUID = Field(..., description="Opera的UUID")
     dialogue_index: Optional[int] = Field(None, description="对话索引，仅用于get操作")
     data: Optional[Union[Dict[str, Any], DialogueForCreation, DialogueForFilter]] = Field(
@@ -78,6 +78,10 @@ class DialogueTool(BaseApiTool):
             'includes_staff_id_null': true
         }
     }
+    5. 获取最新对话索引: {
+        'action': 'get_latest_index',
+        'opera_id': 'uuid'
+    }
     """
     args_schema: Type[BaseModel] = DialogueToolSchema
 
@@ -119,6 +123,10 @@ class DialogueTool(BaseApiTool):
                 if not data:
                     raise ValueError("创建对话需要提供data")
                 result = self._make_request("POST", base_url, json=data.model_dump(by_alias=True))
+                return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
+
+            elif action == "get_latest_index":
+                result = self._make_request("GET", f"{base_url}/LatestIndex")
                 return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 
             else:

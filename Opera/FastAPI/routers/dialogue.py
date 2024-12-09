@@ -126,3 +126,19 @@ async def create_dialogue(opera_id: UUID, dialogue: DialogueForCreation):
         400: 创建失败时返回错误信息
     """
     pass
+
+@router.get("/LatestIndex", response_model=int)
+async def get_latest_dialogue_index(opera_id: UUID):
+    """
+    获取当前最后对话的Index值
+    
+    参数:
+        opera_id (UUID): Opera ID
+        
+    返回:
+        int: 最后对话的索引值。无对话时返回0
+            
+    错误:
+        404: 找不到指定的Opera
+    """
+    pass
