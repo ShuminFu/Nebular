@@ -41,15 +41,17 @@ CREW_MANAGER_INIT = {
     "description": """
     查询所有Bot列表中名为BotManager的Bot
     """,
-    "expected_output": "返回Bot ID以及其他详情",
-}
+    "expected_output": "返回不在活跃状态的Bot ID列表以及详情",
+} # 怎么感觉这个也可以coding实现
 
-GET_SUB_BOTS_BY_TAG = {
-    "description":"""
-    根据这个Bot的TAG 分析出所有的子Bot的ID
-    """,
-    "expected_output":"返回所有子Bot的ID列表"
-}
+# GET_SUB_BOTS_BY_TAG = {
+#     "description":"""
+#     根据这个Bot的TAG 分析出所有的子Bot的ID
+#     """,
+#     "expected_output":"返回所有子Bot的ID列表"
+# } # 这个可以直接通过coding调用API工具实现，而不用通过AI来调用API工具
+
+
 
 DEFAULT_CREW_MANAGER = Agent(
     tools=[BotTool()],

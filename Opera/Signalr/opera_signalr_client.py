@@ -112,7 +112,7 @@ class OperaSignalRClient:
         self._connection_task = None
 
     async def _on_open(self) -> None:
-        logger.info("已连接到服务器")
+        logger.info(f"已连接到服务器 [Bot ID: {self.bot_id if self.bot_id else 'Not Set'}]")
         self._connected = True
         # 如果有bot_id，自动设置
         if self.bot_id:
@@ -121,7 +121,7 @@ class OperaSignalRClient:
             await self.set_snitch_mode(True)
 
     async def _on_close(self) -> None:
-        logger.info("与服务器断开连接")
+        logger.info(f"与服务器断开连接 [Bot ID: {self.bot_id if self.bot_id else 'Not Set'}]")
         self._connected = False
 
     async def _on_error(self, message: CompletionMessage) -> None:
