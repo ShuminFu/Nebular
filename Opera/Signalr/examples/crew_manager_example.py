@@ -91,7 +91,7 @@ async def run_crew_manager(bot_id: str):
                                 "backstory": "I am an AI assistant"
                             }
                         ]
-                    }) # 这是啥初始化参数
+                    }) # TODO: CrewRunner的初始化参数可以让CrewManager来决定或者从Description，Tags，Roles中获取。
                 )
                 process.start()
                 crew_processes.append(process)
@@ -128,7 +128,6 @@ def start_crew_runner_process(bot_id: str, config: dict):
     async def run_crew_runner():
         runner = CrewRunner(config=config, bot_id=UUID(bot_id))
         try:
-            await runner.setup()
             await runner.run()
         except Exception as e:
             logger.error(f"CrewRunner运行出错，Bot ID: {bot_id}, 错误: {str(e)}")

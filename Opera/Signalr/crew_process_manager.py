@@ -20,27 +20,33 @@ class BaseCrewProcess(ABC):
         self.client: Optional[OperaSignalRClient] = None
         self.is_running: bool = True
         self.crew: Optional[Crew] = None
+        self._connection_established = asyncio.Event()  # 添加连接状态事件
 
     async def setup(self):
         """初始化设置"""
         self.crew = self._setup_crew()
         if self.bot_id:
             self.client = OperaSignalRClient(bot_id=str(self.bot_id))
+            # 设置hello回调
+            self.client.set_callback("on_hello", self._handle_hello)
             await self.client.connect()
             self.client.set_callback("on_message_received", self._handle_message)
+            # 等待连接建立
+            try:
+                await asyncio.wait_for(self._connection_established.wait(), timeout=30)
+                logger.info(f"{self.__class__.__name__} SignalR连接已成功建立")
+            except asyncio.TimeoutError:
+                logger.error(f"等待{self.__class__.__name__} SignalR连接超时")
+                raise
 
-    @abstractmethod
-    def _setup_crew(self) -> Crew:
-        """设置Crew配置，由子类实现"""
-        pass
-
-    @abstractmethod
-    async def _handle_message(self, message: MessageReceivedArgs):
-        """处理接收到的消息，由子类实现"""
-        pass
+    async def _handle_hello(self):
+        """处理hello消息"""
+        logger.info(f"{self.__class__.__name__}收到hello消息，连接已建立")
+        self._connection_established.set()
 
     async def stop(self):
         """停止Crew运行"""
+        self._connection_established.clear()  # 清除连接状态
         self.is_running = False
         if self.client:
             await self.client.disconnect()
@@ -55,6 +61,16 @@ class BaseCrewProcess(ABC):
             logger.exception(f"Crew运行出错: {e}")
         finally:
             await self.stop()
+
+    @abstractmethod
+    def _setup_crew(self) -> Crew:
+        """设置Crew配置，由子类实现"""
+        pass
+
+    @abstractmethod
+    async def _handle_message(self, message: MessageReceivedArgs):
+        """处理接收到的消息，由子类实现"""
+        pass
 
 @dataclass
 class CrewProcessInfo:
@@ -71,7 +87,6 @@ class CrewManager(BaseCrewProcess):
     def __init__(self):
         super().__init__()
         self.crew_processes: Dict[UUID, CrewProcessInfo] = {}
-        self._connection_established = asyncio.Event()  # 添加连接状态事件
 
     def _setup_crew(self) -> Crew:
         return Crew(
@@ -79,46 +94,13 @@ class CrewManager(BaseCrewProcess):
             tasks=[Task(**CREW_MANAGER_INIT, agent=DEFAULT_CREW_MANAGER)]
         )
 
-    async def setup(self):
-        """初始化设置"""
-        self.crew = self._setup_crew()
-        if self.bot_id:
-            self.client = OperaSignalRClient(bot_id=str(self.bot_id))
-            # 设置hello回调
-            self.client.set_callback("on_hello", self._handle_hello)
-            await self.client.connect()
-            self.client.set_callback("on_message_received", self._handle_message)
-            # 等待连接建立
-            try:
-                await asyncio.wait_for(self._connection_established.wait(), timeout=30)
-                logger.info("SignalR连接已成功建立")
-            except asyncio.TimeoutError:
-                logger.error("等待SignalR连接超时")
-                raise
-
-    async def _handle_hello(self):
-        """处理hello消息"""
-        logger.info("收到hello消息，连接已建立")
-        self._connection_established.set()
-
     async def start(self):
-        """启动CrewManager"""
-        # await self.setup()
-        result = await self.crew.kickoff()
-        self.bot_id = UUID(result['bot_id'])
-        logger.info(f"CrewManager已启动，Bot ID: {self.bot_id}")
+        """开始处理CrewManager的Task队列等逻辑"""
+        pass
 
     async def _handle_message(self, message: MessageReceivedArgs):
         """处理接收到的消息"""
-        for bot_id, info in self.crew_processes.items():
-            if message.opera_id in info.opera_ids:
-                await self.client.send("ForwardMessage", [str(bot_id), message])
-
-    async def stop(self):
-        """停止CrewManager"""
-        self._connection_established.clear()  # 清除连接状态
-        await super().stop()
-
+        logger.info(f"收到消息: {message.text}")
 
 class CrewRunner(BaseCrewProcess):
     """在独立进程中运行的Crew"""
@@ -159,15 +141,7 @@ class CrewRunner(BaseCrewProcess):
 
     async def _handle_message(self, message: MessageReceivedArgs):
         """处理接收到的消息"""
-        try:
-            for task in self.crew.tasks:
-                task.description = f"处理消息: {message.text}\n上下文: {task.description}"
-
-            result = await self.crew.kickoff()
-            await self._handle_result(result)
-
-        except Exception as e:
-            logger.error(f"消息处理出错: {e}")
+        logger.info(f"收到消息: {message.text}")
 
     async def _handle_result(self, result: str):
         """处理Crew执行结果"""
