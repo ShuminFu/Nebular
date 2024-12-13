@@ -64,7 +64,7 @@ def test_system_shutdown():
     
     # 模拟接收系统关闭信号
     time.sleep(1)
-    # TODO: 触发系统关闭事件
+    # 需要触发系统关闭事件来进行后续测试
     
     assert shutdown_received, "系统关闭测试失败：未收到关闭回调"
 

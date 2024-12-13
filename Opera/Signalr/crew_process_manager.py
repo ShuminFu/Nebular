@@ -11,6 +11,7 @@ from Opera.Signalr.opera_signalr_client import OperaSignalRClient, MessageReceiv
 from ai_core.tools.bot_api_tool import BotTool
 from ai_core.tools.staff_invitation_api_tool import StaffInvitationTool
 from ai_core.configs.config import DEFAULT_CREW_MANAGER_PROMPT, CREW_MANAGER_INIT, llm, DEFAULT_CREW_MANAGER
+from ai_core.configs.base_agents import create_intent_mind_agent, create_persona_switch_agent
 
 class BaseCrewProcess(ABC):
     """Crew进程的基类，定义共同的接口和功能"""
@@ -20,18 +21,24 @@ class BaseCrewProcess(ABC):
         self.client: Optional[OperaSignalRClient] = None
         self.is_running: bool = True
         self.crew: Optional[Crew] = None
-        self._connection_established = asyncio.Event()  # 添加连接状态事件
+        self._connection_established = asyncio.Event()
+        self.intent_mind: Optional[Agent] = None
+        self.persona_switch: Optional[Agent] = None
 
     async def setup(self):
         """初始化设置"""
+        # 初始化基础Agent
+        self.intent_mind = create_intent_mind_agent()
+        self.persona_switch = create_persona_switch_agent()
+        
+        # 设置Crew
         self.crew = self._setup_crew()
+        
         if self.bot_id:
             self.client = OperaSignalRClient(bot_id=str(self.bot_id))
-            # 设置hello回调
             self.client.set_callback("on_hello", self._handle_hello)
             await self.client.connect()
             self.client.set_callback("on_message_received", self._handle_message)
-            # 等待连接建立
             try:
                 await asyncio.wait_for(self._connection_established.wait(), timeout=30)
                 logger.info(f"{self.__class__.__name__} SignalR连接已成功建立")
@@ -71,6 +78,23 @@ class BaseCrewProcess(ABC):
     async def _handle_message(self, message: MessageReceivedArgs):
         """处理接收到的消息，由子类实现"""
         pass
+
+    async def _process_message_with_intent_mind(self, message: MessageReceivedArgs):
+        """使用IntentMind处理消息"""
+        # 创建任务
+        task = Task(
+            description=f"Analyze the intent of the message: {message.text}",
+            agent=self.intent_mind
+        )
+        return await self.crew.run_async([task])
+
+    async def _process_result_with_persona_switch(self, result: str, staff_id: UUID):
+        """使用PersonaSwitch处理结果"""
+        task = Task(
+            description=f"Process the result and respond as staff {staff_id}: {result}",
+            agent=self.persona_switch
+        )
+        return await self.crew.run_async([task])
 
 @dataclass
 class CrewProcessInfo:
@@ -145,6 +169,6 @@ class CrewRunner(BaseCrewProcess):
 
     async def _handle_result(self, result: str):
         """处理Crew执行结果"""
-        # TODO: 实现结果处理逻辑，例如发送回复消息
+        # TODO: 实现结果处理逻辑，例如进行后续的任务，更新Staff的Parameters等等。
         pass
 

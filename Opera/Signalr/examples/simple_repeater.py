@@ -7,8 +7,10 @@ import sys
 async def message_handler(message: MessageReceivedArgs):
     """处理接收到的消息"""
     logger.info(f"收到消息: {message.text}")
-    # TODO: 实现发送消息的方法
-    # await client.send_message(message.opera_id, f"复读: {message.text}")
+    # 这里预留实现发送消息的方法，但是SignalR Server暂不支持直接发送消息，需要通过调用Opera API来发送消息。
+    # 唯一支持client.send的方法是SetBotID
+    pass
+
 
 
 async def main():
@@ -31,11 +33,23 @@ async def main():
     # 保持程序运行
     try:
         while True:
+            if not client.is_connected():
+                logger.error("SignalR连接已断开，尝试重新连接...")
+                try:
+                    await client.disconnect()  # 确保清理旧连接
+                    await client.connect()
+                    await asyncio.sleep(5)  # 重连间隔
+                    continue
+                except Exception as e:
+                    logger.error(f"重连失败: {e}")
             await asyncio.sleep(1)
-            # TODO 是不是不应该在这里保持运行？不然即便signalr挂了，也不知道Bot挂了。
     except KeyboardInterrupt:
         await client.disconnect()
         logger.info("Bot已停止")
+    except Exception as e:
+        logger.error(f"运行时发生错误: {e}")
+        await client.disconnect()
+        raise
 
 
 if __name__ == "__main__":

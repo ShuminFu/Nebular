@@ -30,8 +30,8 @@ ipykernel = "^6.29.5"
 
 
 [tool.poetry.group.crewai.dependencies]
-crewai = "^0.80.0"
-crewai-tools = "^0.14.0"
+crewai = "^0.86.0"
+crewai-tools = "^0.17.0"
 
 [build-system]
 requires = ["poetry-core"]
