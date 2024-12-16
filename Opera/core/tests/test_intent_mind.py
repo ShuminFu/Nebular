@@ -8,14 +8,17 @@ from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 
 def main():
     # 1. 创建一个Bot的意图处理器
-    bot_id = UUID('550e8400-e29b-41d4-a716-446655440000')  # 示例UUID
-    intent_mind = IntentMind(bot_id=bot_id)
-    
+    intent_mind = IntentMind()
+    opera_id = UUID('96028f82-9f76-4372-976c-f0c5a054db79')
+    receiver_staff_ids = [UUID('c2a71833-4403-4d08-8ef6-23e6327832b2')]
+    sender_staff_id = UUID('ab01d4f7-bbf1-44aa-a55b-cbc7d62fbfbc')
     # 2. 创建一个模拟的消息
     message = MessageReceivedArgs(
+        opera_id=opera_id,
+        receiver_staff_ids=receiver_staff_ids,
         index=1,
-        text="请帮我分析最近的销售数据",
-        sender_staff_id=UUID('660e8400-e29b-41d4-a716-446655440000'),  # 示例Staff UUID
+        text="写一个python代码，计算1到100的和",
+        sender_staff_id=sender_staff_id,
         time=datetime.now(timezone(timedelta(hours=8))),
         is_narratage=False,
         is_whisper=False,

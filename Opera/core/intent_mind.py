@@ -25,8 +25,7 @@ class IntentMind:
     3. 转换为任务并进行调度
     """
     
-    def __init__(self, bot_id: UUID):
-        self.bot_id = bot_id
+    def __init__(self):
         self.dialogue_pool = DialoguePool()
         self.task_queue = BotTaskQueue()
         self.staff_dialogues: Dict[UUID, Set[int]] = {}  # 记录每个Staff的对话索引
@@ -177,7 +176,7 @@ if __name__ == '__main__':
     from uuid import UUID
     
     # 创建Bot的对话处理器
-    bot_processor = IntentMind(bot_id=UUID("bot-uuid"))
+    bot_processor = IntentMind()
 
     # 收集来自不同Staff的ProcessingDialogue
     staff_dialogues = [
