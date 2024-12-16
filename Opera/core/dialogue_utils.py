@@ -8,6 +8,7 @@ from enum import IntEnum
 from collections import Counter
 import heapq
 
+from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 from Opera.FastAPI.models import CamelBaseModel, Dialogue
 
 
@@ -173,6 +174,46 @@ class ProcessingDialogue(CamelBaseModel):
             # 上下文
             context=DialogueContext(
                 stage_index=dialogue.stage_index,
+                related_dialogue_indices=[],  # 初始为空，后续可能需要更新
+                conversation_state={}  # 初始为空，后续可能需要更新
+            )
+        )
+
+    @classmethod
+    def from_message_args(cls, args: MessageReceivedArgs,
+                     priority: DialoguePriority = DialoguePriority.NORMAL,
+                     dialogue_type: DialogueType = DialogueType.TEXT) -> "ProcessingDialogue":
+        """从MessageReceivedArgs创建ProcessingDialogue
+        
+        Args:
+            args: SignalR接收到的消息参数
+            priority: 对话优先级，默认为NORMAL
+            dialogue_type: 对话类型，默认为TEXT
+            
+        Returns:
+            ProcessingDialogue: 处理中的对话对象
+        """
+        return cls(
+            # 基础信息
+            dialogue_index=args.index,
+            created_at=args.time,
+            staff_id=args.sender_staff_id,
+            
+            # 对话属性
+            _text=args.text,
+            is_narratage=args.is_narratage,
+            is_whisper=args.is_whisper,
+            tags=args.tags,
+            mentioned_staff_ids=args.mentioned_staff_ids or [],
+            
+            # 处理属性
+            priority=priority,
+            type=dialogue_type,
+            status=ProcessingStatus.PENDING,
+            
+            # 上下文
+            context=DialogueContext(
+                stage_index=args.stage_index,
                 related_dialogue_indices=[],  # 初始为空，后续可能需要更新
                 conversation_state={}  # 初始为空，后续可能需要更新
             )

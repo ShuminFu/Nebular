@@ -4,7 +4,7 @@
 主要用于CrewManager和CrewRunner的对话处理和任务管理的桥接。
 """
 
-from typing import List, Dict, Set
+from typing import List, Dict, Set, Union
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
 
@@ -14,7 +14,7 @@ from Opera.core.dialogue_utils import (
     ProcessingStatus, DialogueContext, IntentAnalysis
 )
 from Opera.core.task_queue import BotTask, BotTaskQueue, TaskType, TaskStatus
-
+from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 
 class IntentMind:
     """Bot的意图处理器
@@ -31,26 +31,26 @@ class IntentMind:
         self.task_queue = BotTaskQueue()
         self.staff_dialogues: Dict[UUID, Set[int]] = {}  # 记录每个Staff的对话索引
         
-    def _determine_dialogue_priority(self, dialogue: Dialogue) -> DialoguePriority:
+    def _determine_dialogue_priority(self, dialogue_obj: Union[Dialogue, MessageReceivedArgs]) -> DialoguePriority:
         """确定对话的优先级
         
         基于对话的属性（如标签、提及的Staff等）确定优先级
         """
-        if dialogue.tags and "urgent" in dialogue.tags.lower():
+        if dialogue_obj.tags and "urgent" in dialogue_obj.tags.lower():
             return DialoguePriority.URGENT
-        if dialogue.mentioned_staff_ids:
+        if dialogue_obj.mentioned_staff_ids:
             return DialoguePriority.HIGH
         return DialoguePriority.NORMAL
         
-    def _determine_dialogue_type(self, dialogue: Dialogue) -> DialogueType:
+    def _determine_dialogue_type(self, dialogue_obj: Union[Dialogue, MessageReceivedArgs]) -> DialogueType:
         """确定对话的类型
         
         基于对话的内容和标签确定类型
         """
-        if dialogue.tags:
-            if "command" in dialogue.tags.lower():
+        if dialogue_obj.tags:
+            if "command" in dialogue_obj.tags.lower():
                 return DialogueType.COMMAND
-            if "query" in dialogue.tags.lower():
+            if "query" in dialogue_obj.tags.lower():
                 return DialogueType.QUERY
         return DialogueType.TEXT
         
@@ -77,6 +77,48 @@ class IntentMind:
             source_dialogue_index=dialogue.dialogue_index,
             source_staff_id=dialogue.staff_id
         )
+        
+    def process_message(self, message: MessageReceivedArgs) -> None:
+        """处理单个MessageReceivedArgs消息
+        
+        直接从SignalR消息创建ProcessingDialogue并处理
+        """
+        # 确定优先级和类型
+        priority = self._determine_dialogue_priority(message)
+        dialogue_type = self._determine_dialogue_type(message)
+        
+        # 创建ProcessingDialogue
+        processing_dialogue = ProcessingDialogue.from_message_args(
+            message,
+            priority=priority,
+            dialogue_type=dialogue_type
+        )
+        
+        # 添加到对话池
+        self.dialogue_pool.add_dialogue(processing_dialogue)
+        
+        # 记录Staff的对话
+        if message.sender_staff_id:
+            if message.sender_staff_id not in self.staff_dialogues:
+                self.staff_dialogues[message.sender_staff_id] = set()
+            self.staff_dialogues[message.sender_staff_id].add(message.index)
+        
+        # 分析对话（这里只分析新加入的对话）
+        self.dialogue_pool.analyze_dialogues()
+        
+        # 创建并添加任务
+        task = self._create_task_from_dialogue(processing_dialogue)
+        self.task_queue.add_task(task)
+
+    def process_messages(self, messages: List["MessageReceivedArgs"]) -> None:
+        """处理多个MessageReceivedArgs消息
+        
+        按时间顺序处理多条消息
+        """
+        # 按时间排序
+        sorted_messages = sorted(messages, key=lambda x: x.time)
+        for message in sorted_messages:
+            self.process_message(message)
         
     def process_dialogues(self, dialogues: List[Dialogue]) -> None:
         """处理对话列表
