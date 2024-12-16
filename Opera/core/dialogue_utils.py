@@ -63,7 +63,7 @@ class ProcessingDialogue(CamelBaseModel):
     staff_id: Optional[UUID] = Field(default=None, description="发送者Staff ID")
     
     # 对话属性
-    _text: Optional[str] = Field(default=None, description="对话内容（私有，通过属性访问）")
+    text_content: Optional[str] = Field(default=None, description="对话内容（私有，通过属性访问）")
     is_narratage: bool = Field(default=False, description="是否为旁白")
     is_whisper: bool = Field(default=False, description="是否为悄悄话")
     tags: Optional[str] = Field(default=None, description="标签")
@@ -88,9 +88,9 @@ class ProcessingDialogue(CamelBaseModel):
         Returns:
             str: 对话内容
         """
-        if self._text is None:
-            self._text = self._fetch_text_from_api()
-        return self._text
+        if self.text_content is None:
+            self.text_content = self._fetch_text_from_api()
+        return self.text_content
     
     @text.setter
     def text(self, value: str) -> None:
@@ -99,7 +99,7 @@ class ProcessingDialogue(CamelBaseModel):
         Args:
             value: 对话内容
         """
-        self._text = value
+        self.text_content = value
     
     # 处理属性
     priority: DialoguePriority = Field(default=DialoguePriority.NORMAL, description="处理优先级")
@@ -160,7 +160,7 @@ class ProcessingDialogue(CamelBaseModel):
             staff_id=dialogue.staff_id,
             
             # 对话属性
-            _text=dialogue.text,
+            text_content=dialogue.text,
             is_narratage=dialogue.is_narratage,
             is_whisper=dialogue.is_whisper,
             tags=dialogue.tags,
@@ -180,7 +180,7 @@ class ProcessingDialogue(CamelBaseModel):
         )
 
     @classmethod
-    def from_message_args(cls, args: MessageReceivedArgs,
+    def from_message_args(cls, message_args: MessageReceivedArgs,
                      priority: DialoguePriority = DialoguePriority.NORMAL,
                      dialogue_type: DialogueType = DialogueType.TEXT) -> "ProcessingDialogue":
         """从MessageReceivedArgs创建ProcessingDialogue
@@ -195,16 +195,16 @@ class ProcessingDialogue(CamelBaseModel):
         """
         return cls(
             # 基础信息
-            dialogue_index=args.index,
-            created_at=args.time,
-            staff_id=args.sender_staff_id,
+            dialogue_index=message_args.index,
+            created_at=message_args.time,
+            staff_id=message_args.sender_staff_id,
             
             # 对话属性
-            _text=args.text,
-            is_narratage=args.is_narratage,
-            is_whisper=args.is_whisper,
-            tags=args.tags,
-            mentioned_staff_ids=args.mentioned_staff_ids or [],
+            text_content=message_args.text,
+            is_narratage=message_args.is_narratage,
+            is_whisper=message_args.is_whisper,
+            tags=message_args.tags,
+            mentioned_staff_ids=message_args.mentioned_staff_ids or [],
             
             # 处理属性
             priority=priority,
@@ -213,7 +213,7 @@ class ProcessingDialogue(CamelBaseModel):
             
             # 上下文
             context=DialogueContext(
-                stage_index=args.stage_index,
+                stage_index=message_args.stage_index,
                 related_dialogue_indices=[],  # 初始为空，后续可能需要更新
                 conversation_state={}  # 初始为空，后续可能需要更新
             )
