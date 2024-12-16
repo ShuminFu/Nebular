@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from crewai import Agent, Task, Crew
 from loguru import logger
 
-from Opera.Signalr.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
+from Opera.signalr_client.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 from ai_core.tools.bot_api_tool import BotTool
 from ai_core.tools.staff_invitation_api_tool import StaffInvitationTool
 from ai_core.configs.config import DEFAULT_CREW_MANAGER_PROMPT, CREW_MANAGER_INIT, llm, DEFAULT_CREW_MANAGER
