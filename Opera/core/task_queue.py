@@ -3,7 +3,7 @@
 from pydantic import Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 from enum import IntEnum
 
 from Opera.FastAPI.models import CamelBaseModel
@@ -37,7 +37,7 @@ class TaskStatus(IntEnum):
 
 class BotTask(CamelBaseModel):
     """任务模型"""
-    id: UUID = Field(..., description="任务唯一标识")
+    id: UUID = Field(default_factory=lambda: UUID(int=uuid4().int), description="任务唯一标识")
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone(timedelta(hours=8))), 
         description="创建时间 (UTC+8)"

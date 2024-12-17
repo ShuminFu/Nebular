@@ -1,4 +1,4 @@
-"""最小MVP示例，测试对话->对话池->任务队列的基本流程。"""
+"""最小可行性示例，测试对话->对话池->任务队列的基本流程。"""
 
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
@@ -7,7 +7,7 @@ from Opera.core.intent_mind import IntentMind
 from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 
 def main():
-    # 1. 创建一个Bot的意图处理器
+    # 1. 实例化一个意图识别
     intent_mind = IntentMind()
     opera_id = UUID('96028f82-9f76-4372-976c-f0c5a054db79')
     receiver_staff_ids = [UUID('c2a71833-4403-4d08-8ef6-23e6327832b2')]
@@ -16,7 +16,7 @@ def main():
     message = MessageReceivedArgs(
         opera_id=opera_id,
         receiver_staff_ids=receiver_staff_ids,
-        index=1,
+        index=25,
         text="写一个python代码，计算1到100的和",
         sender_staff_id=sender_staff_id,
         time=datetime.now(timezone(timedelta(hours=8))),
@@ -24,7 +24,7 @@ def main():
         is_whisper=False,
         tags="query, urgent",
         mentioned_staff_ids=[],
-        stage_index=None
+        stage_index=1
     )
     
     # 3. 处理消息

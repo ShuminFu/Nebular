@@ -54,15 +54,18 @@ class IntentMind:
         return DialogueType.TEXT
         
     def _create_task_from_dialogue(self, dialogue: ProcessingDialogue) -> BotTask:
-        """从对话创建任务"""
+        """从对话创建任务
+        
+        创建任务后会将对话状态更新为已完成
+        """
         task_type = TaskType.CONVERSATION
         if dialogue.type == DialogueType.COMMAND:
             task_type = TaskType.ACTION
         elif dialogue.type == DialogueType.QUERY:
             task_type = TaskType.ANALYSIS
             
-        return BotTask(
-            id=UUID(),
+        # 创建任务
+        task = BotTask(
             priority=dialogue.priority,
             type=task_type,
             description=f"Process dialogue {dialogue.dialogue_index} from staff {dialogue.staff_id}",
@@ -76,6 +79,11 @@ class IntentMind:
             source_dialogue_index=dialogue.dialogue_index,
             source_staff_id=dialogue.staff_id
         )
+        
+        # 更新对话状态为已完成
+        self.dialogue_pool.update_dialogue_status(dialogue.dialogue_index, ProcessingStatus.COMPLETED)
+        
+        return task
         
     def process_message(self, message: MessageReceivedArgs) -> None:
         """处理单个MessageReceivedArgs消息
@@ -105,11 +113,13 @@ class IntentMind:
         # 分析对话（这里只分析新加入的对话）
         self.dialogue_pool.analyze_dialogues()
         
-        # 创建并添加任务
-        task = self._create_task_from_dialogue(processing_dialogue)
-        self.task_queue.add_task(task)
+        # 从对话池中获取已分析的对话来创建任务
+        analyzed_dialogue = self.dialogue_pool.get_dialogue(message.index)
+        if analyzed_dialogue and analyzed_dialogue.status == ProcessingStatus.PENDING:
+            task = self._create_task_from_dialogue(analyzed_dialogue)
+            self.task_queue.add_task(task)
 
-    def process_messages(self, messages: List["MessageReceivedArgs"]) -> None:
+    def process_messages(self, messages: List[MessageReceivedArgs]) -> None:
         """处理多个MessageReceivedArgs消息
         
         按时间顺序处理多条消息
@@ -154,10 +164,12 @@ class IntentMind:
         # 2. 对话池分析 - 使用占位符
         self.dialogue_pool.analyze_dialogues()
         
-        # 3. 直接使用已经增强的processing_dialogues创建任务
-        for processing_dialogue in processing_dialogues:
-            task = self._create_task_from_dialogue(processing_dialogue)
-            self.task_queue.add_task(task)
+        # 3. 从对话池中获取已分析的对话来创建任务
+        for dialogue_index in [d.dialogue_index for d in processing_dialogues]:
+            analyzed_dialogue = self.dialogue_pool.get_dialogue(dialogue_index)
+            if analyzed_dialogue:
+                task = self._create_task_from_dialogue(analyzed_dialogue)
+                self.task_queue.add_task(task)
         
     def get_staff_dialogues(self, staff_id: UUID) -> Set[int]:
         """获取对话发送人为指定Staff的所有对话索引"""
@@ -172,17 +184,5 @@ class IntentMind:
         return self.dialogue_pool
 
 if __name__ == '__main__':
-    # 使用示例
-    from uuid import UUID
-    
-    # 创建Bot的对话处理器
-    bot_processor = IntentMind()
-
-    # 收集来自不同Staff的ProcessingDialogue
-    staff_dialogues = [
-        ProcessingDialogue(...),  # Staff 1的对话
-        ProcessingDialogue(...),  # Staff 2的对话
-    ]
-
-    # 处理所有Staff的对话
-    bot_processor.process_staff_dialogues(staff_dialogues)
+    # check test_intent_mind.py
+    pass
