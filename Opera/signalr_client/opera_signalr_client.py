@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pysignalr.client import SignalRClient
 from pysignalr.messages import CompletionMessage
 from loguru import logger
+from ai_core.tools.staff_invitation_api_tool import StaffInvitationTool
 
 # 配置日志
 logger.configure(
@@ -75,6 +76,7 @@ class OperaSignalRClient:
         self.bot_id = UUID(bot_id) if bot_id else None
         self.snitch_mode: bool = False
         self._connected = False
+        self.staff_invitation_tool = StaffInvitationTool()  # 初始化StaffInvitationTool
 
         # 设置基本回调
         self.client.on_open(self._on_open)
@@ -263,22 +265,44 @@ class OperaSignalRClient:
 
     async def _handle_staff_invited(self, args: Dict[str, Any]) -> None:
         logger.info(f"收到Staff邀请事件: {json.dumps(args, ensure_ascii=False)}")
-        if self.callbacks["on_staff_invited"]:
-            invite_data = {
-                "opera_id": UUID(args["operaId"]),
-                "invitation_id": UUID(args["invitationId"]),
-                "parameter": json.loads(args["parameter"]),
+        try:
+            # 准备接受邀请所需的数据
+            opera_id = UUID(args["operaId"])
+            invitation_id = UUID(args["invitationId"])
+            roles = args["roles"]
+            
+            # 构造接受邀请的数据
+            acceptance_data = {
+                "name": f"{self.roles}" if self.roles else "AutoBot",
+                "parameter": args["parameter"],
+                "is_on_stage": True,
                 "tags": args["tags"],
                 "roles": args["roles"],
                 "permissions": args["permissions"]
             }
-            logger.debug(f"Staff邀请详情: Opera ID={invite_data['opera_id']}, "
-                         f"邀请ID={invite_data['invitation_id']}, "
-                         f"角色={invite_data['roles']}, "
-                         f"权限={invite_data['permissions']}")
-            await self._execute_callback("on_staff_invited", self.callbacks["on_staff_invited"], invite_data)
-        else:
-            logger.warning("收到Staff邀请事件，但未设置处理回调")
+            
+            # 使用StaffInvitationTool接受邀请
+            result = self.staff_invitation_tool.run(
+                action="accept",
+                opera_id=opera_id,
+                invitation_id=invitation_id,
+                data=acceptance_data
+            )
+            logger.info(f"自动接受邀请: {result}")
+            
+            # 继续执行原有的回调逻辑
+            if self.callbacks["on_staff_invited"]:
+                invite_data = {
+                    "opera_id": opera_id,
+                    "invitation_id": invitation_id,
+                    "parameter": json.loads(args["parameter"]),
+                    "tags": args["tags"],
+                    "roles": args["roles"],
+                    "permissions": args["permissions"]
+                }
+                await self._execute_callback("on_staff_invited", self.callbacks["on_staff_invited"], invite_data)
+        except Exception as e:
+            logger.error(f"自动接受邀请失败: {str(e)}")
 
     async def _handle_stage_changed(self, args: Dict[str, Any]) -> None:
         logger.info(f"收到Stage变更事件: {json.dumps(args, ensure_ascii=False)}")
