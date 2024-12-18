@@ -85,92 +85,71 @@ class IntentMind:
         
         return task
         
-    def process_message(self, message: MessageReceivedArgs) -> None:
-        """处理单个MessageReceivedArgs消息
+    def _process_single_dialogue(self, dialogue_obj: Union[Dialogue, MessageReceivedArgs], 
+                               is_message: bool = True) -> None:
+        """处理单个对话的通用方法
         
-        直接从SignalR消息创建ProcessingDialogue并处理
+        Args:
+            dialogue_obj: 对话对象，可以是Dialogue或MessageReceivedArgs
+            is_message: 是否是MessageReceivedArgs类型
         """
         # 确定优先级和类型
-        priority = self._determine_dialogue_priority(message)
-        dialogue_type = self._determine_dialogue_type(message)
+        priority = self._determine_dialogue_priority(dialogue_obj)
+        dialogue_type = self._determine_dialogue_type(dialogue_obj)
         
         # 创建ProcessingDialogue
-        processing_dialogue = ProcessingDialogue.from_message_args(
-            message,
-            priority=priority,
-            dialogue_type=dialogue_type
+        processing_dialogue = (
+            ProcessingDialogue.from_message_args(dialogue_obj, priority=priority, dialogue_type=dialogue_type)
+            if is_message
+            else ProcessingDialogue.from_dialogue(dialogue_obj, priority=priority, dialogue_type=dialogue_type)
         )
         
         # 添加到对话池
         self.dialogue_pool.add_dialogue(processing_dialogue)
         
         # 记录Staff的对话
-        if message.sender_staff_id:
-            if message.sender_staff_id not in self.staff_dialogues:
-                self.staff_dialogues[message.sender_staff_id] = set()
-            self.staff_dialogues[message.sender_staff_id].add(message.index)
+        staff_id = dialogue_obj.sender_staff_id if is_message else dialogue_obj.staff_id
+        if staff_id:
+            if staff_id not in self.staff_dialogues:
+                self.staff_dialogues[staff_id] = set()
+            self.staff_dialogues[staff_id].add(dialogue_obj.index)
+            
+        return processing_dialogue.dialogue_index
+
+    def process_message(self, message: MessageReceivedArgs) -> None:
+        """处理单个MessageReceivedArgs消息"""
+        dialogue_index = self._process_single_dialogue(message, is_message=True)
         
-        # 分析对话（这里只分析新加入的对话）
+        # 分析对话
         self.dialogue_pool.analyze_dialogues()
         
         # 从对话池中获取已分析的对话来创建任务
-        analyzed_dialogue = self.dialogue_pool.get_dialogue(message.index)
+        analyzed_dialogue = self.dialogue_pool.get_dialogue(dialogue_index)
         if analyzed_dialogue and analyzed_dialogue.status == ProcessingStatus.PENDING:
             task = self._create_task_from_dialogue(analyzed_dialogue)
             self.task_queue.add_task(task)
 
-    def process_messages(self, messages: List[MessageReceivedArgs]) -> None:
-        """处理多个MessageReceivedArgs消息
-        
-        按时间顺序处理多条消息
-        """
-        # 按时间排序
-        sorted_messages = sorted(messages, key=lambda x: x.time)
-        for message in sorted_messages:
-            self.process_message(message)
-        
     def process_dialogues(self, dialogues: List[Dialogue]) -> None:
-        """处理对话列表
-        
-        1. 转换为ProcessingDialogue并添加到对话池
-        2. 使用对话池进行上下文分析（占位，后续实现LLM分析）
-        3. 基于带上下文的ProcessingDialogue创建任务
-        """
+        """处理对话列表"""
         # 按时间排序
         sorted_dialogues = sorted(dialogues, key=lambda x: x.time)
         
-        # 1. 转换对话并添加到对话池
-        processing_dialogues = []  # 保存转换后的对话，避免重复获取
+        # 处理每个对话
+        dialogue_indices = []
         for dialogue in sorted_dialogues:
-            # 创建ProcessingDialogue
-            priority = self._determine_dialogue_priority(dialogue)
-            dialogue_type = self._determine_dialogue_type(dialogue)
-            processing_dialogue = ProcessingDialogue.from_dialogue(
-                dialogue, 
-                priority=priority,
-                dialogue_type=dialogue_type
-            )
-            
-            # 添加到对话池和临时列表
-            self.dialogue_pool.add_dialogue(processing_dialogue)
-            processing_dialogues.append(processing_dialogue)
-            
-            # 记录Staff的对话
-            if dialogue.staff_id:
-                if dialogue.staff_id not in self.staff_dialogues:
-                    self.staff_dialogues[dialogue.staff_id] = set()
-                self.staff_dialogues[dialogue.staff_id].add(dialogue.index)
+            dialogue_index = self._process_single_dialogue(dialogue, is_message=False)
+            dialogue_indices.append(dialogue_index)
         
-        # 2. 对话池分析 - 使用占位符
+        # 对话池分析
         self.dialogue_pool.analyze_dialogues()
         
-        # 3. 从对话池中获取已分析的对话来创建任务
-        for dialogue_index in [d.dialogue_index for d in processing_dialogues]:
+        # 创建任务
+        for dialogue_index in dialogue_indices:
             analyzed_dialogue = self.dialogue_pool.get_dialogue(dialogue_index)
-            if analyzed_dialogue:
+            if analyzed_dialogue and analyzed_dialogue.status == ProcessingStatus.PENDING:
                 task = self._create_task_from_dialogue(analyzed_dialogue)
                 self.task_queue.add_task(task)
-        
+
     def get_staff_dialogues(self, staff_id: UUID) -> Set[int]:
         """获取对话发送人为指定Staff的所有对话索引"""
         return self.staff_dialogues.get(staff_id, set())
