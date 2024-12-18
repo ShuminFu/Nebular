@@ -163,5 +163,5 @@ class IntentMind:
         return self.dialogue_pool
 
 if __name__ == '__main__':
-    # check test_intent_mind.py
-    pass
+    from Opera.core.tests.test_intent_mind import main
+    main()
