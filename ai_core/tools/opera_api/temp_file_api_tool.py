@@ -3,7 +3,7 @@
 from typing import Optional, Type, ClassVar
 from uuid import UUID
 from pydantic import BaseModel, Field
-from ai_core.tools.base_api_tool import BaseApiTool
+from ai_core.tools.opera_api.base_api_tool import BaseApiTool
 
 
 class TempFileToolSchema(BaseModel):

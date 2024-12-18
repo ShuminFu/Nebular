@@ -32,9 +32,9 @@
 
 from crewai import Agent, Task, Crew
 from typing import List
-from ai_core.tools.bot_api_tool import BotTool
-from ai_core.tools.dialogue_api_tool import DialogueTool
-from ai_core.tools.staff_api_tool import StaffTool
+from ai_core.tools.opera_api.bot_api_tool import BotTool
+from ai_core.tools.opera_api.dialogue_api_tool import DialogueTool
+from ai_core.tools.opera_api.staff_api_tool import StaffTool
 from ai_core.configs.config import llm
 
 def create_intent_mind_agent(tools: List = None) -> Agent:

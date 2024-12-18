@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, ValidationError
 from Opera.FastAPI.models import Resource, ResourceForCreation, ResourceForUpdate, ResourceForFilter
-from ai_core.tools.base_api_tool import BaseApiTool
+from ai_core.tools.opera_api.base_api_tool import BaseApiTool
 
 
 class ResourceToolSchema(BaseModel):

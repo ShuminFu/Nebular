@@ -1,11 +1,9 @@
 # pylint: skip-file
-from crewai import Agent, Crew, Process, Task
-from crewai.project import CrewBase, agent, crew, task
+from crewai import Agent, Crew, Task
 
 # Uncomment the following line to use an example of a custom tool
-from ai_core.tools.template_tool import MyCustomTool
 from crewai import LLM
-from dotenv import load_dotenv
+
 # load_dotenv("configs/.env")
 
 # Check our tools documentations for more information on how to use them

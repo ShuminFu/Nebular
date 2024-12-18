@@ -1,9 +1,8 @@
 import asyncio
-import ast
 import multiprocessing
 from uuid import UUID
 from loguru import logger
-from ai_core.tools.bot_api_tool import BotTool
+from ai_core.tools.opera_api.bot_api_tool import BotTool
 from Opera.core.crew_process import CrewManager, CrewRunner
 from Opera.core.bot_response_parser import BotResponseParser
 

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pysignalr.client import SignalRClient
 from pysignalr.messages import CompletionMessage
 from loguru import logger
-from ai_core.tools.staff_invitation_api_tool import StaffInvitationTool
+from ai_core.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
 
 # 配置日志
 logger.configure(

@@ -1,6 +1,6 @@
 """临时文件工具使用示例，展示了如何使用TempFileTool进行临时文件的上传、追加和删除操作。"""
 from crewai import Agent, Task, Crew
-from ai_core.tools.temp_file_api_tool import TempFileTool
+from ai_core.tools.opera_api.temp_file_api_tool import TempFileTool
 from ai_core.configs.config import llm
 
 

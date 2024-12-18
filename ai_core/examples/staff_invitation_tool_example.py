@@ -1,7 +1,7 @@
 """Staff邀请API工具使用示例，展示了如何使用StaffInvitationTool进行Staff邀请的创建、查询、删除和接受等操作。"""
 
 from crewai import Agent, Task, Crew
-from ai_core.tools.staff_invitation_api_tool import StaffInvitationTool
+from ai_core.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
 from ai_core.configs.config import llm
 
 

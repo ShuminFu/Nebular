@@ -1,7 +1,7 @@
 """Resource API工具使用示例，展示了如何使用ResourceApiTool进行资源的创建、查询、更新等操作。"""
 from uuid import UUID
 from crewai import Agent, Task, Crew
-from ai_core.tools.resource_api_tool import ResourceTool
+from ai_core.tools.opera_api.resource_api_tool import ResourceTool
 from ai_core.configs.config import llm
 
 

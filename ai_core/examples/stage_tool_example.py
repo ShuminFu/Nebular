@@ -1,7 +1,7 @@
 """Stage API工具使用示例，展示了如何使用StageTool进行场幕的创建和查询等操作。"""
 
 from crewai import Agent, Task, Crew
-from ai_core.tools.stage_api_tool import StageTool
+from ai_core.tools.opera_api.stage_api_tool import StageTool
 from ai_core.configs.config import llm
 
 
