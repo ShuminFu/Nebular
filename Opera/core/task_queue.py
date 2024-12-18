@@ -20,10 +20,10 @@ class TaskPriority(IntEnum):
 
 class TaskType(IntEnum):
     """任务类型枚举"""
-    CONVERSATION = 1
-    ANALYSIS = 2
-    ACTION = 3
-    SYSTEM = 4
+    CONVERSATION = 1 # For quick conversation that doesn't need any further tools or processing.
+    ANALYSIS = 2 # For planning
+    ACTION = 3 # For execution
+    SYSTEM = 4 # For CrewProcess creation
 
 
 class TaskStatus(IntEnum):

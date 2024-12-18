@@ -97,12 +97,12 @@ if __name__ == "__main__":
     async def test_agents():
         """测试Agent的基本功能"""
         # 创建测试用的Agent实例
-        intent_mind = create_intent_agent()
+        intent_agent = create_intent_agent()
         persona_switch = create_persona_agent()
         
         # 创建测试用的Crew
         test_crew = Crew(
-            agents=[intent_mind, persona_switch],
+            agents=[intent_agent, persona_switch],
             tasks=[
                 # 测试IntentMind的对话意图分析
                 Task(
@@ -112,7 +112,7 @@ if __name__ == "__main__":
                     2. 可能的具体需求
                     3. 用户可能遇到的问题
                     4. 建议的处理优先级""",
-                    agent=intent_mind
+                    agent=intent_agent
                 ),
                 # 测试PersonaSwitch的角色切换
                 Task(

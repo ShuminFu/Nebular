@@ -23,10 +23,10 @@ class DialoguePriority(IntEnum):
 
 class DialogueType(IntEnum):
     """对话类型枚举"""
-    TEXT = 1
-    COMMAND = 2
-    QUERY = 3
-    SYSTEM = 4
+    TEXT = 1 # usually not have to reply unless mentioned or whispered, just added into the dialogue pool for context analysis.
+    COMMAND = 2 # command for the crews to execute
+    QUERY = 3  # query for planning or analysis
+    SYSTEM = 4 # Sent by the system. Not sure how to use it yet.
 
 
 class ProcessingStatus(IntEnum):
