@@ -37,7 +37,7 @@ from ai_core.tools.opera_api.dialogue_api_tool import DialogueTool
 from ai_core.tools.opera_api.staff_api_tool import StaffTool
 from ai_core.configs.config import llm
 
-def create_intent_mind_agent(tools: List = None) -> Agent:
+def create_intent_agent(tools: List = None) -> Agent:
     """
     创建IntentMind Agent
     负责处理对话意图识别和任务队列管理
@@ -61,7 +61,7 @@ def create_intent_mind_agent(tools: List = None) -> Agent:
         llm=llm  
     )
 
-def create_persona_switch_agent(tools: List = None) -> Agent:
+def create_persona_agent(tools: List = None) -> Agent:
     """
     创建PersonaSwitch Agent
     负责处理任务结果并以对应staff身份发言
@@ -97,8 +97,8 @@ if __name__ == "__main__":
     async def test_agents():
         """测试Agent的基本功能"""
         # 创建测试用的Agent实例
-        intent_mind = create_intent_mind_agent()
-        persona_switch = create_persona_switch_agent()
+        intent_mind = create_intent_agent()
+        persona_switch = create_persona_agent()
         
         # 创建测试用的Crew
         test_crew = Crew(

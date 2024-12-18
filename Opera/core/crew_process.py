@@ -9,7 +9,20 @@ from loguru import logger
 
 from Opera.signalr_client.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 from ai_core.configs.config import CREW_MANAGER_INIT, DEFAULT_CREW_MANAGER
-from ai_core.configs.base_agents import create_intent_mind_agent, create_persona_switch_agent
+from ai_core.configs.base_agents import create_intent_agent, create_persona_agent
+from Opera.core.intent_mind import IntentMind
+from Opera.core.task_queue import BotTaskQueue, TaskType, TaskStatus
+
+
+@dataclass
+class CrewProcessInfo:
+    """工作型Crew进程信息"""
+    process: multiprocessing.Process
+    bot_id: UUID
+    opera_ids: List[UUID]  # 一个Bot可以在多个Opera中
+    roles: Dict[UUID, List[str]]  # opera_id -> roles
+    staff_ids: Dict[UUID, UUID]  # opera_id -> staff_id
+
 
 class BaseCrewProcess(ABC):
     """Crew进程的基类，定义共同的接口和功能"""
@@ -20,34 +33,32 @@ class BaseCrewProcess(ABC):
         self.is_running: bool = True
         self.crew: Optional[Crew] = None
         self._connection_established = asyncio.Event()
-        self.intent_mind: Optional[Agent] = None
-        self.persona_switch: Optional[Agent] = None
+        self.intent_agent: Optional[Agent] = None
+        self.persona_agent: Optional[Agent] = None
+        self.intent_processor = IntentMind()
+        self.task_queue = BotTaskQueue()
 
     async def setup(self):
         """初始化设置"""
         # 初始化基础Agent
-        self.intent_mind = create_intent_mind_agent()
-        self.persona_switch = create_persona_switch_agent()
-        
+        self.intent_agent = create_intent_agent()
+        self.persona_agent = create_persona_agent()
+
         # 设置Crew
         self.crew = self._setup_crew()
-        
+
         if self.bot_id:
             self.client = OperaSignalRClient(bot_id=str(self.bot_id))
             self.client.set_callback("on_hello", self._handle_hello)
             await self.client.connect()
-            self.client.set_callback("on_message_received", self._handle_message)
+            self.client.set_callback(
+                "on_message_received", self._handle_message)
             try:
                 await asyncio.wait_for(self._connection_established.wait(), timeout=30)
                 logger.info(f"{self.__class__.__name__} SignalR连接已成功建立")
             except asyncio.TimeoutError:
                 logger.error(f"等待{self.__class__.__name__} SignalR连接超时")
                 raise
-
-    async def _handle_hello(self):
-        """处理hello消息"""
-        logger.info(f"{self.__class__.__name__}收到hello消息，连接已建立")
-        self._connection_established.set()
 
     async def stop(self):
         """停止Crew运行"""
@@ -61,11 +72,46 @@ class BaseCrewProcess(ABC):
         try:
             await self.setup()
             while self.is_running:
+                # 处理任务队列中的任务
+                task = self.task_queue.get_next_task()
+                if task:
+                    await self._process_task(task)
                 await asyncio.sleep(1)
         except Exception as e:
             logger.exception(f"Crew运行出错: {e}")
         finally:
             await self.stop()
+
+    async def _process_task(self, task):
+        """处理任务队列中的任务"""
+        try:
+            # 根据任务类型执行不同的处理逻辑
+            if task.type == TaskType.CONVERSATION:
+                await self._handle_conversation_task(task)
+            elif task.type == TaskType.ACTION:
+                await self._handle_action_task(task)
+            elif task.type == TaskType.ANALYSIS:
+                await self._handle_analysis_task(task)
+        except Exception as e:
+            logger.exception(f"处理任务出错: {e}")
+            task.status = TaskStatus.FAILED
+        else:
+            task.status = TaskStatus.COMPLETED
+
+    async def _handle_hello(self):
+        """处理hello消息"""
+        logger.info(f"{self.__class__.__name__}收到hello消息，连接已建立")
+        self._connection_established.set()
+
+    async def _handle_message(self, message: MessageReceivedArgs):
+        """处理接收到的消息"""
+        logger.info(f"收到消息: {message.text}")
+        # 使用意图处理器处理消息
+        self.intent_processor.process_message(message)
+        # 获取新生成的任务并添加到任务队列
+        new_tasks = self.intent_processor.get_task_queue().get_all_tasks()
+        for task in new_tasks:
+            self.task_queue.add_task(task)
 
     @abstractmethod
     def _setup_crew(self) -> Crew:
@@ -73,35 +119,20 @@ class BaseCrewProcess(ABC):
         pass
 
     @abstractmethod
-    async def _handle_message(self, message: MessageReceivedArgs):
-        """处理接收到的消息，由子类实现"""
+    async def _handle_conversation_task(self, task):
+        """处理对话类型的任务"""
         pass
 
-    async def _process_message_with_intent_mind(self, message: MessageReceivedArgs):
-        """使用IntentMind处理消息"""
-        # 创建任务
-        task = Task(
-            description=f"Analyze the intent of the message: {message.text}",
-            agent=self.intent_mind
-        )
-        return await self.crew.run_async([task])
+    @abstractmethod
+    async def _handle_action_task(self, task):
+        """处理动作类型的任务"""
+        pass
 
-    async def _process_result_with_persona_switch(self, result: str, staff_id: UUID):
-        """使用PersonaSwitch处理结果"""
-        task = Task(
-            description=f"Process the result and respond as staff {staff_id}: {result}",
-            agent=self.persona_switch
-        )
-        return await self.crew.run_async([task])
+    @abstractmethod
+    async def _handle_analysis_task(self, task):
+        """处理分析类型的任务"""
+        pass
 
-@dataclass
-class CrewProcessInfo:
-    """工作型Crew进程信息"""
-    process: multiprocessing.Process
-    bot_id: UUID
-    opera_ids: List[UUID]  # 一个Bot可以在多个Opera中
-    roles: Dict[UUID, List[str]]  # opera_id -> roles
-    staff_ids: Dict[UUID, UUID]  # opera_id -> staff_id
 
 class CrewManager(BaseCrewProcess):
     """管理所有工作型Crew的进程"""
@@ -112,17 +143,25 @@ class CrewManager(BaseCrewProcess):
 
     def _setup_crew(self) -> Crew:
         return Crew(
-            agents=[DEFAULT_CREW_MANAGER], 
+            agents=[DEFAULT_CREW_MANAGER],
             tasks=[Task(**CREW_MANAGER_INIT, agent=DEFAULT_CREW_MANAGER)]
         )
 
-    async def start(self):
-        """开始处理CrewManager的Task队列等逻辑"""
+    async def _handle_conversation_task(self, task):
+        """处理对话类型的任务"""
+        # 实现CrewManager特定的对话任务处理逻辑
         pass
 
-    async def _handle_message(self, message: MessageReceivedArgs):
-        """处理接收到的消息"""
-        logger.info(f"收到消息: {message.text}")
+    async def _handle_action_task(self, task):
+        """处理动作类型的任务"""
+        # 实现CrewManager特定的动作任务处理逻辑
+        pass
+
+    async def _handle_analysis_task(self, task):
+        """处理分析类型的任务"""
+        # 实现CrewManager特定的分析任务处理逻辑
+        pass
+
 
 class CrewRunner(BaseCrewProcess):
     """在独立进程中运行的Crew"""
@@ -161,12 +200,17 @@ class CrewRunner(BaseCrewProcess):
             verbose=True
         )
 
-    async def _handle_message(self, message: MessageReceivedArgs):
-        """处理接收到的消息"""
-        logger.info(f"收到消息: {message.text}")
-
-    async def _handle_result(self, result: str):
-        """处理Crew执行结果"""
-        # TODO: 实现结果处理逻辑，例如进行后续的任务，更新Staff的Parameters等等。
+    async def _handle_action_task(self, task):
+        """处理动作类型的任务"""
+        # 实现CrewRunner特定的动作任务处理逻辑
         pass
 
+    async def _handle_analysis_task(self, task):
+        """处理分析类型的任务"""
+        # 实现CrewRunner特定的分析任务处理逻辑
+        pass
+
+    async def _handle_conversation_task(self, task):
+        """处理对话类型的任务"""
+        # 实现CrewRunner特定的对话任务处理逻辑
+        pass

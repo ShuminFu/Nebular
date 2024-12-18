@@ -32,7 +32,7 @@ async def run_crew_manager(bot_id: str):
             child_bot_info = bot_tool._run(action="get", bot_id=child_bot_id)
             _, child_bot_data = parser.parse_response(child_bot_info)
             
-            if not child_bot_data.get("isActive", True):  # 如果子Bot未激活
+            if not child_bot_data.get("isActive", True):  
                 # 为未激活的子Bot创建CrewRunner进程
                 process = multiprocessing.Process(
                     target=start_crew_runner_process,
