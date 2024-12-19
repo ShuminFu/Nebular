@@ -20,10 +20,26 @@ class TaskPriority(IntEnum):
 
 class TaskType(IntEnum):
     """任务类型枚举"""
-    CONVERSATION = 1 # For quick conversation that doesn't need any further tools or processing.
-    ANALYSIS = 2 # For planning
-    ACTION = 3 # For execution
-    SYSTEM = 4 # For CrewProcess creation
+        # 基础对话任务
+    CONVERSATION = 10  # 基础对话处理，不一定需要回复，比如CrewRunner仅回复被Mentioned或者Whispered的对话
+    CHAT_PLANNING = 11  # 对话策略规划
+    CHAT_RESPONSE = 12  # 对话响应生成
+    
+    # 分析类任务
+    ANALYSIS = 20  # 基础分析
+    INTENT_ANALYSIS = 21  # 意图分析
+    CONTEXT_ANALYSIS = 22  # 上下文分析，比如需要额外的RAG BOT/SEARCH BOT的帮助来收集上下文
+    
+    # 执行类任务
+    ACTION = 30  # 基础动作
+    TOOL_EXECUTION = 31  # 工具调用
+    API_CALL = 32  # API调用
+    
+    # 管理类任务
+    SYSTEM = 40  # 系统任务
+    CREW_LIFECYCLE = 41  # CrewRunner的生命周期管理
+    STAGE_MANAGEMENT = 42  # Opera Stage 管理
+    ROLE_ASSIGNMENT = 43  # 发言角色分配
 
 
 class TaskStatus(IntEnum):

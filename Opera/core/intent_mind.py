@@ -44,25 +44,63 @@ class IntentMind:
     def _determine_dialogue_type(self, dialogue_obj: Union[Dialogue, MessageReceivedArgs]) -> DialogueType:
         """确定对话的类型
         
-        基于对话的内容和标签确定类型
+        基于对话的属性确定类型：
+        1. 系统消息（通过tags判断）
+        2. 旁白（is_narratage）
+        3. 私密对话（is_whisper）- 私密对话同时也是提及对话
+        4. 提及对话（mentioned_staff_ids非空）
+        5. 普通对话（其他情况）
+        
+        注意：
+        - whisper类型的对话自动被视为mention类型
+        - mention类型的对话不一定是whisper类型
+        
+        Args:
+            dialogue_obj: 对话对象，可以是Dialogue或MessageReceivedArgs
+            
+        Returns:
+            DialogueType: 对话类型枚举值
         """
-        if dialogue_obj.tags:
-            if "command" in dialogue_obj.tags.lower():
-                return DialogueType.COMMAND
-            if "query" in dialogue_obj.tags.lower():
-                return DialogueType.QUERY
-        return DialogueType.TEXT
+        # 首先检查是否是系统消息
+        if dialogue_obj.tags and "system" in dialogue_obj.tags.lower():
+            return DialogueType.SYSTEM
+            
+        # 检查是否是旁白
+        if dialogue_obj.is_narratage:
+            return DialogueType.NARRATAGE
+            
+        # 检查是否是私密对话
+        if dialogue_obj.is_whisper:
+            return DialogueType.WHISPER
+            
+        # 检查是否有提及其他Staff
+        if dialogue_obj.mentioned_staff_ids and len(dialogue_obj.mentioned_staff_ids) > 0:
+            return DialogueType.MENTION
+            
+        # 默认为普通对话
+        return DialogueType.NORMAL
         
     def _create_task_from_dialogue(self, dialogue: ProcessingDialogue) -> BotTask:
         """从对话创建任务
         
-        创建任务后会将对话状态更新为已完成
+        基于对话类型进行初步的任务类型判断，后续会通过意图分析来更新更具体的任务类型。
+        创建任务后会将对话状态更新为已完成。
+        
+        Args:
+            dialogue: 处理中的对话对象
+            
+        Returns:
+            BotTask: 创建的任务对象
         """
-        task_type = TaskType.CONVERSATION
-        if dialogue.type == DialogueType.COMMAND:
-            task_type = TaskType.ACTION
-        elif dialogue.type == DialogueType.QUERY:
-            task_type = TaskType.ANALYSIS
+        # 基于对话类型进行初步的任务类型判断
+        task_type = TaskType.CONVERSATION  # 默认为基础对话处理
+        
+        if dialogue.type == DialogueType.SYSTEM:
+            task_type = TaskType.SYSTEM  # 系统消息
+        elif dialogue.type in [DialogueType.WHISPER, DialogueType.MENTION]:
+            task_type = TaskType.CHAT_RESPONSE  # 需要响应的对话
+        elif dialogue.type == DialogueType.NARRATAGE:
+            task_type = TaskType.ANALYSIS  # 旁白需要分析
             
         # 创建任务
         task = BotTask(
@@ -72,7 +110,8 @@ class IntentMind:
             parameters={
                 "text": dialogue.text,
                 "tags": dialogue.tags,
-                "mentioned_staff_ids": [str(id) for id in dialogue.mentioned_staff_ids],
+                "mentioned_staff_ids": [str(id) for id in (dialogue.mentioned_staff_ids or [])],
+                "dialogue_type": dialogue.type.name,
                 "intent": dialogue.intent_analysis.model_dump() if dialogue.intent_analysis else None,
                 "context": dialogue.context.model_dump()
             },
