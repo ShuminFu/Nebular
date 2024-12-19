@@ -1,7 +1,7 @@
 """Opera SignalR 对话队列的数据模型定义。"""
 
 from pydantic import Field
-from typing import List, Optional, Dict, Any, Set
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 from enum import IntEnum
@@ -65,8 +65,8 @@ class ProcessingDialogue(CamelBaseModel):
     dialogue_index: int = Field(..., description="对话索引")
     created_at: datetime = Field(default_factory=lambda: datetime.now(
         timezone(timedelta(hours=8))), description="创建时间 (UTC+8)")
-    staff_id: Optional[UUID] = Field(default=None, description="发送者Staff ID")
-
+    sender_staff_id: Optional[UUID] = Field(default=None, description="发送者Staff ID")
+    receiver_staff_id: Optional[UUID] = Field(default=None, description="接收者Staff ID")
     # 对话属性
     text_content: Optional[str] = Field(
         default=None, description="对话内容（私有，通过属性访问）")
@@ -83,6 +83,8 @@ class ProcessingDialogue(CamelBaseModel):
             str: 对话内容
 
         TODO: _fetch_text_from_api 实现实际的API调用逻辑
+        - get opera_id from receiver_staff_id
+        - get dialogue text based on opera_id and dialogue_index
         """
         # 这里后续需要实现实际的API调用
         # 临时返回占位内容
@@ -169,7 +171,8 @@ class ProcessingDialogue(CamelBaseModel):
             # 基础信息
             dialogue_index=dialogue.index,
             created_at=dialogue.time,
-            staff_id=dialogue.staff_id,
+            sender_staff_id=dialogue.sender_staff_id,
+            receiver_staff_id=dialogue.receiver_staff_id,
 
             # 对话属性
             text_content=dialogue.text,
@@ -209,7 +212,8 @@ class ProcessingDialogue(CamelBaseModel):
             # 基础信息
             dialogue_index=message_args.index,
             created_at=message_args.time,
-            staff_id=message_args.sender_staff_id,
+            sender_staff_id=message_args.sender_staff_id,
+            receiver_staff_id=message_args.receiver_staff_id,
 
             # 对话属性
             text_content=message_args.text,
@@ -245,8 +249,7 @@ class DialoguePool(CamelBaseModel):
             status.name.lower(): 0 for status in ProcessingStatus},
         description="状态计数器"
     )
-    receiver_staff_id: UUID = Field(..., description="接收者Staff ID")
-
+    
     # 配置参数
     max_size: int = Field(default=1000, description="对话池最大容量")
     min_heat_threshold: float = Field(default=0.5, description="最小热度阈值")
@@ -257,25 +260,22 @@ class DialoguePool(CamelBaseModel):
         """将对话池状态持久化到API
         
         TODO: 实现实际的API调用逻辑
-        - 使用receiver_staff_id作为API调用的参数
-        - 可以调用DialogueTool进行批量更新
-        - 需要将ProcessingDialogue转换为API所需的格式
-        - 处理可能的API调用失败情况
+        - What's in the pool: ProcessingDialogue
+
         """
         pass
 
     @classmethod
-    def create(cls, receiver_staff_id: UUID, **kwargs) -> "DialoguePool":
+    def create(cls, **kwargs) -> "DialoguePool":
         """创建对话池的工厂方法
 
         Args:
-            receiver_staff_id: 接收者Staff ID
-            **kwargs: 其他参数
+            **kwargs: 配置参数
 
         Returns:
             DialoguePool: 新创建的对话池实例
         """
-        return cls(receiver_staff_id=receiver_staff_id, **kwargs)
+        return cls(**kwargs)
 
     def _decay_heat(self) -> None:
         """对所有对话进行热度衰减
