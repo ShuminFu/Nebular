@@ -114,7 +114,8 @@ class OperaSignalRClient:
         self._connection_task = None
 
     async def _on_open(self) -> None:
-        logger.info(f"已连接到服务器 [Bot ID: {self.bot_id if self.bot_id else 'Not Set'}]")
+        logger.info(
+            f"已连接到服务器 [Bot ID: {self.bot_id if self.bot_id else 'Not Set'}]")
         self._connected = True
         # 如果有bot_id，自动设置
         if self.bot_id:
@@ -123,7 +124,8 @@ class OperaSignalRClient:
             await self.set_snitch_mode(True)
 
     async def _on_close(self) -> None:
-        logger.info(f"与服务器断开连接 [Bot ID: {self.bot_id if self.bot_id else 'Not Set'}]")
+        logger.info(
+            f"与服务器断开连接 [Bot ID: {self.bot_id if self.bot_id else 'Not Set'}]")
         self._connected = False
 
     async def _on_error(self, message: CompletionMessage) -> None:
@@ -142,15 +144,15 @@ class OperaSignalRClient:
     async def disconnect(self):
         """安全地断开连接"""
         try:
-            if self._connection_task:
-                # 直接取消连接任务
+            if self._connection_task and not self._connection_task.done():
+                # 只在任务还在运行时才取消
                 self._connection_task.cancel()
                 try:
                     await self._connection_task
                 except asyncio.CancelledError:
                     pass
-                self._connection_task = None
-            self._connected = False
+            self._connection_task = None
+
         except Exception as e:
             logger.exception(f"断开连接时出错: {e}")
 
@@ -166,7 +168,7 @@ class OperaSignalRClient:
 
     async def send(self, method: str, args: list):
         """发送消息到SignalR服务器
-        
+
         Args:
             method: 要调用的方法名
             args: 参数列表
@@ -270,7 +272,7 @@ class OperaSignalRClient:
             opera_id = UUID(args["operaId"])
             invitation_id = UUID(args["invitationId"])
             roles = args["roles"]
-            
+
             # 构造接受邀请的数据
             acceptance_data = {
                 "name": f"{self.roles}" if self.roles else "AutoBot",
@@ -280,7 +282,7 @@ class OperaSignalRClient:
                 "roles": args["roles"],
                 "permissions": args["permissions"]
             }
-            
+
             # 使用StaffInvitationTool接受邀请
             result = self.staff_invitation_tool.run(
                 action="accept",
@@ -289,7 +291,7 @@ class OperaSignalRClient:
                 data=acceptance_data
             )
             logger.info(f"自动接受邀请: {result}")
-            
+
             # 继续执行原有的回调逻辑
             if self.callbacks["on_staff_invited"]:
                 invite_data = {

@@ -113,7 +113,7 @@ class BotTaskQueue(CamelBaseModel):
                 self.status_counter[new_status.name.lower()] += 1
                 break
     
-    def get_next_pending_task(self) -> Optional[BotTask]:
+    def get_next_task(self) -> Optional[BotTask]:
         """获取下一个待处理的任务（按优先级排序）"""
         pending_tasks = [
             task for task in self.tasks 

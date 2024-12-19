@@ -29,7 +29,7 @@ async def run_crew_manager(bot_id: str):
         # 检查每个子Bot的状态并启动未激活的Bot
         for child_bot_id in child_bots:
             # 获取子Bot状态
-            child_bot_info = bot_tool._run(action="get", bot_id=child_bot_id)
+            child_bot_info = bot_tool.run(action="get", bot_id=child_bot_id)
             _, child_bot_data = parser.parse_response(child_bot_info)
             
             if not child_bot_data.get("isActive", True):  
@@ -99,7 +99,7 @@ async def main():
     parser = BotResponseParser()
     
     # 获取所有Bot
-    result = bot_tool._run(action="get_all")
+    result = bot_tool.run(action="get_all")
     logger.info(f"获取所有Bot结果: {result}")
     
     # 存储所有进程的列表

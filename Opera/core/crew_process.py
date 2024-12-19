@@ -32,7 +32,6 @@ class BaseCrewProcess(ABC):
         self.client: Optional[OperaSignalRClient] = None
         self.is_running: bool = True
         self.crew: Optional[Crew] = None
-        self._connection_established = asyncio.Event()
         self.intent_agent: Optional[Agent] = None
         self.persona_agent: Optional[Agent] = None
         self.intent_processor = IntentMind()
@@ -51,18 +50,22 @@ class BaseCrewProcess(ABC):
             self.client = OperaSignalRClient(bot_id=str(self.bot_id))
             self.client.set_callback("on_hello", self._handle_hello)
             await self.client.connect()
+
+            # 等待连接建立
+            for _ in range(30):  # 30秒超时
+                if self.client._connected:
+                    logger.info(f"{self.__class__.__name__} SignalR连接已成功建立")
+                    break
+                await asyncio.sleep(1)
+            else:
+                logger.error(f"等待{self.__class__.__name__} SignalR连接超时")
+                raise asyncio.TimeoutError()
+
             self.client.set_callback(
                 "on_message_received", self._handle_message)
-            try:
-                await asyncio.wait_for(self._connection_established.wait(), timeout=30)
-                logger.info(f"{self.__class__.__name__} SignalR连接已成功建立")
-            except asyncio.TimeoutError:
-                logger.error(f"等待{self.__class__.__name__} SignalR连接超时")
-                raise
 
     async def stop(self):
         """停止Crew运行"""
-        self._connection_established.clear()  # 清除连接状态
         self.is_running = False
         if self.client:
             await self.client.disconnect()
@@ -72,6 +75,12 @@ class BaseCrewProcess(ABC):
         try:
             await self.setup()
             while self.is_running:
+                # 检查连接状态
+                if self.client and not self.client._connected:
+                    logger.warning("检测到连接断开，尝试重新连接")
+                    await self.setup()
+                    continue
+
                 # 处理任务队列中的任务
                 task = self.task_queue.get_next_task()
                 if task:
@@ -81,6 +90,10 @@ class BaseCrewProcess(ABC):
             logger.exception(f"Crew运行出错: {e}")
         finally:
             await self.stop()
+
+    async def _handle_hello(self):
+        """处理hello消息"""
+        logger.info(f"{self.__class__.__name__}收到hello消息，连接已建立")
 
     async def _process_task(self, task):
         """处理任务队列中的任务"""
@@ -97,11 +110,6 @@ class BaseCrewProcess(ABC):
             task.status = TaskStatus.FAILED
         else:
             task.status = TaskStatus.COMPLETED
-
-    async def _handle_hello(self):
-        """处理hello消息"""
-        logger.info(f"{self.__class__.__name__}收到hello消息，连接已建立")
-        self._connection_established.set()
 
     async def _handle_message(self, message: MessageReceivedArgs):
         """处理接收到的消息"""
