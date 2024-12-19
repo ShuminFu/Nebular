@@ -7,6 +7,7 @@ from Opera.core.crew_process import CrewManager, CrewRunner
 from Opera.core.bot_response_parser import BotResponseParser
 
 
+
 async def run_crew_manager(bot_id: str):
     """为单个Bot运行CrewManager"""
     manager = CrewManager()
@@ -55,9 +56,8 @@ async def run_crew_manager(bot_id: str):
         await manager.setup()
         logger.info(f"CrewManager已启动，Bot ID: {bot_id}")
         
-        # 主循环
-        while True:
-            await asyncio.sleep(1)
+        # 运行CrewManager
+        await manager.run()
             
     except asyncio.TimeoutError:
         logger.error(f"Bot {bot_id} 等待连接超时")
