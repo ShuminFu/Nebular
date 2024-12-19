@@ -245,6 +245,7 @@ class DialoguePool(CamelBaseModel):
             status.name.lower(): 0 for status in ProcessingStatus},
         description="状态计数器"
     )
+    receiver_staff_id: UUID = Field(..., description="接收者Staff ID")
 
     # 配置参数
     max_size: int = Field(default=1000, description="对话池最大容量")
@@ -254,12 +255,27 @@ class DialoguePool(CamelBaseModel):
 
     async def _persist_to_api(self) -> None:
         """将对话池状态持久化到API
-        TODO: 实现实际的持久化API调用逻辑
+        
+        TODO: 实现实际的API调用逻辑
+        - 使用receiver_staff_id作为API调用的参数
         - 可以调用DialogueTool进行批量更新
         - 需要将ProcessingDialogue转换为API所需的格式
         - 处理可能的API调用失败情况
         """
         pass
+
+    @classmethod
+    def create(cls, receiver_staff_id: UUID, **kwargs) -> "DialoguePool":
+        """创建对话池的工厂方法
+
+        Args:
+            receiver_staff_id: 接收者Staff ID
+            **kwargs: 其他参数
+
+        Returns:
+            DialoguePool: 新创建的对话池实例
+        """
+        return cls(receiver_staff_id=receiver_staff_id, **kwargs)
 
     def _decay_heat(self) -> None:
         """对所有对话进行热度衰减

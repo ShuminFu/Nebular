@@ -89,16 +89,31 @@ class BotTaskQueue(CamelBaseModel):
         default_factory=lambda: {status.name.lower(): 0 for status in TaskStatus},
         description="状态计数器"
     )
+    bot_id: UUID = Field(..., description="Bot ID")
 
     async def _persist_to_api(self) -> None:
         """将任务队列状态持久化到API
         
         TODO: 持久化API调用逻辑
+        - 使用bot_id作为API调用的参数
         - 可以调用TaskTool进行批量更新
         - 需要将BotTask转换为API所需的格式
         - 处理可能的API调用失败情况
         """
         pass
+
+    @classmethod
+    def create(cls, bot_id: UUID, **kwargs) -> "BotTaskQueue":
+        """创建任务队列的工厂方法
+
+        Args:
+            bot_id: Bot ID
+            **kwargs: 其他参数
+
+        Returns:
+            BotTaskQueue: 新创建的任务队列实例
+        """
+        return cls(bot_id=bot_id, **kwargs)
 
     async def add_task(self, task: BotTask) -> None:
         """添加任务并更新计数器"""
