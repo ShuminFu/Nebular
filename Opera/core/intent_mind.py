@@ -25,9 +25,9 @@ class IntentMind:
     3. 转换为任务并进行调度
     """
     
-    def __init__(self):
+    def __init__(self, task_queue: BotTaskQueue):
         self.dialogue_pool = DialoguePool()
-        self.task_queue = BotTaskQueue()
+        self.task_queue = task_queue  # 使用外部传入的任务队列
         self.staff_dialogues: Dict[UUID, Set[int]] = {}  # 记录每个Staff的对话索引
         
     def _determine_dialogue_priority(self, dialogue_obj: Union[Dialogue, MessageReceivedArgs]) -> DialoguePriority:
@@ -192,11 +192,7 @@ class IntentMind:
     def get_staff_dialogues(self, staff_id: UUID) -> Set[int]:
         """获取对话发送人为指定Staff的所有对话索引"""
         return self.staff_dialogues.get(staff_id, set())
-    
-    def get_task_queue(self) -> BotTaskQueue:
-        """获取当前任务队列"""
-        return self.task_queue
-    
+
     def get_dialogue_pool(self) -> DialoguePool:
         """获取当前对话池"""
         return self.dialogue_pool

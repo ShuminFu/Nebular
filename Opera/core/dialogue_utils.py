@@ -254,8 +254,7 @@ class DialoguePool(CamelBaseModel):
 
     async def _persist_to_api(self) -> None:
         """将对话池状态持久化到API
-        
-        TODO: 实现实际的API调用逻辑
+        TODO: 实现实际的持久化API调用逻辑
         - 可以调用DialogueTool进行批量更新
         - 需要将ProcessingDialogue转换为API所需的格式
         - 处理可能的API调用失败情况
@@ -363,7 +362,7 @@ class DialoguePool(CamelBaseModel):
     def analyze_dialogues(self) -> None:
         """分析对话关联性并附加上下文（占位实现）
 
-        TODO: 
+        TODO: analyze_dialogues 
         1. 实现LLM分析逻辑
         2. 识别对话意图
         3. 识别对话关联

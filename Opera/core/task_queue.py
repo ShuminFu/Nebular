@@ -93,7 +93,7 @@ class BotTaskQueue(CamelBaseModel):
     async def _persist_to_api(self) -> None:
         """将任务队列状态持久化到API
         
-        TODO: 实现实际的API调用逻辑
+        TODO: 持久化API调用逻辑
         - 可以调用TaskTool进行批量更新
         - 需要将BotTask转换为API所需的格式
         - 处理可能的API调用失败情况

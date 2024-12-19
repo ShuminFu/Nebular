@@ -34,8 +34,8 @@ class BaseCrewProcess(ABC):
         self.crew: Optional[Crew] = None
         self.intent_agent: Optional[Agent] = None
         self.persona_agent: Optional[Agent] = None
-        self.intent_processor = IntentMind()
         self.task_queue = BotTaskQueue()
+        self.intent_processor = IntentMind(self.task_queue)
 
     async def setup(self):
         """初始化设置"""
@@ -54,7 +54,7 @@ class BaseCrewProcess(ABC):
             # 等待连接建立
             for _ in range(30):  # 30秒超时
                 if self.client._connected:
-                    logger.info(f"{self.__class__.__name__} SignalR连接已成功建立")
+                    logger.info(f"{self.__class__.__name__} 进程已成功运行")
                     break
                 await asyncio.sleep(1)
             else:
@@ -93,7 +93,7 @@ class BaseCrewProcess(ABC):
 
     async def _handle_hello(self):
         """处理hello消息"""
-        logger.info(f"{self.__class__.__name__}收到hello消息，连接已建立")
+        logger.info(f"{self.__class__.__name__}SignalR连接已建立")
 
     async def _process_task(self, task):
         """处理任务队列中的任务"""
@@ -114,12 +114,8 @@ class BaseCrewProcess(ABC):
     async def _handle_message(self, message: MessageReceivedArgs):
         """处理接收到的消息"""
         logger.info(f"收到消息: {message.text}")
-        # 使用意图处理器处理消息
+        # 使用意图处理器处理消息，直接生成任务到共享的任务队列中
         self.intent_processor.process_message(message)
-        # 获取新生成的任务并添加到任务队列
-        new_tasks = self.intent_processor.get_task_queue().get_all_tasks()
-        for task in new_tasks:
-            self.task_queue.add_task(task)
 
     @abstractmethod
     def _setup_crew(self) -> Crew:

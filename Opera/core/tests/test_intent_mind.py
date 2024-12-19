@@ -4,14 +4,18 @@ from uuid import UUID
 from datetime import datetime, timezone, timedelta
 
 from Opera.core.intent_mind import IntentMind
+from Opera.core.task_queue import BotTaskQueue
 from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 
 def main():
-    # 1. 实例化一个意图识别
-    intent_mind = IntentMind()
+    # 1. 创建任务队列和意图识别实例
+    task_queue = BotTaskQueue()
+    intent_mind = IntentMind(task_queue)
+
     opera_id = UUID('96028f82-9f76-4372-976c-f0c5a054db79')
     receiver_staff_ids = [UUID('c2a71833-4403-4d08-8ef6-23e6327832b2')]
     sender_staff_id = UUID('ab01d4f7-bbf1-44aa-a55b-cbc7d62fbfbc')
+
     # 2. 创建一个模拟的消息
     message = MessageReceivedArgs(
         opera_id=opera_id,
@@ -50,7 +54,6 @@ def main():
             print(f"- 置信度: {dialogue.intent_analysis.confidence}")
     
     # 6. 检查任务队列状态
-    task_queue = intent_mind.get_task_queue()
     print("\n任务队列状态:")
     print(f"- 任务数量: {len(task_queue.tasks)}")
     print(f"- 状态计数: {task_queue.status_counter}")

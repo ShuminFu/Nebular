@@ -221,7 +221,6 @@ class OperaSignalRClient:
 
     # 内部处理方法
     async def _handle_hello(self, *args) -> None:
-        logger.info("Hello!")
         if self.callbacks["on_hello"]:
             await self._execute_callback("on_hello", self.callbacks["on_hello"])
         else:
