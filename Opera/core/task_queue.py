@@ -84,6 +84,7 @@ class BotTask(CamelBaseModel):
 
 class BotTaskQueue(CamelBaseModel):
     """任务队列模型"""
+    #TODO: 这个队列没有先后顺序。
     tasks: List[BotTask] = Field(default_factory=list, description="任务列表")
     status_counter: Dict[str, int] = Field(
         default_factory=lambda: {status.name.lower(): 0 for status in TaskStatus},

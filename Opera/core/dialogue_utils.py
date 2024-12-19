@@ -261,7 +261,8 @@ class DialoguePool(CamelBaseModel):
         
         TODO: 实现实际的API调用逻辑
         - What's in the pool: ProcessingDialogue
-
+        - What's neccessary for persistance: dialogue_index, receiver_staff_id, heat, status_counter
+        - Should the text of the dialogue be persisted? Too much data for token consideration.
         """
         pass
 
