@@ -252,6 +252,16 @@ class DialoguePool(CamelBaseModel):
     heat_decay_rate: float = Field(default=0.1, description="每次维护时的热度衰减率")
     max_age_hours: int = Field(default=24, description="对话最大保留时间（小时）")
 
+    async def _persist_to_api(self) -> None:
+        """将对话池状态持久化到API
+        
+        TODO: 实现实际的API调用逻辑
+        - 可以调用DialogueTool进行批量更新
+        - 需要将ProcessingDialogue转换为API所需的格式
+        - 处理可能的API调用失败情况
+        """
+        pass
+
     def _decay_heat(self) -> None:
         """对所有对话进行热度衰减
 
@@ -313,26 +323,31 @@ class DialoguePool(CamelBaseModel):
 
         self.dialogues = keep_dialogues
 
-    def maintain_pool(self) -> None:
+    async def maintain_pool(self) -> None:
         """维护对话池
 
         1. 清理过期对话（基于时间）
         2. 对话热度衰减（与对话池维护频率相关）
         3. 清理冷对话（基于热度）
         4. 强制执行大小限制
+        5. 持久化更新后的状态
         """
         self._clean_expired_dialogues()  # 先清理过期对话
-        self._decay_heat()               # 再进行热度衰减
+        self._decay_heat()         # 再进行热度衰减
         self._clean_cold_dialogues()     # 清理低热度对话
         self._enforce_size_limit()       # 最后控制池大小
+        # 维护完成后持久化
+        await self._persist_to_api()
 
-    def add_dialogue(self, dialogue: ProcessingDialogue) -> None:
+    async def add_dialogue(self, dialogue: ProcessingDialogue) -> None:
         """添加对话并更新计数器"""
         self.dialogues.append(dialogue)
         self.status_counter[dialogue.status.name.lower()] += 1
-        self.maintain_pool()
+        await self.maintain_pool()
+        # 添加对话后持久化
+        await self._persist_to_api()
 
-    def update_dialogue_status(self, dialogue_index: int, new_status: ProcessingStatus) -> None:
+    async def update_dialogue_status(self, dialogue_index: int, new_status: ProcessingStatus) -> None:
         """更新对话状态并维护计数器"""
         for dialogue in self.dialogues:
             if dialogue.dialogue_index == dialogue_index:
@@ -341,6 +356,8 @@ class DialoguePool(CamelBaseModel):
                 # 状态更新不增加热度，热度只与对话关联有关
                 self.status_counter[old_status.name.lower()] -= 1
                 self.status_counter[new_status.name.lower()] += 1
+                # 状态更新后持久化
+                await self._persist_to_api()
                 break
 
     def analyze_dialogues(self) -> None:

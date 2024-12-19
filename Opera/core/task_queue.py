@@ -90,12 +90,24 @@ class BotTaskQueue(CamelBaseModel):
         description="状态计数器"
     )
 
-    def add_task(self, task: BotTask) -> None:
+    async def _persist_to_api(self) -> None:
+        """将任务队列状态持久化到API
+        
+        TODO: 实现实际的API调用逻辑
+        - 可以调用TaskTool进行批量更新
+        - 需要将BotTask转换为API所需的格式
+        - 处理可能的API调用失败情况
+        """
+        pass
+
+    async def add_task(self, task: BotTask) -> None:
         """添加任务并更新计数器"""
         self.tasks.append(task)
         self.status_counter[task.status.name.lower()] += 1
+        # 添加任务后持久化
+        await self._persist_to_api()
     
-    def update_task_status(self, task_id: UUID, new_status: TaskStatus) -> None:
+    async def update_task_status(self, task_id: UUID, new_status: TaskStatus) -> None:
         """更新任务状态并维护计数器"""
         for task in self.tasks:
             if task.id == task_id:
@@ -111,6 +123,8 @@ class BotTaskQueue(CamelBaseModel):
                 # 更新计数器
                 self.status_counter[old_status.name.lower()] -= 1
                 self.status_counter[new_status.name.lower()] += 1
+                # 状态更新后持久化
+                await self._persist_to_api()
                 break
     
     def get_next_task(self) -> Optional[BotTask]:
