@@ -115,7 +115,7 @@ class BaseCrewProcess(ABC):
         """处理接收到的消息"""
         logger.info(f"收到消息: {message.text}")
         # 使用意图处理器处理消息，直接生成任务到共享的任务队列中
-        self.intent_processor.process_message(message)
+        await self.intent_processor.process_message(message)
 
     @abstractmethod
     def _setup_crew(self) -> Crew:

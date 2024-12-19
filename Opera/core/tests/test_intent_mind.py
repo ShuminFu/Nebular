@@ -1,5 +1,5 @@
 """最小可行性示例，测试对话->对话池->任务队列的基本流程。"""
-
+import asyncio
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
 
@@ -7,7 +7,8 @@ from Opera.core.intent_mind import IntentMind
 from Opera.core.task_queue import BotTaskQueue
 from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 
-def main():
+
+async def main():
     # 1. 创建任务队列和意图识别实例
     task_queue = BotTaskQueue()
     intent_mind = IntentMind(task_queue)
@@ -33,7 +34,7 @@ def main():
     
     # 3. 处理消息
     print("处理消息...")
-    intent_mind.process_message(message)
+    await intent_mind.process_message(message)
     
     # 4. 检查对话池状态
     dialogue_pool = intent_mind.get_dialogue_pool()
@@ -71,4 +72,4 @@ def main():
         print(f"- 源Staff ID: {task.source_staff_id}")
 
 if __name__ == "__main__":
-    main() 
+    asyncio.run(main())

@@ -124,7 +124,7 @@ class IntentMind:
         
         return task
         
-    def _process_single_dialogue(self, dialogue_obj: Union[Dialogue, MessageReceivedArgs], 
+    async def _process_single_dialogue(self, dialogue_obj: Union[Dialogue, MessageReceivedArgs],
                                is_message: bool = True) -> None:
         """处理单个对话的通用方法
         
@@ -144,7 +144,7 @@ class IntentMind:
         )
         
         # 添加到对话池
-        self.dialogue_pool.add_dialogue(processing_dialogue)
+        await self.dialogue_pool.add_dialogue(processing_dialogue)
         
         # 记录Staff的对话
         staff_id = dialogue_obj.sender_staff_id if is_message else dialogue_obj.staff_id
@@ -155,9 +155,9 @@ class IntentMind:
             
         return processing_dialogue.dialogue_index
 
-    def process_message(self, message: MessageReceivedArgs) -> None:
+    async def process_message(self, message: MessageReceivedArgs) -> None:
         """处理单个MessageReceivedArgs消息"""
-        dialogue_index = self._process_single_dialogue(message, is_message=True)
+        dialogue_index = await self._process_single_dialogue(message, is_message=True)
         
         # 分析对话
         self.dialogue_pool.analyze_dialogues()
