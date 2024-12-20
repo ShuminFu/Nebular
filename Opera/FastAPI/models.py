@@ -39,6 +39,14 @@ class CamelBaseModel(BaseModel):
         data = super().model_dump(**kwargs)
         return convert_uuid(data)
 
+    def to_camel_case_dict(self) -> dict:
+        # 获取原始数据
+        data = self.model_dump()
+
+        # 将键转换为小驼峰
+        return {to_camel(k): v for k, v in data.items()}
+
+
 
 # 维护状态枚举
 class MaintenanceState(IntEnum):
