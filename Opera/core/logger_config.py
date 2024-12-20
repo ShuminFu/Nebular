@@ -22,7 +22,7 @@ def setup_logger(name: str = None, log_file: str = None):
             "<level>{level: <8}</level> | "
             "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
             "<yellow>[{extra[trace_id]}]</yellow> "
-            "{message}"
+            "<white>{message}</white>"
         ),
         level="INFO",
     )
