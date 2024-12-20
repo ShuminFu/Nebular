@@ -96,7 +96,7 @@ async def run_crew_manager(bot_id: str):
                       (asyncio.TimeoutError, ConnectionError),
                       max_tries=3,
                       max_time=300)
-async def run_crew_runner():
+async def run_crew_runner(runner: CrewRunner, bot_id: str):
     """在新进程中运行CrewRunner"""
     # 为每个runner实例创建新的trace_id
     log = get_logger_with_trace_id()
@@ -110,7 +110,7 @@ async def run_crew_runner():
 def start_crew_runner_process(bot_id: str, config: dict):
     """在新进程中启动CrewRunner"""
     runner = CrewRunner(config=config, bot_id=UUID(bot_id))
-    asyncio.run(run_crew_runner())
+    asyncio.run(run_crew_runner(runner, bot_id))
 
 def start_crew_manager_process(bot_id: str):
     """在新进程中启动CrewManager"""
