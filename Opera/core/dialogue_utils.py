@@ -66,7 +66,9 @@ class ProcessingDialogue(CamelBaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(
         timezone(timedelta(hours=8))), description="创建时间 (UTC+8)")
     sender_staff_id: Optional[UUID] = Field(default=None, description="发送者Staff ID")
-    receiver_staff_id: Optional[UUID] = Field(default=None, description="接收者Staff ID")
+    receiver_staff_ids: List[UUID] = Field(default_factory=list, description="接收者Staff ID列表")
+    opera_id: UUID = Field(..., description="Opera ID")
+
     # 对话属性
     text_content: Optional[str] = Field(
         default=None, description="对话内容（私有，通过属性访问）")
@@ -83,7 +85,6 @@ class ProcessingDialogue(CamelBaseModel):
             str: 对话内容
 
         TODO: _fetch_text_from_api 实现实际的API调用逻辑
-        - get opera_id from receiver_staff_id
         - get dialogue text based on opera_id and dialogue_index
         """
         # 这里后续需要实现实际的API调用
@@ -154,47 +155,6 @@ class ProcessingDialogue(CamelBaseModel):
         return self.heat * reference_factor * float(self.priority)
 
     @classmethod
-    def from_dialogue(cls, dialogue: Dialogue,
-                      priority: DialoguePriority = DialoguePriority.NORMAL,
-                      dialogue_type: DialogueType = DialogueType.NORMAL) -> "ProcessingDialogue":
-        """从原始Dialogue创建ProcessingDialogue
-
-        Args:
-            dialogue: 原始对话
-            priority: 对话优先级，默认为NORMAL
-            dialogue_type: 对话类型，默认为
-
-        Returns:
-            ProcessingDialogue: 处理中的对话对象
-        """
-        return cls(
-            # 基础信息
-            dialogue_index=dialogue.index,
-            created_at=dialogue.time,
-            sender_staff_id=dialogue.sender_staff_id,
-            receiver_staff_id=dialogue.receiver_staff_id,
-
-            # 对话属性
-            text_content=dialogue.text,
-            is_narratage=dialogue.is_narratage,
-            is_whisper=dialogue.is_whisper,
-            tags=dialogue.tags,
-            mentioned_staff_ids=dialogue.mentioned_staff_ids or [],
-
-            # 处理属性
-            priority=priority,
-            type=dialogue_type,
-            status=ProcessingStatus.PENDING,
-
-            # 上下文
-            context=DialogueContext(
-                stage_index=dialogue.stage_index,
-                related_dialogue_indices=[],  # 初始为空，后续可能需要更新
-                conversation_state={}  # 初始为空，后续可能需要更新
-            )
-        )
-
-    @classmethod
     def from_message_args(cls, message_args: MessageReceivedArgs,
                           priority: DialoguePriority = DialoguePriority.NORMAL,
                           dialogue_type: DialogueType = DialogueType.NORMAL) -> "ProcessingDialogue":
@@ -213,7 +173,8 @@ class ProcessingDialogue(CamelBaseModel):
             dialogue_index=message_args.index,
             created_at=message_args.time,
             sender_staff_id=message_args.sender_staff_id,
-            receiver_staff_id=message_args.receiver_staff_id,
+            receiver_staff_ids=message_args.receiver_staff_ids,
+            opera_id=message_args.opera_id,
 
             # 对话属性
             text_content=message_args.text,

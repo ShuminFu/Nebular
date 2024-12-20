@@ -10,7 +10,8 @@ from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 
 async def main():
     # 1. 创建任务队列和意图识别实例
-    task_queue = BotTaskQueue()
+    bot_id = UUID('c2a71833-4403-4d08-8ef6-23e6327832b2')
+    task_queue = BotTaskQueue(bot_id=bot_id)
     intent_mind = IntentMind(task_queue)
 
     opera_id = UUID('96028f82-9f76-4372-976c-f0c5a054db79')

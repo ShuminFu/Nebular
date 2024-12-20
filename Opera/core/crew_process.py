@@ -34,14 +34,14 @@ class BaseCrewProcess(ABC):
         self.crew: Optional[Crew] = None
         self.intent_agent: Optional[Agent] = None
         self.persona_agent: Optional[Agent] = None
-        self.task_queue = BotTaskQueue()
-        self.intent_processor = IntentMind(self.task_queue)
 
     async def setup(self):
         """初始化设置"""
-        # 初始化基础Agent
         self.intent_agent = create_intent_agent()
         self.persona_agent = create_persona_agent()
+
+        self.task_queue = BotTaskQueue(bot_id=self.bot_id)
+        self.intent_processor = IntentMind(self.task_queue)
 
         # 设置Crew
         self.crew = self._setup_crew()
