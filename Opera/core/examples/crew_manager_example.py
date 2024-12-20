@@ -1,14 +1,19 @@
 import asyncio
 import multiprocessing
-from uuid import UUID
-from loguru import logger
+import sys
+from uuid import UUID, uuid4
+from Opera.core.logger_config import get_logger, get_logger_with_trace_id
 from ai_core.tools.opera_api.bot_api_tool import BotTool
 from Opera.core.crew_process import CrewManager, CrewRunner
 from Opera.core.bot_response_parser import ApiResponseParser
 
+# 获取logger实例
+logger = get_logger(__name__, log_file="logs/crew_manager.log")
 
 async def run_crew_manager(bot_id: str):
     """为单个Bot运行CrewManager"""
+    # 为每个manager实例创建新的trace_id
+    log = get_logger_with_trace_id()
     manager = CrewManager()
     manager.bot_id = UUID(bot_id)
     bot_tool = BotTool()
@@ -18,13 +23,13 @@ async def run_crew_manager(bot_id: str):
     try:
         # 获取Bot信息以读取defaultTags
         bot_info = bot_tool.run(action="get", bot_id=bot_id)
-        logger.info(f"获取Bot {bot_id} 信息: {bot_info}")
+        log.info(f"获取Bot {bot_id} 信息: {bot_info}")
 
         # 解析Bot信息
         _, bot_data = parser.parse_response(bot_info)
         default_tags = parser.parse_default_tags(bot_data)
         child_bots = parser.get_child_bots(default_tags)
-        logger.info(f"从defaultTags获取到的子Bot列表: {child_bots}")
+        log.info(f"从defaultTags获取到的子Bot列表: {child_bots}")
 
         # 检查每个子Bot的状态并启动未激活的Bot
         for child_bot_id in child_bots:
@@ -49,13 +54,13 @@ async def run_crew_manager(bot_id: str):
                 )
                 process.start()
                 crew_processes.append(process)
-                logger.info(f"已为子Bot {child_bot_id} 启动CrewRunner进程")
+                log.info(f"已为子Bot {child_bot_id} 启动CrewRunner进程")
 
         # 运行CrewManager
         await manager.run()
 
     except asyncio.TimeoutError:
-        logger.error(f"Bot {bot_id} 等待连接超时")
+        log.error(f"Bot {bot_id} 等待连接超时")
         raise
     except KeyboardInterrupt:
         await manager.stop()
@@ -63,9 +68,9 @@ async def run_crew_manager(bot_id: str):
         for process in crew_processes:
             process.terminate()
             process.join()
-        logger.info(f"CrewManager和所有CrewRunner已停止，Bot ID: {bot_id}")
+        log.info(f"CrewManager和所有CrewRunner已停止，Bot ID: {bot_id}")
     except Exception as e:
-        logger.error(f"CrewManager运行出错，Bot ID: {bot_id}, 错误: {str(e)}")
+        log.error(f"CrewManager运行出错，Bot ID: {bot_id}, 错误: {str(e)}")
         # 确保清理所有进程
         for process in crew_processes:
             process.terminate()
@@ -76,11 +81,13 @@ async def run_crew_manager(bot_id: str):
 def start_crew_runner_process(bot_id: str, config: dict):
     """在新进程中启动CrewRunner"""
     async def run_crew_runner():
+        # 为每个runner实例创建新的trace_id
+        log = get_logger_with_trace_id()
         runner = CrewRunner(config=config, bot_id=UUID(bot_id))
         try:
             await runner.run()
         except Exception as e:
-            logger.error(f"CrewRunner运行出错，Bot ID: {bot_id}, 错误: {str(e)}")
+            log.error(f"CrewRunner运行出错，Bot ID: {bot_id}, 错误: {str(e)}")
             raise
 
     asyncio.run(run_crew_runner())
@@ -92,13 +99,15 @@ def start_crew_manager_process(bot_id: str):
 
 
 async def main():
+    # 为main函数创建新的trace_id
+    log = get_logger_with_trace_id()
     # 创建BotTool实例
     bot_tool = BotTool()
     parser = ApiResponseParser()
 
     # 获取所有Bot
     result = bot_tool.run(action="get_all")
-    logger.info(f"获取所有Bot结果: {result}")
+    log.info(f"获取所有Bot结果: {result}")
 
     # 存储所有进程的列表
     processes = []
@@ -113,10 +122,9 @@ async def main():
                 if "测试" in bot["name"] and not bot["isActive"]
             ]
             # TODO: 这里可以把tag也加入到CrewManager的初始化信息中。
-            logger.info("符合条件的Bot列表:")
+            log.info("符合条件的Bot列表:")
             for bot in crew_manager_bots:
-                logger.info(f"ID: {bot['id']}, Name: {
-                            bot['name']}, Description: {bot['description']}")
+                log.info(f"ID: {bot['id']}, Name: {bot['name']}, Description: {bot['description']}")
 
                 # 为每个Bot创建新进程
                 process = multiprocessing.Process(
@@ -125,22 +133,22 @@ async def main():
                 )
                 process.start()
                 processes.append(process)
-                logger.info(f"已为Bot {bot['id']}启动CrewManager进程")
+                log.info(f"已为Bot {bot['id']}启动CrewManager进程")
 
             # 等待所有进程
             try:
                 while True:
                     await asyncio.sleep(1)
             except KeyboardInterrupt:
-                logger.info("正在停止所有进程...")
+                log.info("正在停止所有进程...")
                 for process in processes:
                     process.terminate()
                     process.join()
-                logger.info("所有进程已停止")
+                log.info("所有进程已停止")
         else:
-            logger.error(f"API请求失败，状态码: {status_code}")
+            log.error(f"API请求失败，状态码: {status_code}")
     except Exception as e:
-        logger.error(f"处理结果时出错: {str(e)}")
+        log.error(f"处理结果时出错: {str(e)}")
         # 确保清理所有进程
         for process in processes:
             process.terminate()

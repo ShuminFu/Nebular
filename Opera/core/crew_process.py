@@ -5,7 +5,7 @@ import asyncio
 import multiprocessing
 from abc import ABC, abstractmethod
 from crewai import Agent, Task, Crew
-from loguru import logger
+from Opera.core.logger_config import get_logger, get_logger_with_trace_id
 
 from Opera.signalr_client.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 from ai_core.configs.config import CREW_MANAGER_INIT, DEFAULT_CREW_MANAGER
@@ -34,6 +34,8 @@ class BaseCrewProcess(ABC):
         self.crew: Optional[Crew] = None
         self.intent_agent: Optional[Agent] = None
         self.persona_agent: Optional[Agent] = None
+        # 为每个进程创建一个带trace_id的logger
+        self.log = get_logger_with_trace_id()
 
     async def setup(self):
         """初始化设置"""
@@ -54,11 +56,11 @@ class BaseCrewProcess(ABC):
             # 等待连接建立
             for _ in range(30):  # 30秒超时
                 if self.client._connected:
-                    logger.info(f"{self.__class__.__name__} 进程已成功运行")
+                    self.log.info(f"{self.__class__.__name__} 进程准备就绪")
                     break
                 await asyncio.sleep(1)
             else:
-                logger.error(f"等待{self.__class__.__name__} SignalR连接超时")
+                self.log.error(f"等待{self.__class__.__name__} SignalR连接超时")
                 raise asyncio.TimeoutError()
 
             self.client.set_callback(
@@ -77,7 +79,7 @@ class BaseCrewProcess(ABC):
             while self.is_running:
                 # 检查连接状态
                 if self.client and not self.client._connected:
-                    logger.warning("检测到连接断开，尝试重新连接")
+                    self.log.warning("检测到连接断开，尝试重新连接")
                     await self.setup()
                     continue
 
@@ -87,13 +89,13 @@ class BaseCrewProcess(ABC):
                     await self._process_task(task)
                 await asyncio.sleep(1)
         except Exception as e:
-            logger.exception(f"Crew运行出错: {e}")
+            self.log.exception(f"Crew运行出错: {e}")
         finally:
             await self.stop()
 
     async def _handle_hello(self):
         """处理hello消息"""
-        logger.info(f"{self.__class__.__name__}SignalR连接已建立")
+        self.log.info(f"{self.__class__.__name__}SignalR连接已建立")
 
     async def _process_task(self, task):
         """处理任务队列中的任务"""
@@ -106,14 +108,14 @@ class BaseCrewProcess(ABC):
             elif task.type == TaskType.ANALYSIS:
                 await self._handle_analysis_task(task)
         except Exception as e:
-            logger.exception(f"处理任务出错: {e}")
+            self.log.exception(f"处理任务出错: {e}")
             task.status = TaskStatus.FAILED
         else:
             task.status = TaskStatus.COMPLETED
 
     async def _handle_message(self, message: MessageReceivedArgs):
         """处理接收到的消息"""
-        logger.info(f"收到消息: {message.text}")
+        self.log.info(f"收到消息: {message.text}")
         # 使用意图处理器处理消息，直接生成任务到共享的任务队列中
         await self.intent_processor.process_message(message)
 

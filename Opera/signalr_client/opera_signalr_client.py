@@ -14,35 +14,11 @@ from dataclasses import dataclass
 
 from pysignalr.client import SignalRClient
 from pysignalr.messages import CompletionMessage
-from loguru import logger
+from Opera.core.logger_config import get_logger, get_logger_with_trace_id
 from ai_core.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
 
-# 配置日志
-logger.configure(
-    handlers=[
-        {
-            "sink": sys.stdout,
-            "format": (
-                "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-                "<level>{level: <8}</level> | "
-                "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
-                "<level>{message}</level>"
-            ),
-            "level": "INFO",
-        },
-        {
-            "sink": "logs/opera_signalr.log",
-            "rotation": "500 MB",
-            "retention": "10 days",
-            "compression": "zip",
-            "format": (
-                "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
-                "{name}:{function}:{line} - {message}"
-            ),
-            "level": "DEBUG",
-        }
-    ]
-)
+# 获取logger实例
+logger = get_logger(__name__, log_file="logs/opera_signalr.log")
 
 
 @dataclass
@@ -77,6 +53,8 @@ class OperaSignalRClient:
         self.snitch_mode: bool = False
         self._connected = False
         self.staff_invitation_tool = StaffInvitationTool()  # 初始化StaffInvitationTool
+        # 为每个实例创建一个带trace_id的logger
+        self.log = get_logger_with_trace_id()
 
         # 设置基本回调
         self.client.on_open(self._on_open)
@@ -114,7 +92,7 @@ class OperaSignalRClient:
         self._connection_task = None
 
     async def _on_open(self) -> None:
-        logger.info(
+        self.log.info(
             f"已连接到服务器 [Bot ID: {self.bot_id if self.bot_id else 'Not Set'}]")
         self._connected = True
         # 如果有bot_id，自动设置
@@ -124,21 +102,21 @@ class OperaSignalRClient:
             await self.set_snitch_mode(True)
 
     async def _on_close(self) -> None:
-        logger.info(
+        self.log.info(
             f"与服务器断开连接 [Bot ID: {self.bot_id if self.bot_id else 'Not Set'}]")
         self._connected = False
 
     async def _on_error(self, message: CompletionMessage) -> None:
-        logger.error(f"发生错误: {message.error}")
+        self.log.error(f"发生错误: {message.error}")
 
     async def connect(self):
         """建立SignalR连接"""
         try:
-            logger.debug("开始建立连接...")
+            self.log.debug("开始建立连接...")
             self._connection_task = asyncio.create_task(self.client.run())
             await asyncio.sleep(0.1)  # 给予连接初始化的时间
         except Exception as e:
-            logger.exception(f"连接失败: {str(e)}")
+            self.log.exception(f"连接失败: {str(e)}")
             raise
 
     async def disconnect(self):
@@ -154,7 +132,7 @@ class OperaSignalRClient:
             self._connection_task = None
 
         except Exception as e:
-            logger.exception(f"断开连接时出错: {e}")
+            self.log.exception(f"断开连接时出错: {e}")
 
     async def set_bot_id(self, bot_id: UUID):
         """设置Bot ID"""
@@ -210,13 +188,13 @@ class OperaSignalRClient:
             )
 
         except asyncio.TimeoutError:
-            logger.error(
+            self.log.error(
                 f"回调 {callback_name} 执行超时 (>{self.callback_timeout}秒)"
             )
             self.callback_stats[callback_name]["error"] += 1
 
         except Exception as _:
-            logger.exception(f"回调 {callback_name} 执行出错")
+            self.log.exception(f"回调 {callback_name} 执行出错")
             self.callback_stats[callback_name]["error"] += 1
 
     # 内部处理方法
@@ -224,17 +202,17 @@ class OperaSignalRClient:
         if self.callbacks["on_hello"]:
             await self._execute_callback("on_hello", self.callbacks["on_hello"])
         else:
-            logger.debug("收到Hello事件，但未设置处理回调")
+            self.log.debug("收到Hello事件，但未设置处理回调")
 
     async def _handle_system_shutdown(self, *args) -> None:
-        logger.warning(f"收到系统关闭事件: {args}")
+        self.log.warning(f"收到系统关闭事件: {args}")
         if self.callbacks["on_system_shutdown"]:
             await self._execute_callback("on_system_shutdown", self.callbacks["on_system_shutdown"])
         else:
-            logger.debug("收到系统关闭事件，但未设置处理回调")
+            self.log.debug("收到系统关闭事件，但未设置处理回调")
 
     async def _handle_opera_created(self, args: Dict[str, Any]) -> None:
-        logger.info(f"收到Opera创建事件: {json.dumps(args, ensure_ascii=False)}")
+        self.log.info(f"收到Opera创建事件: {json.dumps(args, ensure_ascii=False)}")
         if self.callbacks["on_opera_created"]:
             opera_args = OperaCreatedArgs(
                 opera_id=UUID(args["operaId"]),
@@ -244,7 +222,7 @@ class OperaSignalRClient:
                 description=args.get("description"),
                 database_name=args["databaseName"]
             )
-            logger.debug(f"Opera创建详情: ID={opera_args.opera_id}, 名称={opera_args.name}, "
+            self.log.debug(f"Opera创建详情: ID={opera_args.opera_id}, 名称={opera_args.name}, "
                          f"父ID={opera_args.parent_id}, 数据库={opera_args.database_name}")
             await self.message_processor.handle_opera_created(opera_args)
             await self._execute_callback(
@@ -253,19 +231,19 @@ class OperaSignalRClient:
                 opera_args
             )
         else:
-            logger.warning("收到Opera创建事件，但未设置处理回调")
+            self.log.warning("收到Opera创建事件，但未设置处理回调")
 
     async def _handle_opera_deleted(self, args: Dict[str, Any]) -> None:
-        logger.info(f"收到Opera删除事件: {json.dumps(args, ensure_ascii=False)}")
+        self.log.info(f"收到Opera删除事件: {json.dumps(args, ensure_ascii=False)}")
         if self.callbacks["on_opera_deleted"]:
             opera_id = UUID(args["operaId"])
-            logger.debug(f"Opera删除详情: ID={opera_id}")
+            self.log.debug(f"Opera删除详情: ID={opera_id}")
             await self._execute_callback("on_opera_deleted", self.callbacks["on_opera_deleted"], opera_id)
         else:
-            logger.warning("收到Opera删除事件，但未设置处理回调")
+            self.log.warning("收到Opera删除事件，但未设置处理回调")
 
     async def _handle_staff_invited(self, args: Dict[str, Any]) -> None:
-        logger.info(f"收到Staff邀请事件: {json.dumps(args, ensure_ascii=False)}")
+        self.log.info(f"收到Staff邀请事件: {json.dumps(args, ensure_ascii=False)}")
         try:
             # 准备接受邀请所需的数据
             opera_id = UUID(args["operaId"])
@@ -289,7 +267,7 @@ class OperaSignalRClient:
                 invitation_id=invitation_id,
                 data=acceptance_data
             )
-            logger.info(f"自动接受邀请: {result}")
+            self.log.info(f"自动接受邀请: {result}")
 
             # 继续执行原有的回调逻辑
             if self.callbacks["on_staff_invited"]:
@@ -303,26 +281,26 @@ class OperaSignalRClient:
                 }
                 await self._execute_callback("on_staff_invited", self.callbacks["on_staff_invited"], invite_data)
         except Exception as e:
-            logger.error(f"自动接受邀请失败: {str(e)}")
+            self.log.error(f"自动接受邀请失败: {str(e)}")
 
     async def _handle_stage_changed(self, args: Dict[str, Any]) -> None:
-        logger.info(f"收到Stage变更事件: {json.dumps(args, ensure_ascii=False)}")
+        self.log.info(f"收到Stage变更事件: {json.dumps(args, ensure_ascii=False)}")
         if self.callbacks["on_stage_changed"]:
             stage_data = {
                 "opera_id": UUID(args["operaId"]),
                 "stage_index": args["stageIndex"],
                 "stage_name": args["stageName"]
             }
-            logger.debug(f"Stage变更详情: Opera ID={stage_data['opera_id']}, "
+            self.log.debug(f"Stage变更详情: Opera ID={stage_data['opera_id']}, "
                          f"阶段索引={stage_data['stage_index']}, "
                          f"阶段名称={stage_data['stage_name']}")
             await self._execute_callback("on_stage_changed", self.callbacks["on_stage_changed"], stage_data)
         else:
-            logger.warning("收到Stage变更事件，但未设置处理回调")
+            self.log.warning("收到Stage变更事件，但未设置处理回调")
 
     async def _handle_message_received(self, args: Dict[str, Any]) -> None:
         """处理接收到的消息"""
-        logger.info(f"收到消息: {json.dumps(args[0], ensure_ascii=False)}")
+        self.log.info(f"收到消息: {json.dumps(args[0], ensure_ascii=False)}")
         if self.callbacks["on_message_received"]:
             message_args = MessageReceivedArgs(
                 opera_id=UUID(args[0]["operaId"]),
@@ -346,7 +324,7 @@ class OperaSignalRClient:
                 message_args
             )
         else:
-            logger.warning("收到消息，但未设置处理回调")
+            self.log.warning("收到消息，但未设置处理回调")
 
     # 在OperaSignalRClient类中添加重试机制
     async def connect_with_retry(self, max_retries=3, retry_delay=5):
@@ -357,14 +335,14 @@ class OperaSignalRClient:
             except Exception as e:
                 if attempt == max_retries - 1:
                     raise
-                logger.error(f"连接失败，{retry_delay}秒后重试: {str(e)}")
+                self.log.error(f"连接失败，{retry_delay}秒后重试: {str(e)}")
                 await asyncio.sleep(retry_delay)
 
     # 添加心跳检测
     async def check_health(self):
         while True:
             if not self.is_connected():
-                logger.warning("连接已断开，尝试重连")
+                self.log.warning("连接已断开，尝试重连")
                 await self.connect_with_retry()
             await asyncio.sleep(30)  # 每30秒检查一次
 
@@ -375,7 +353,7 @@ class OperaSignalRClient:
 
     def print_callback_stats(self) -> None:
         """打印所有回调函数的执行统计信息"""
-        logger.info("回调函数执行统计:")
+        self.log.info("回调函数执行统计:")
         for name, stats in self.callback_stats.items():
             success_rate = 0
             total = stats["success"] + stats["error"]
@@ -385,7 +363,7 @@ class OperaSignalRClient:
             last_exec = stats["last_execution"].strftime(
                 "%Y-%m-%d %H:%M:%S") if stats["last_execution"] else "从未执行"
 
-            logger.info(
+            self.log.info(
                 f"回调 {name}:\n"
                 f"  成功次数: {stats['success']}\n"
                 f"  失败次数: {stats['error']}\n"
