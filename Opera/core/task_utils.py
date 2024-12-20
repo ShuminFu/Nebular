@@ -115,6 +115,39 @@ class BotTaskQueue(CamelBaseModel):
         """
         return cls(bot_id=bot_id, **kwargs)
 
+    @classmethod
+    async def restore_from_api(cls, bot_id: UUID, **kwargs) -> "BotTaskQueue":
+        """从API恢复任务队列状态的工厂方法
+
+        TODO: 实现从API恢复数据的逻辑
+        - 使用bot_id从API获取持久化的任务数据
+        - 将API数据转换为BotTask对象
+        - 重建任务队列的状态计数器
+        - 处理可能的API调用失败情况
+        - 考虑任务状态的有效性（是否需要重置某些状态）
+        - 考虑是否需要增量恢复机制
+
+        Args:
+            bot_id: Bot ID
+            **kwargs: 配置参数，可能包括时间范围、过滤条件等
+
+        Returns:
+            BotTaskQueue: 恢复的任务队列实例
+        """
+        # 创建一个新的任务队列实例
+        queue = cls(bot_id=bot_id, **kwargs)
+
+        # 从API获取持久化的任务数据
+        # restored_data = await task_api.get_persisted_tasks(bot_id=bot_id, **kwargs)
+
+        # 将API数据转换为BotTask对象
+        # queue.tasks = [BotTask(**data) for data in restored_data]
+
+        # 重建状态计数器
+        # queue.status_counter = Counter(task.status.name.lower() for task in queue.tasks)
+
+        return queue
+
     async def add_task(self, task: BotTask) -> None:
         """添加任务并更新计数器"""
         self.tasks.append(task)

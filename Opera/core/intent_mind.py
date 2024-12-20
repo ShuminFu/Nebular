@@ -91,6 +91,8 @@ class IntentMind:
         Returns:
             BotTask: 创建的任务对象
         """
+        self.dialogue_pool.update_dialogue_status(dialogue.dialogue_index, ProcessingStatus.PROCESSING)
+
         # 基于对话类型进行初步的任务类型判断
         task_type = TaskType.CONVERSATION  # 默认为基础对话处理
 

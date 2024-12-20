@@ -89,7 +89,7 @@ class ApiResponseParser:
         return default_tags.get("ChildBots", [])
 
     @staticmethod
-    def get_task_queue(default_tags: dict) -> BotTaskQueue:
+    def get_task_queue(default_tags: dict) -> "BotTaskQueue":
         """从defaultTags中获取任务队列
         
         Args:

@@ -27,17 +27,19 @@ class CamelBaseModel(BaseModel):
 
     def model_dump(self, **kwargs):
         """重写model_dump方法，确保UUID被正确序列化"""
-        def convert_uuid(obj):
+        def convert_types(obj):
             if isinstance(obj, UUID):
                 return str(obj)
+            elif isinstance(obj, datetime):
+                return obj.isoformat()
             elif isinstance(obj, list):
-                return [convert_uuid(item) for item in obj]
+                return [convert_types(item) for item in obj]
             elif isinstance(obj, dict):
-                return {k: convert_uuid(v) for k, v in obj.items()}
+                return {k: convert_types(v) for k, v in obj.items()}
             return obj
 
         data = super().model_dump(**kwargs)
-        return convert_uuid(data)
+        return convert_types(data)
 
     def to_camel_case_dict(self) -> dict:
         # 获取原始数据
