@@ -6,10 +6,18 @@ from Opera.core.logger_config import get_logger, get_logger_with_trace_id
 from ai_core.tools.opera_api.bot_api_tool import BotTool
 from Opera.core.crew_process import CrewManager, CrewRunner
 from Opera.core.bot_response_parser import ApiResponseParser
+import backoff  # 需要添加到requirements.txt
 
 # 获取logger实例
 logger = get_logger(__name__, log_file="logs/crew_manager.log")
 
+# 重试装饰器
+
+
+@backoff.on_exception(backoff.expo,
+                      (asyncio.TimeoutError, ConnectionError),
+                      max_tries=3,
+                      max_time=300)
 async def run_crew_manager(bot_id: str):
     """为单个Bot运行CrewManager"""
     # 为每个manager实例创建新的trace_id
@@ -33,34 +41,40 @@ async def run_crew_manager(bot_id: str):
 
         # 检查每个子Bot的状态并启动未激活的Bot
         for child_bot_id in child_bots:
-            # 获取子Bot状态
-            child_bot_info = bot_tool.run(action="get", bot_id=child_bot_id)
-            _, child_bot_data = parser.parse_response(child_bot_info)
+            try:
+                # 获取子Bot状态
+                child_bot_info = bot_tool.run(action="get", bot_id=child_bot_id)
+                _, child_bot_data = parser.parse_response(child_bot_info)
 
-            if not child_bot_data.get("isActive", True):
-                # 为未激活的子Bot创建CrewRunner进程
-                process = multiprocessing.Process(
-                    target=start_crew_runner_process,
-                    args=(child_bot_id, {
-                        "agents": [
-                            {
-                                "name": "Default Agent",
-                                "role": "Assistant",
-                                "goal": "Help with tasks",
-                                "backstory": "I am an AI assistant"
-                            }
-                        ]
-                    })  # TODO: CrewRunner的初始化参数可以让CrewManager来决定或者从Description，Tags，Roles中获取。
-                )
-                process.start()
-                crew_processes.append(process)
-                log.info(f"已为子Bot {child_bot_id} 启动CrewRunner进程")
+                if not child_bot_data.get("isActive", True):
+                    # 为未激活的子Bot创建CrewRunner进程
+                    process = multiprocessing.Process(
+                        target=start_crew_runner_process,
+                        args=(child_bot_id, {
+                            "agents": [
+                                {
+                                    "name": "Default Agent",
+                                    "role": "Assistant",
+                                    "goal": "Help with tasks",
+                                    "backstory": "I am an AI assistant"
+                                }
+                            ],
+                            "max_retries": 3,  # 添加重试次数配置
+                            "retry_delay": 5    # 添加重试延迟配置
+                        })
+                    )
+                    process.start()
+                    crew_processes.append(process)
+                    log.info(f"已为子Bot {child_bot_id} 启动CrewRunner进程")
+            except Exception as e:
+                log.error(f"处理子Bot {child_bot_id} 时出错: {str(e)}")
+                continue
 
         # 运行CrewManager
         await manager.run()
 
     except asyncio.TimeoutError:
-        log.error(f"Bot {bot_id} 等待连接超时")
+        log.error(f"Bot {bot_id} 等待连接超时，将进行重试")
         raise
     except KeyboardInterrupt:
         await manager.stop()
@@ -78,25 +92,29 @@ async def run_crew_manager(bot_id: str):
         raise
 
 
+@backoff.on_exception(backoff.expo,
+                      (asyncio.TimeoutError, ConnectionError),
+                      max_tries=3,
+                      max_time=300)
+async def run_crew_runner():
+    """在新进程中运行CrewRunner"""
+    # 为每个runner实例创建新的trace_id
+    log = get_logger_with_trace_id()
+    try:
+        await runner.run()
+    except Exception as e:
+        log.error(f"CrewRunner运行出错，Bot ID: {bot_id}, 错误: {str(e)}")
+        raise
+
+
 def start_crew_runner_process(bot_id: str, config: dict):
     """在新进程中启动CrewRunner"""
-    async def run_crew_runner():
-        # 为每个runner实例创建新的trace_id
-        log = get_logger_with_trace_id()
-        runner = CrewRunner(config=config, bot_id=UUID(bot_id))
-        try:
-            await runner.run()
-        except Exception as e:
-            log.error(f"CrewRunner运行出错，Bot ID: {bot_id}, 错误: {str(e)}")
-            raise
-
+    runner = CrewRunner(config=config, bot_id=UUID(bot_id))
     asyncio.run(run_crew_runner())
-
 
 def start_crew_manager_process(bot_id: str):
     """在新进程中启动CrewManager"""
     asyncio.run(run_crew_manager(bot_id))
-
 
 async def main():
     # 为main函数创建新的trace_id
