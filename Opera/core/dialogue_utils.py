@@ -9,7 +9,9 @@ from collections import Counter
 import heapq
 
 from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
-from Opera.FastAPI.models import CamelBaseModel, Dialogue
+from Opera.FastAPI.models import CamelBaseModel
+from ai_core.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
+from Opera.core.api_response_parser import ApiResponseParser
 
 
 class DialoguePriority(IntEnum):
@@ -79,17 +81,38 @@ class ProcessingDialogue(CamelBaseModel):
         default_factory=list, description="提及的Staff ID列表")
 
     def _fetch_text_from_api(self) -> str:
-        """从API获取话内容的占位方法
+        """从API获取对话内容
+
+        使用共享的DialogueTool实例获取指定opera_id和dialogue_index的对话内容。
 
         Returns:
-            str: 对话内容
-
-        TODO: _fetch_text_from_api 实现实际的API调用逻辑
-        - get dialogue text based on opera_id and dialogue_index
+            str: 对话内容。如果获取失败则返回空字符串。
         """
-        # 这里后续需要实现实际的API调用
-        # 临时返回占位内容
-        return f"Dialogue content for index: {self.dialogue_index}"
+        try:
+            # 准备API调用参数
+            params = {
+                "action": "get",
+                "opera_id": self.opera_id,
+                "dialogue_index": self.dialogue_index
+            }
+
+            # 使用共享的DialogueTool实例调用API
+            result = _SHARED_DIALOGUE_TOOL._run(**params)
+
+            # 使用ApiResponseParser解析响应
+            status_code, data = ApiResponseParser.parse_response(result)
+
+            # 返回对话文本内容
+            if isinstance(data, dict) and "text" in data:
+                return data["text"]
+
+            # 如果无法获取内容，返回空字符串
+            return ""
+
+        except Exception as e:
+            # 记录错误并返回空字符串
+            print(f"获取对话内容失败: {str(e)}")
+            return ""
 
     @property
     def text(self) -> str:
@@ -210,7 +233,7 @@ class DialoguePool(CamelBaseModel):
             status.name.lower(): 0 for status in ProcessingStatus},
         description="状态计数器"
     )
-    
+
     # 配置参数
     max_size: int = Field(default=1000, description="对话池最大容量")
     min_heat_threshold: float = Field(default=0.5, description="最小热度阈值")
@@ -219,7 +242,7 @@ class DialoguePool(CamelBaseModel):
 
     async def _persist_to_api(self) -> None:
         """将对话池状态持久化到API
-        
+
         TODO: 实现实际的API调用逻辑
         - What's in the pool: ProcessingDialogue
         - What's neccessary for persistance: dialogue_index, receiver_staff_id, heat, status_counter

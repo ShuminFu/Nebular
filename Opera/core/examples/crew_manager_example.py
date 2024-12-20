@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from Opera.core.logger_config import get_logger, get_logger_with_trace_id
 from ai_core.tools.opera_api.bot_api_tool import BotTool
 from Opera.core.crew_process import CrewManager, CrewRunner
-from Opera.core.bot_response_parser import ApiResponseParser
+from Opera.core.api_response_parser import ApiResponseParser
 import backoff  # 需要添加到requirements.txt
 
 # 获取logger实例
