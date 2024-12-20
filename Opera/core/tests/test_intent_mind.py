@@ -4,7 +4,7 @@ from uuid import UUID
 from datetime import datetime, timezone, timedelta
 
 from Opera.core.intent_mind import IntentMind
-from Opera.core.task_queue import BotTaskQueue
+from Opera.core.task_utils import BotTaskQueue
 from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 
 

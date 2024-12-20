@@ -1,7 +1,7 @@
 import ast
 from typing import List
 from Opera.core.dialogue_utils import ProcessingDialogue
-from Opera.core.task_queue import BotTaskQueue
+from Opera.core.task_utils import BotTaskQueue
 
 
 class ApiResponseParser:

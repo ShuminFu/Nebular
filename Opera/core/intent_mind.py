@@ -11,7 +11,7 @@ from Opera.core.dialogue_utils import (
     ProcessingDialogue, DialoguePool, DialoguePriority, DialogueType,
     ProcessingStatus
 )
-from Opera.core.task_queue import BotTask, BotTaskQueue, TaskType
+from Opera.core.task_utils import BotTask, BotTaskQueue, TaskType
 from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 
 

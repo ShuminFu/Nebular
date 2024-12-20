@@ -11,7 +11,7 @@ from Opera.signalr_client.opera_signalr_client import OperaSignalRClient, Messag
 from ai_core.configs.config import CREW_MANAGER_INIT, DEFAULT_CREW_MANAGER
 from ai_core.configs.base_agents import create_intent_agent, create_persona_agent
 from Opera.core.intent_mind import IntentMind
-from Opera.core.task_queue import BotTaskQueue, TaskType, TaskStatus
+from Opera.core.task_utils import BotTaskQueue, TaskType, TaskStatus
 
 
 @dataclass
