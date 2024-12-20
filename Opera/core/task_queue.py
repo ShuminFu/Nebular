@@ -84,7 +84,6 @@ class BotTask(CamelBaseModel):
 
 class BotTaskQueue(CamelBaseModel):
     """任务队列模型"""
-    #TODO: 这个队列没有先后顺序。
     tasks: List[BotTask] = Field(default_factory=list, description="任务列表")
     status_counter: Dict[str, int] = Field(
         default_factory=lambda: {status.name.lower(): 0 for status in TaskStatus},
@@ -144,7 +143,7 @@ class BotTaskQueue(CamelBaseModel):
                 break
     
     def get_next_task(self) -> Optional[BotTask]:
-        """获取下一个待处理的任务（按优先级排序）"""
+        """获取下一个待处理的任务（按优先级排序，同优先级按创建时间FIFO）"""
         pending_tasks = [
             task for task in self.tasks 
             if task.status == TaskStatus.PENDING
@@ -152,4 +151,4 @@ class BotTaskQueue(CamelBaseModel):
         if not pending_tasks:
             return None
         
-        return max(pending_tasks, key=lambda x: (x.priority, -x.created_at.timestamp()))
+        return max(pending_tasks, key=lambda x: (x.priority, x.created_at.timestamp()))
