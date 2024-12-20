@@ -14,7 +14,9 @@ from pydantic.alias_generators import to_camel, to_pascal
 
 
 class CamelBaseModel(BaseModel):
-    """基础模型类，自动将所有字段转换为大驼峰（序列化时），小驼峰（验证构建时）"""
+    """基础模型类，自动将所有字段转换为:
+    大驼峰（序列化输出，转化为JSON等格式时）
+    小驼峰（输入数据，验证构建时）"""
 
     class Config:
         alias_generator = AliasGenerator(

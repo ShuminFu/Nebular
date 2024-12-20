@@ -4,7 +4,7 @@ from uuid import UUID
 from loguru import logger
 from ai_core.tools.opera_api.bot_api_tool import BotTool
 from Opera.core.crew_process import CrewManager, CrewRunner
-from Opera.core.bot_response_parser import BotResponseParser
+from Opera.core.bot_response_parser import ApiResponseParser
 
 
 async def run_crew_manager(bot_id: str):
@@ -13,7 +13,7 @@ async def run_crew_manager(bot_id: str):
     manager.bot_id = UUID(bot_id)
     bot_tool = BotTool()
     crew_processes = []
-    parser = BotResponseParser()
+    parser = ApiResponseParser()
 
     try:
         # 获取Bot信息以读取defaultTags
@@ -94,7 +94,7 @@ def start_crew_manager_process(bot_id: str):
 async def main():
     # 创建BotTool实例
     bot_tool = BotTool()
-    parser = BotResponseParser()
+    parser = ApiResponseParser()
 
     # 获取所有Bot
     result = bot_tool.run(action="get_all")
