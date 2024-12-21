@@ -69,8 +69,10 @@ class ProcessingDialogue(CamelBaseModel):
     dialogue_index: int = Field(..., description="对话索引")
     created_at: datetime = Field(default_factory=lambda: datetime.now(
         timezone(timedelta(hours=8))), description="创建时间 (UTC+8)")
-    sender_staff_id: Optional[UUID] = Field(default=None, description="发送者Staff ID")
-    receiver_staff_ids: List[UUID] = Field(default_factory=list, description="接收者Staff ID列表")
+    sender_staff_id: Optional[UUID] = Field(
+        default=None, description="发送者Staff ID")
+    receiver_staff_ids: List[UUID] = Field(
+        default_factory=list, description="接收者Staff ID列表")
     opera_id: UUID = Field(..., description="Opera ID")
 
     # 对话属性
@@ -224,7 +226,7 @@ class ProcessingDialogue(CamelBaseModel):
 
 class PersistentDialogueState(ProcessingDialogue):
     """持久化的对话状态模型
-    
+
     继承自ProcessingDialogue，但只保留需要持久化的关键状态信息。
     其他信息可以通过API重新获取。
     """
@@ -235,16 +237,20 @@ class PersistentDialogueState(ProcessingDialogue):
     # 对话标识（必需）
     dialogue_index: int = Field(..., description="对话索引")
     opera_id: UUID = Field(..., description="Opera的UUID")
-    receiver_staff_ids: List[UUID] = Field(default_factory=list, description="接收者Staff ID列表")
+    receiver_staff_ids: List[UUID] = Field(
+        default_factory=list, description="接收者Staff ID列表")
 
     # 意图识别处理结果（必需）
     priority: DialoguePriority = Field(..., description="处理优先级")
     type: DialogueType = Field(..., description="对话类型")
-    intent_analysis: Optional[IntentAnalysis] = Field(default=None, description="意图分析结果")
-    context: DialogueContext = Field(default_factory=DialogueContext, description="对话上下文")
+    intent_analysis: Optional[IntentAnalysis] = Field(
+        default=None, description="意图分析结果")
+    context: DialogueContext = Field(
+        default_factory=DialogueContext, description="对话上下文")
 
     # 对话池状态信息（必需）
-    status: ProcessingStatus = Field(default=ProcessingStatus.PENDING, description="处理状态")
+    status: ProcessingStatus = Field(
+        default=ProcessingStatus.PENDING, description="处理状态")
     heat: float = Field(default=1.0, description="对话热度")
     reference_count: int = Field(default=0, description="被引用次数")
 
@@ -264,15 +270,24 @@ class PersistentDialogueState(ProcessingDialogue):
             reference_count=dialogue.reference_count
         )
 
-    def update_processing_dialogue(self, dialogue: ProcessingDialogue) -> None:
-        """使用持久化状态更新ProcessingDialogue对象"""
-        dialogue.priority = self.priority
-        dialogue.type = self.type
-        dialogue.intent_analysis = self.intent_analysis
-        dialogue.context = self.context
-        dialogue.status = self.status
-        dialogue.heat = self.heat
-        dialogue.reference_count = self.reference_count
+    def to_processing_dialogue(self) -> ProcessingDialogue:
+        """将持久化状态转换为ProcessingDialogue对象
+
+        Returns:
+            ProcessingDialogue: 转换后的对话对象
+        """
+        return ProcessingDialogue(
+            dialogue_index=self.dialogue_index,
+            opera_id=self.opera_id,
+            receiver_staff_ids=self.receiver_staff_ids,
+            priority=self.priority,
+            type=self.type,
+            intent_analysis=self.intent_analysis,
+            context=self.context,
+            status=self.status,
+            heat=self.heat,
+            reference_count=self.reference_count
+        )
 
 
 class DialoguePool(CamelBaseModel):
@@ -295,97 +310,14 @@ class DialoguePool(CamelBaseModel):
     heat_decay_rate: float = Field(default=0.1, description="每次维护时的热度衰减率")
     max_age_hours: int = Field(default=24, description="对话最大保留时间（小时）")
 
-    async def _persist_to_api(self) -> None:
-        """将对话池状态持久化到API
-
-        将对话池中的每个对话以PersistentDialogueState的形式持久化到每个receiver staff的parameters中。
-        步骤：
-        1. 获取所有需要更新的staff
-        2. 获取每个staff当前的parameters
-        3. 更新parameters中的对话状态
-        4. 将更新后的parameters保存回API
-        """
-        # 创建StaffTool实例
-        staff_tool = _SHARED_STAFF_TOOL
-
-        # 收集所有需要更新的staff_id
-        staff_ids = set()
-        for dialogue in self.dialogues:
-            staff_ids.update(dialogue.receiver_staff_ids)
-
-        # 对每个staff进行更新
-        for staff_id in staff_ids:
-            try:
-                # 获取当前staff的信息
-                get_result = staff_tool.run(
-                    action="get",
-                    opera_id=self.dialogues[0].opera_id if self.dialogues else None,
-                    staff_id=staff_id
-                )
-
-                # 解析API响应
-                status_code, staff_data = ApiResponseParser.parse_response(get_result)
-                if status_code != 200 or not staff_data:
-                    print(f"获取Staff {staff_id} 失败")
-                    continue
-
-                # 获取当前parameters
-                try:
-                    current_params = json.loads(staff_data.get("parameter", "{}"))
-                except json.JSONDecodeError:
-                    current_params = {}
-
-                # 获取该staff相关的对话
-                staff_dialogues = [
-                    dialogue for dialogue in self.dialogues
-                    if staff_id in dialogue.receiver_staff_ids
-                ]
-
-                # 将对话转换为持久化状态
-                dialogue_states = [
-                    PersistentDialogueState.from_processing_dialogue(dialogue).model_dump(by_alias=True)
-                    for dialogue in staff_dialogues
-                ]
-
-                # 更新parameters
-                current_params["dialogueStates"] = dialogue_states
-
-                # 更新staff的parameters
-                update_result = staff_tool.run(
-                    action="update",
-                    opera_id=self.dialogues[0].opera_id if self.dialogues else None,
-                    staff_id=staff_id,
-                    data=StaffForUpdate(parameter=json.dumps(current_params))
-                )
-
-                # 检查更新结果
-                status_code, _ = ApiResponseParser.parse_response(update_result)
-                if status_code not in [200, 204]:
-                    print(f"更新Staff {staff_id} 的parameters失败")
-
-            except Exception as e:
-                print(f"处理Staff {staff_id} 时发生错误: {str(e)}")
-                continue
-
-    @classmethod
-    def create(cls, **kwargs) -> "DialoguePool":
-        """创建对话池的工厂方法
-
-        Args:
-            **kwargs: 配置参数
-
-        Returns:
-            DialoguePool: 新创建的对话池实例
-        """
-        return cls(**kwargs)
-
     @classmethod
     async def restore_from_api(cls, **kwargs) -> "DialoguePool":
         """从API恢复对话池状态的工厂方法
 
         TODO: 实现从API恢复数据的逻辑
-        - 调用API获取持久化的对话数据
-        - 将API数据转换为ProcessingDialogue对象
+        - 调用API获取持久化的PersistentDialogueState
+        - 将PersistentDialogueState转换为ProcessingDialogue对象
+        - 使用add_dialogue方法将ProcessingDialogue对象添加到对话池
         - 重建对话池的状态计数器
         - 处理可能的API调用失败情况
         - 考虑是否需要增量恢复机制
@@ -409,67 +341,6 @@ class DialoguePool(CamelBaseModel):
         # pool.status_counter = Counter(d.status.name.lower() for d in pool.dialogues)
 
         return pool
-
-    def _decay_heat(self) -> None:
-        """对所有对话进行热度衰减
-
-        热度衰减与时间无关，只与维护频率相关
-        """
-        for dialogue in self.dialogues:
-            # 热度随着每次维护自然衰减
-            dialogue.update_heat(-self.heat_decay_rate)
-
-    def _clean_expired_dialogues(self) -> None:
-        """清理过期对话
-
-        基于对话创建时间进行清理，与热度机制独立
-        """
-        now = datetime.now(timezone(timedelta(hours=8)))
-        max_age = timedelta(hours=self.max_age_hours)
-
-        # 保留未过期的对话
-        old_count = len(self.dialogues)
-        self.dialogues = [
-            d for d in self.dialogues
-            if (now - d.created_at) <= max_age
-        ]
-
-        # 更新状态计数器
-        if old_count != len(self.dialogues):
-            # 重新计算状态计数
-            self.status_counter = Counter(
-                d.status.name.lower() for d in self.dialogues)
-
-    def _clean_cold_dialogues(self) -> None:
-        """清理冷对话（热度低于阈值）"""
-        self.dialogues = [
-            d for d in self.dialogues
-            if d.heat >= self.min_heat_threshold
-        ]
-
-    def _enforce_size_limit(self) -> None:
-        """强制执行大小限制
-
-        如果对话池超过最大容量，删除优先级最低的对话
-        """
-        if len(self.dialogues) <= self.max_size:
-            return
-
-        # 计算所有对话的优先级分数
-        scored_dialogues = [
-            (-d.calculate_priority_score(), i, d)
-            for i, d in enumerate(self.dialogues)
-        ]
-
-        # 使用堆排序找出要保留的对话
-        heapq.heapify(scored_dialogues)
-        keep_dialogues = []
-        for _ in range(self.max_size):
-            if scored_dialogues:
-                _, _, dialogue = heapq.heappop(scored_dialogues)
-                keep_dialogues.append(dialogue)
-
-        self.dialogues = keep_dialogues
 
     async def maintain_pool(self) -> None:
         """维护对话池
@@ -566,48 +437,139 @@ class DialoguePool(CamelBaseModel):
                 return dialogue
         return None
 
-    async def restore_dialogue(self, persistent_state: PersistentDialogueState) -> None:
-        """从持久化状态恢复单个对话
-        
-        Args:
-            persistent_state: 持久化的对话状态
+    def _decay_heat(self) -> None:
+        """对所有对话进行热度衰减
+
+        热度衰减与时间无关，只与维护频率相关
         """
-        # 从API获取对话基础信息
-        result = await _SHARED_DIALOGUE_TOOL.run(
-            action="get",
-            opera_id=self.opera_id,
-            dialogue_index=persistent_state.dialogue_index
-        )
+        for dialogue in self.dialogues:
+            # 热度随着每次维护自然衰减
+            dialogue.update_heat(-self.heat_decay_rate)
 
-        # 解析API响应
-        status_code, dialogue_data = ApiResponseParser.parse_response(result)
-        if status_code != 200 or not dialogue_data:
-            raise ValueError(f"Failed to restore dialogue {persistent_state.dialogue_index}")
+    def _clean_expired_dialogues(self) -> None:
+        """清理过期对话
 
-        # 将Dialogue数据转换为MessageReceivedArgs
-        message_args = MessageReceivedArgs(
-            index=dialogue_data["index"],
-            time=dialogue_data["time"],
-            stage_index=dialogue_data.get("stage_index"),
-            sender_staff_id=dialogue_data.get("staff_id"),
-            is_narratage=dialogue_data["is_narratage"],
-            is_whisper=dialogue_data["is_whisper"],
-            text=dialogue_data["text"],
-            tags=dialogue_data.get("tags"),
-            mentioned_staff_ids=dialogue_data.get("mentioned_staff_ids", []),
-            opera_id=self.opera_id,  # 从对话池获取
-            receiver_staff_ids=[]     # 这个信息可能需要从其他地方获取
-        )
+        基于对话创建时间进行清理，与热度机制独立
+        """
+        now = datetime.now(timezone(timedelta(hours=8)))
+        max_age = timedelta(hours=self.max_age_hours)
 
-        # 创建新的对话对象
-        dialogue = ProcessingDialogue.from_message_args(
-            message_args,
-            priority=persistent_state.priority,
-            dialogue_type=persistent_state.type
-        )
+        # 保留未过期的对话
+        old_count = len(self.dialogues)
+        self.dialogues = [
+            d for d in self.dialogues
+            if (now - d.created_at) <= max_age
+        ]
 
-        # 使用持久化状态更新对话
-        persistent_state.update_processing_dialogue(dialogue)
+        # 更新状态计数器
+        if old_count != len(self.dialogues):
+            # 重新计算状态计数
+            self.status_counter = Counter(
+                d.status.name.lower() for d in self.dialogues)
 
-        # 添加到对话池
-        await self.add_dialogue(dialogue)
+    def _clean_cold_dialogues(self) -> None:
+        """清理冷对话（热度低于阈值）"""
+        self.dialogues = [
+            d for d in self.dialogues
+            if d.heat >= self.min_heat_threshold
+        ]
+
+    def _enforce_size_limit(self) -> None:
+        """强制执行大小限制
+
+        如果对话池超过最大容量，删除优先级最低的对话
+        """
+        if len(self.dialogues) <= self.max_size:
+            return
+
+        # 计算所有对话的优先级分数
+        scored_dialogues = [
+            (-d.calculate_priority_score(), i, d)
+            for i, d in enumerate(self.dialogues)
+        ]
+
+        # 使用堆排序找出要保留的对话
+        heapq.heapify(scored_dialogues)
+        keep_dialogues = []
+        for _ in range(self.max_size):
+            if scored_dialogues:
+                _, _, dialogue = heapq.heappop(scored_dialogues)
+                keep_dialogues.append(dialogue)
+
+        self.dialogues = keep_dialogues
+
+    async def _persist_to_api(self) -> None:
+        """将对话池状态持久化到API
+
+        将对话池中的每个对话以PersistentDialogueState的形式持久化到每个receiver staff的parameters中。
+        步骤：
+        1. 获取所有需要更新的staff
+        2. 获取每个staff当前的parameters
+        3. 更新parameters中的对话状态
+        4. 将更新后的parameters保存回API
+        """
+        # 创建StaffTool实例
+        staff_tool = _SHARED_STAFF_TOOL
+
+        # 收集所有需要更新的staff_id
+        staff_ids = set()
+        for dialogue in self.dialogues:
+            staff_ids.update(dialogue.receiver_staff_ids)
+
+        # 对每个staff进行更新
+        for staff_id in staff_ids:
+            try:
+                # 获取当前staff的信息
+                get_result = staff_tool.run(
+                    action="get",
+                    opera_id=self.dialogues[0].opera_id if self.dialogues else None,
+                    staff_id=staff_id
+                )
+
+                # 解析API响应
+                status_code, staff_data = ApiResponseParser.parse_response(
+                    get_result)
+                if status_code != 200 or not staff_data:
+                    print(f"获取Staff {staff_id} 失败")
+                    continue
+
+                # 获取当前parameters
+                try:
+                    current_params = json.loads(
+                        staff_data.get("parameter", "{}"))
+                except json.JSONDecodeError:
+                    current_params = {}
+
+                # 获取该staff相关的对话
+                staff_dialogues = [
+                    dialogue for dialogue in self.dialogues
+                    if staff_id in dialogue.receiver_staff_ids
+                ]
+
+                # 将对话转换为持久化状态
+                dialogue_states = [
+                    PersistentDialogueState.from_processing_dialogue(
+                        dialogue).model_dump(by_alias=True)
+                    for dialogue in staff_dialogues
+                ]
+
+                # 更新parameters
+                current_params["dialogueStates"] = dialogue_states
+
+                # 更新staff的parameters
+                update_result = staff_tool.run(
+                    action="update",
+                    opera_id=self.dialogues[0].opera_id if self.dialogues else None,
+                    staff_id=staff_id,
+                    data=StaffForUpdate(parameter=json.dumps(current_params))
+                )
+
+                # 检查更新结果
+                status_code, _ = ApiResponseParser.parse_response(
+                    update_result)
+                if status_code not in [200, 204]:
+                    print(f"更新Staff {staff_id} 的parameters失败")
+
+            except Exception as e:
+                print(f"处理Staff {staff_id} 时发生错误: {str(e)}")
+                continue

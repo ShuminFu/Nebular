@@ -5,8 +5,10 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 from uuid import UUID, uuid4
 from enum import IntEnum
-
-from Opera.FastAPI.models import CamelBaseModel
+from Opera.FastAPI.models import BotForUpdate
+from ai_core.tools.opera_api.bot_api_tool import _SHARED_BOT_TOOL
+from Opera.core.api_response_parser import ApiResponseParser
+import json
 
 
 class TaskPriority(IntEnum):
@@ -82,6 +84,56 @@ class BotTask(CamelBaseModel):
     last_retry_at: Optional[datetime] = Field(default=None, description="最后重试时间")
 
 
+class PersistentTaskState(BotTask):
+    """持久化的任务状态模型
+    
+    继承自BotTask，但只保留需要持久化的关键状态信息。
+    """
+    class Config:
+        # 只包含显式声明的字段
+        extra = "forbid"
+
+    # 任务标识（必需）
+    id: UUID = Field(..., description="任务唯一标识")
+    created_at: datetime = Field(..., description="创建时间")
+    
+    # 任务基本信息（必需）
+    priority: TaskPriority = Field(..., description="任务优先级")
+    type: TaskType = Field(..., description="任务类型")
+    status: TaskStatus = Field(..., description="任务状态")
+    
+    # 任务内容（必需）
+    description: str = Field(..., description="任务描述")
+    parameters: Dict[str, Any] = Field(..., description="任务参数")
+    
+    # 来源信息（可选）
+    source_dialogue_index: Optional[int] = Field(default=None, description="源对话索引")
+    source_staff_id: Optional[UUID] = Field(default=None, description="源Staff ID")
+    
+    # 执行状态（必需）
+    progress: int = Field(..., description="任务进度")
+    result: Optional[Any] = Field(default=None, description="任务结果")
+    error_message: Optional[str] = Field(default=None, description="错误信息")
+
+    @classmethod
+    def from_bot_task(cls, task: BotTask) -> "PersistentTaskState":
+        """从BotTask创建持久化状态"""
+        return cls(
+            id=task.id,
+            created_at=task.created_at,
+            priority=task.priority,
+            type=task.type,
+            status=task.status,
+            description=task.description,
+            parameters=task.parameters,
+            source_dialogue_index=task.source_dialogue_index,
+            source_staff_id=task.source_staff_id,
+            progress=task.progress,
+            result=task.result,
+            error_message=task.error_message
+        )
+
+
 class BotTaskQueue(CamelBaseModel):
     """任务队列模型"""
     tasks: List[BotTask] = Field(default_factory=list, description="任务列表")
@@ -94,13 +146,54 @@ class BotTaskQueue(CamelBaseModel):
     async def _persist_to_api(self) -> None:
         """将任务队列状态持久化到API
         
-        TODO: 持久化API调用逻辑
-        - 使用bot_id作为API调用的参数
-        - 可以调用TaskTool进行批量更新
-        - 需要将BotTask转换为API所需的格式
-        - 处理可能的API调用失败情况
+        将任务队列中的每个任务以PersistentTaskState的形式持久化到Bot的parameters中。
+        步骤：
+        1. 获取Bot当前的parameters
+        2. 更新parameters中的任务状态
+        3. 将更新后的parameters保存回API
         """
-        pass
+        try:
+            # 获取当前bot的信息
+            get_result = _SHARED_BOT_TOOL.run(
+                action="get",
+                bot_id=self.bot_id
+            )
+
+            # 解析API响应
+            status_code, bot_data = ApiResponseParser.parse_response(get_result)
+            if status_code != 200 or not bot_data:
+                print(f"获取Bot {self.bot_id} 失败")
+                return
+
+            # 获取当前parameters
+            try:
+                current_params = json.loads(bot_data.get("parameter", "{}"))
+            except json.JSONDecodeError:
+                current_params = {}
+
+            # 将任务转换为持久化状态
+            task_states = [
+                PersistentTaskState.from_bot_task(task).model_dump(by_alias=True)
+                for task in self.tasks
+            ]
+
+            # 更新parameters
+            current_params["taskStates"] = task_states
+
+            # 更新bot的parameters
+            update_result = _SHARED_BOT_TOOL.run(
+                action="update",
+                bot_id=self.bot_id,
+                data=BotForUpdate(parameter=json.dumps(current_params))
+            )
+
+            # 检查更新结果
+            status_code, _ = ApiResponseParser.parse_response(update_result)
+            if status_code not in [200, 204]:
+                print(f"更新Bot {self.bot_id} 的parameters失败")
+
+        except Exception as e:
+            print(f"持久化Bot {self.bot_id} 的任务状态时发生错误: {str(e)}")
 
     @classmethod
     def create(cls, bot_id: UUID, **kwargs) -> "BotTaskQueue":
@@ -118,35 +211,73 @@ class BotTaskQueue(CamelBaseModel):
     @classmethod
     async def restore_from_api(cls, bot_id: UUID, **kwargs) -> "BotTaskQueue":
         """从API恢复任务队列状态的工厂方法
-
-        TODO: 实现从API恢复数据的逻辑
-        - 使用bot_id从API获取持久化的任务数据
-        - 将API数据转换为BotTask对象
-        - 重建任务队列的状态计数器
-        - 处理可能的API调用失败情况
-        - 考虑任务状态的有效性（是否需要重置某些状态）
-        - 考虑是否需要增量恢复机制
-
+        
+        从Bot的parameters中恢复持久化的任务状态。
+        
         Args:
             bot_id: Bot ID
             **kwargs: 配置参数，可能包括时间范围、过滤条件等
-
+        
         Returns:
             BotTaskQueue: 恢复的任务队列实例
         """
-        # 创建一个新的任务队列实例
-        queue = cls(bot_id=bot_id, **kwargs)
-
-        # 从API获取持久化的任务数据
-        # restored_data = await task_api.get_persisted_tasks(bot_id=bot_id, **kwargs)
-
-        # 将API数据转换为BotTask对象
-        # queue.tasks = [BotTask(**data) for data in restored_data]
-
-        # 重建状态计数器
-        # queue.status_counter = Counter(task.status.name.lower() for task in queue.tasks)
-
-        return queue
+        try:
+            # 创建一个新的任务队列实例
+            queue = cls(bot_id=bot_id, **kwargs)
+            
+            # 获取Bot信息
+            get_result = _SHARED_BOT_TOOL.run(
+                action="get",
+                bot_id=bot_id
+            )
+            
+            # 解析API响应
+            status_code, bot_data = ApiResponseParser.parse_response(get_result)
+            if status_code != 200 or not bot_data:
+                print(f"获取Bot {bot_id} 失败")
+                return queue
+            
+            # 获取parameters中的任务状态
+            try:
+                current_params = json.loads(bot_data.get("parameter", "{}"))
+                task_states = current_params.get("taskStates", [])
+            except json.JSONDecodeError:
+                print(f"解析Bot {bot_id} 的parameters失败")
+                return queue
+            
+            # 将持久化状态转换为BotTask对象
+            for task_state in task_states:
+                try:
+                    # 创建完整的BotTask对象
+                    task = BotTask(
+                        id=task_state["id"],
+                        created_at=datetime.fromisoformat(task_state["createdAt"]),
+                        priority=TaskPriority(task_state["priority"]),
+                        type=TaskType(task_state["type"]),
+                        status=TaskStatus(task_state["status"]),
+                        description=task_state["description"],
+                        parameters=task_state["parameters"],
+                        source_dialogue_index=task_state.get("sourceDialogueIndex"),
+                        source_staff_id=task_state.get("sourceStaffId"),
+                        progress=task_state["progress"],
+                        result=task_state.get("result"),
+                        error_message=task_state.get("errorMessage")
+                    )
+                    queue.tasks.append(task)
+                    
+                    # 更新状态计数器
+                    queue.status_counter[task.status.name.lower()] += 1
+                    
+                except (KeyError, ValueError) as e:
+                    print(f"转换任务状态失败: {str(e)}")
+                    continue
+            
+            return queue
+            
+        except Exception as e:
+            print(f"恢复Bot {bot_id} 的任务状态时发生错误: {str(e)}")
+            # 发生错误时返回空队列
+            return cls(bot_id=bot_id, **kwargs)
 
     async def add_task(self, task: BotTask) -> None:
         """添加任务并更新计数器"""
