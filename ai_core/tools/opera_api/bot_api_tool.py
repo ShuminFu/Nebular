@@ -161,3 +161,5 @@ class BotTool(BaseApiTool):
 
         except Exception as e:
             return f"操作失败: {str(e)}"
+
+_SHARED_BOT_TOOL = BotTool()
