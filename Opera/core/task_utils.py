@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 from uuid import UUID, uuid4
 from enum import IntEnum
-from Opera.FastAPI.models import BotForUpdate
+from Opera.FastAPI.models import BotForUpdate, CamelBaseModel
 from ai_core.tools.opera_api.bot_api_tool import _SHARED_BOT_TOOL
 from Opera.core.api_response_parser import ApiResponseParser
 import json
@@ -146,11 +146,11 @@ class BotTaskQueue(CamelBaseModel):
     async def _persist_to_api(self) -> None:
         """将任务队列状态持久化到API
         
-        将任务队列中的每个任务以PersistentTaskState的形式持久化到Bot的parameters中。
+        将任务队列中的每个任务以PersistentTaskState的形式持久化到Bot的DefaultTags中。
         步骤：
-        1. 获取Bot当前的parameters
-        2. 更新parameters中的任务状态
-        3. 将更新后的parameters保存回API
+        1. 获取Bot当前的DefaultTags
+        2. 更新DefaultTags中的任务状态
+        3. 将更新后的DefaultTags保存回API
         """
         try:
             # 获取当前bot的信息
@@ -165,11 +165,11 @@ class BotTaskQueue(CamelBaseModel):
                 print(f"获取Bot {self.bot_id} 失败")
                 return
 
-            # 获取当前parameters
+            # 获取当前DefaultTags
             try:
-                current_params = json.loads(bot_data.get("parameter", "{}"))
+                current_tags = json.loads(bot_data.get("defaultTags", "{}"))
             except json.JSONDecodeError:
-                current_params = {}
+                current_tags = {}
 
             # 将任务转换为持久化状态
             task_states = [
@@ -177,20 +177,20 @@ class BotTaskQueue(CamelBaseModel):
                 for task in self.tasks
             ]
 
-            # 更新parameters
-            current_params["taskStates"] = task_states
+            # 更新DefaultTags
+            current_tags["taskStates"] = task_states
 
-            # 更新bot的parameters
+            # 更新bot的DefaultTags
             update_result = _SHARED_BOT_TOOL.run(
                 action="update",
                 bot_id=self.bot_id,
-                data=BotForUpdate(parameter=json.dumps(current_params))
+                data=BotForUpdate(default_tags=json.dumps(current_tags))
             )
 
             # 检查更新结果
             status_code, _ = ApiResponseParser.parse_response(update_result)
             if status_code not in [200, 204]:
-                print(f"更新Bot {self.bot_id} 的parameters失败")
+                print(f"更新Bot {self.bot_id} 的DefaultTags失败")
 
         except Exception as e:
             print(f"持久化Bot {self.bot_id} 的任务状态时发生错误: {str(e)}")
@@ -212,7 +212,7 @@ class BotTaskQueue(CamelBaseModel):
     async def restore_from_api(cls, bot_id: UUID, **kwargs) -> "BotTaskQueue":
         """从API恢复任务队列状态的工厂方法
         
-        从Bot的parameters中恢复持久化的任务状态。
+        从Bot的DefaultTags中恢复持久化的任务状态。
         
         Args:
             bot_id: Bot ID
@@ -237,12 +237,12 @@ class BotTaskQueue(CamelBaseModel):
                 print(f"获取Bot {bot_id} 失败")
                 return queue
             
-            # 获取parameters中的任务状态
+            # 获取DefaultTags中的任务状态
             try:
-                current_params = json.loads(bot_data.get("parameter", "{}"))
-                task_states = current_params.get("taskStates", [])
+                current_tags = json.loads(bot_data.get("defaultTags", "{}"))
+                task_states = current_tags.get("taskStates", [])
             except json.JSONDecodeError:
-                print(f"解析Bot {bot_id} 的parameters失败")
+                print(f"解析Bot {bot_id} 的DefaultTags失败")
                 return queue
             
             # 将持久化状态转换为BotTask对象
