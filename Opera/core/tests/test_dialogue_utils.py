@@ -6,7 +6,8 @@ import asyncio
 
 from Opera.core.dialogue_utils import (
     ProcessingDialogue, DialogueType, DialoguePool,
-    PersistentDialogueState, DialoguePriority, ProcessingStatus
+    PersistentDialogueState, DialoguePriority, ProcessingStatus,
+    IntentAnalysis, DialogueContext
 )
 from ai_core.tools.opera_api.staff_api_tool import _SHARED_STAFF_TOOL
 from Opera.core.api_response_parser import ApiResponseParser
@@ -50,8 +51,9 @@ class TestProcessingDialogue(unittest.TestCase):
 
 
 class AsyncTestCase(unittest.TestCase):
+    """支持异步测试的基类"""
     def run_async(self, coro):
-        return asyncio.run(coro)
+        return asyncio.get_event_loop().run_until_complete(coro)
 
 
 class TestDialoguePool(AsyncTestCase):
@@ -227,6 +229,191 @@ class TestDialoguePool(AsyncTestCase):
                         )
             except Exception as e:
                 print(f"清理Staff {staff_id} 时发生错误: {str(e)}")
+
+
+class TestDialogueAnalysis(AsyncTestCase):
+    """测试对话分析功能"""
+
+    def setUp(self):
+        """设置测试环境"""
+        # 使用已知存在的Opera和Staff ID
+        self.test_opera_id1 = UUID('96028f82-9f76-4372-976c-f0c5a054db79')
+        self.test_opera_id2 = UUID('99a51bfa-0b95-46e5-96b3-e3cfc021a6b2')  # 另一个Opera
+        self.test_staff_id1 = UUID('c2a71833-4403-4d08-8ef6-23e6327832b2')
+        self.test_staff_id2 = UUID('06ec00fc-9546-40b0-b180-b482ba0e0e27')
+
+        # 创建测试用的对话池
+        self.pool = DialoguePool()
+
+        # 创建测试用的对话 - Opera 1
+        self.dialogue1 = ProcessingDialogue(
+            dialogue_index=1,
+            opera_id=self.test_opera_id1,
+            type=DialogueType.NORMAL,
+            priority=DialoguePriority.NORMAL,
+            status=ProcessingStatus.PENDING,
+            receiver_staff_ids=[self.test_staff_id1],
+            created_at=datetime.now(timezone(timedelta(hours=8))),
+            text="请帮我审查这段代码的性能问题"
+        )
+
+        self.dialogue2 = ProcessingDialogue(
+            dialogue_index=2,
+            opera_id=self.test_opera_id1,
+            type=DialogueType.NORMAL,
+            priority=DialoguePriority.NORMAL,
+            status=ProcessingStatus.PENDING,
+            receiver_staff_ids=[self.test_staff_id1],
+            created_at=datetime.now(timezone(timedelta(hours=8))),
+            text="我发现循环中有一个O(n^2)的复杂度"
+        )
+
+        # 创建测试用的对话 - Opera 2
+        self.dialogue3 = ProcessingDialogue(
+            dialogue_index=1,
+            opera_id=self.test_opera_id2,
+            type=DialogueType.NORMAL,
+            priority=DialoguePriority.NORMAL,
+            status=ProcessingStatus.PENDING,
+            receiver_staff_ids=[self.test_staff_id2],
+            created_at=datetime.now(timezone(timedelta(hours=8))),
+            text="这是另一个Opera中的对话"
+        )
+
+        # 添加对话到对话池
+        self.pool.dialogues = [self.dialogue1, self.dialogue2, self.dialogue3]
+
+    def test_intent_analysis(self):
+        """测试意图分析功能"""
+        # 执行分析
+        self.pool.analyze_dialogues()
+
+        # 验证所有对话都有意图分析结果
+        for dialogue in self.pool.dialogues:
+            self.assertIsNotNone(dialogue.intent_analysis)
+            self.assertIsInstance(dialogue.intent_analysis, IntentAnalysis)
+            self.assertIsInstance(dialogue.intent_analysis.intent, str)
+            self.assertGreater(len(dialogue.intent_analysis.intent), 0)
+            self.assertIsInstance(dialogue.intent_analysis.confidence, float)
+            self.assertGreater(dialogue.intent_analysis.confidence, 0)
+
+        # 验证第一个对话的意图是关于代码审查
+        self.assertIn("审查", self.dialogue1.intent_analysis.intent.lower())
+        self.assertIn("代码", self.dialogue1.intent_analysis.intent.lower())
+
+        # 验证第二个对话的意图是关于性能问题报告
+        self.assertIn("性能", self.dialogue2.intent_analysis.intent.lower())
+        self.assertIn("复杂度", self.dialogue2.intent_analysis.intent.lower())
+
+    def test_context_analysis(self):
+        """测试上下文关联分析功能"""
+        # 执行分析
+        self.pool.analyze_dialogues()
+
+        # 验证所有对话都有上下文信息
+        for dialogue in self.pool.dialogues:
+            self.assertIsNotNone(dialogue.context)
+            self.assertIsInstance(dialogue.context, DialogueContext)
+            self.assertIsInstance(dialogue.context.related_dialogue_indices, list)
+
+        # 验证同一Opera内的对话关联
+        # dialogue2应该与dialogue1有关联（因为都是关于代码审查的对话）
+        self.assertIn(1, self.dialogue2.context.related_dialogue_indices)
+
+        # 验证不同Opera的对话没有关联
+        # dialogue3不应该与dialogue1或dialogue2有关联
+        self.assertEqual(len(self.dialogue3.context.related_dialogue_indices), 0)
+
+    def test_opera_isolation(self):
+        """测试Opera隔离功能"""
+        # 执行分析
+        self.pool.analyze_dialogues()
+
+        # 获取每个Opera的对话
+        opera1_dialogues = [d for d in self.pool.dialogues if d.opera_id == self.test_opera_id1]
+        opera2_dialogues = [d for d in self.pool.dialogues if d.opera_id == self.test_opera_id2]
+
+        # 验证Opera1的对话只与Opera1的对话有关联
+        for dialogue in opera1_dialogues:
+            related_dialogues = [
+                self.pool.get_dialogue(idx)
+                for idx in dialogue.context.related_dialogue_indices
+            ]
+            for related in related_dialogues:
+                self.assertEqual(related.opera_id, self.test_opera_id1)
+
+        # 验证Opera2的对话只与Opera2的对话有关联
+        for dialogue in opera2_dialogues:
+            related_dialogues = [
+                self.pool.get_dialogue(idx)
+                for idx in dialogue.context.related_dialogue_indices
+            ]
+            for related in related_dialogues:
+                self.assertEqual(related.opera_id, self.test_opera_id2)
+
+    def test_heat_update(self):
+        """测试热度更新功能"""
+        # 记录初始热度
+        initial_heats = {d.dialogue_index: d.heat for d in self.pool.dialogues}
+
+        # 执行分析
+        self.pool.analyze_dialogues()
+
+        # 验证相关对话的热度有增加
+        for dialogue in self.pool.dialogues:
+            if dialogue.context.related_dialogue_indices:
+                for related_index in dialogue.context.related_dialogue_indices:
+                    related = self.pool.get_dialogue(related_index)
+                    self.assertGreater(
+                        related.heat,
+                        initial_heats[related.dialogue_index]
+                    )
+
+    def test_conversation_state(self):
+        """测试对话状态信息"""
+        # 执行分析
+        self.pool.analyze_dialogues()
+
+        # 验证每个对话的状态信息
+        for dialogue in self.pool.dialogues:
+            state = dialogue.context.conversation_state
+            self.assertIn("intent", state)
+            self.assertIn("confidence", state)
+            self.assertIn("analyzed_at", state)
+            self.assertIsInstance(state["intent"], str)
+            self.assertIsInstance(state["confidence"], float)
+            self.assertIsInstance(state["analyzed_at"], str)
+
+    # def tearDown(self):
+    #     """清理测试环境"""
+    #     self.run_async(self._tearDown())
+
+    # async def _tearDown(self):
+    #     """异步清理测试环境"""
+    #     # 清理测试Staff的对话状态
+    #     for staff_id in [self.test_staff_id1, self.test_staff_id2]:
+    #         try:
+    #             # 获取当前参数
+    #             result = _SHARED_STAFF_TOOL.run(
+    #                 action="get",
+    #                 opera_id=self.test_opera_id1,
+    #                 staff_id=staff_id
+    #             )
+    #             status_code, staff_data = ApiResponseParser.parse_response(result)
+    #             if status_code == 200:
+    #                 # 清除dialogue_states
+    #                 parameters = json.loads(staff_data.get("parameter", "{}"))
+    #                 if "dialogueStates" in parameters:
+    #                     del parameters["dialogueStates"]
+    #                     # 更新Staff
+    #                     _SHARED_STAFF_TOOL.run(
+    #                         action="update",
+    #                         opera_id=self.test_opera_id1,
+    #                         staff_id=staff_id,
+    #                         data=StaffForUpdate(parameter=json.dumps(parameters))
+    #                     )
+    #         except Exception as e:
+    #             print(f"清理Staff {staff_id} 时发生错误: {str(e)}")
 
 
 if __name__ == '__main__':

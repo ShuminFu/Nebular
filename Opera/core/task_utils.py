@@ -69,19 +69,19 @@ class BotTask(CamelBaseModel):
     status: TaskStatus = Field(default=TaskStatus.PENDING, description="任务状态")
     
     # 任务内容
-    description: str = Field(..., description="任务描述")
-    parameters: Dict[str, Any] = Field(default_factory=dict, description="任务参数")
+    description: str = Field(..., description="任务描述,由intent而来")
+    parameters: Dict[str, Any] = Field(default_factory=dict, description="任务参数，由processing_dialogue的text以及context组成")
     
     # 来源信息
     source_dialogue_index: Optional[int] = Field(default=None, description="源对话索引")
     source_staff_id: Optional[UUID] = Field(default=None, description="源Staff ID")
     
     # 执行信息
-    progress: int = Field(default=0, description="任务进度(0-100)")
+    progress: int = Field(default=0, description="任务进度(0-100)，暂时无用")
     result: Optional[Any] = Field(default=None, description="任务结果")
     error_message: Optional[str] = Field(default=None, description="错误信息")
-    retry_count: int = Field(default=0, description="重试次数")
-    last_retry_at: Optional[datetime] = Field(default=None, description="最后重试时间")
+    retry_count: int = Field(default=0, description="重试次数，暂时无用")
+    last_retry_at: Optional[datetime] = Field(default=None, description="最后重试时间，暂时无用")
 
 
 class PersistentTaskState(BotTask):

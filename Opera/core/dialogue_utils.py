@@ -1,7 +1,7 @@
 """Opera SignalR 对话队列的数据模型定义。"""
 
 from pydantic import Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Set
 from datetime import datetime, timezone, timedelta
 from uuid import UUID
 from enum import IntEnum
@@ -9,6 +9,8 @@ from collections import Counter
 import heapq
 import json
 
+from crewai import Agent, Task, Crew
+from ai_core.configs.config import llm
 from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 from Opera.FastAPI.models import CamelBaseModel, StaffForUpdate
 from ai_core.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
@@ -48,12 +50,12 @@ class DialogueContext(CamelBaseModel):
     related_dialogue_indices: List[int] = Field(
         default_factory=list, description="相关对话索引列表")
     conversation_state: Dict[str, Any] = Field(
-        default_factory=dict, description="对话状态信息")
+        default_factory=dict, description="对话状态信息比如Pending Task来表述依赖顺序关系，暂时无用")
 
 
 class IntentAnalysis(CamelBaseModel):
     """意图分析结果模型"""
-    intent: str = Field(..., description="识别出的意图")
+    intent: str = Field(..., description="识别出的意图描述")
     confidence: float = Field(..., description="置信度")
     parameters: Dict[str, Any] = Field(
         default_factory=dict, description="提取的参数")
@@ -310,6 +312,11 @@ class DialoguePool(CamelBaseModel):
     heat_decay_rate: float = Field(default=0.1, description="每次维护时的热度衰减率")
     max_age_hours: int = Field(default=24, description="对话最大保留时间（小时）")
 
+    def __init__(self, **data):
+        """初始化对话池，创建对话分析器实例"""
+        super().__init__(**data)
+        self._analyzer = DialogueAnalyzer()
+
     @classmethod
     async def restore_from_api(cls, **kwargs) -> "DialoguePool":
         """从API恢复对话池状态的工厂方法
@@ -380,55 +387,50 @@ class DialoguePool(CamelBaseModel):
                 break
 
     def analyze_dialogues(self) -> None:
-        """分析对话关联性并附加上下文（占位实现）
+        """分析对话关联性并附加上下文
 
-        TODO: analyze_dialogues 
-        1. 实现LLM分析逻辑
-        2. 识别对话意图
-        3. 识别对话关联
-        4. 构建对话上下文
-        5.  需要注意的是Bot可能是跨opera的，不应该让staff看到另一个opera的信息作为context。
-
+        使用CrewAI实现的对话分析器来：
+        1. 识别对话意图 summary:str
+        2. 分析上下文关联 related_indices:List[int]
+        3. 确保Opera隔离
         """
-        # 临时实现：为每个对话添加基础意图分析和上下文
+        # 按Opera分组处理对话
+        opera_groups: Dict[UUID, List[ProcessingDialogue]] = {}
         for dialogue in self.dialogues:
-            # 1. 意图分析
-            if not dialogue.intent_analysis:  # 如果还没有进行过意图分析
-                # 这里将来需要调用LLM进行实际的意图分析
-                dialogue.intent_analysis = IntentAnalysis(
-                    intent="unknown",  # 临时占位
-                    confidence=1.0,
-                    parameters={
-                        "text": dialogue.text,
-                        "type": dialogue.type.name,
-                        "is_narratage": dialogue.is_narratage,
-                        "is_whisper": dialogue.is_whisper,
-                        "tags": dialogue.tags
+            if not dialogue.opera_id in opera_groups:
+                opera_groups[dialogue.opera_id] = []
+            opera_groups[dialogue.opera_id].append(dialogue)
+
+        # 对每个Opera的对话进行分析
+        for opera_id, dialogues in opera_groups.items():
+            # 创建临时对话池用于上下文分析
+            temp_pool = DialoguePool()
+            temp_pool.dialogues = dialogues
+
+            for dialogue in dialogues:
+                # 1. 意图分析
+                if not dialogue.intent_analysis:
+                    dialogue.intent_analysis = self._analyzer.analyze_intent(dialogue)
+
+                # 2. 上下文分析
+                related_indices = self._analyzer.analyze_context(dialogue, temp_pool)
+
+                # 3. 更新对话上下文
+                dialogue.context = DialogueContext(
+                    stage_index=None,  # TODO: 实现阶段分析
+                    related_dialogue_indices=list(related_indices),
+                    conversation_state={
+                        "intent": dialogue.intent_analysis.intent,
+                        "confidence": dialogue.intent_analysis.confidence,
+                        "analyzed_at": datetime.now(timezone(timedelta(hours=8))).isoformat()
                     }
                 )
 
-            # 2. 上下文分析
-            # TODO: 这里将来需要基于意图分析结果构建更丰富的上下文
-            # 临时实现：模拟一些相关对话
-            related_indices = []
-            if dialogue.dialogue_index > 1:
-                # 临时逻辑：假设与前一条对话相关
-                related_indices = [dialogue.dialogue_index - 1]
-                # 更新被引用对话的热度
+                # 4. 更新相关对话的热度
                 for related_index in related_indices:
                     related_dialogue = self.get_dialogue(related_index)
-                    if related_dialogue:
-                        related_dialogue.update_heat(0.3)  # 被引用时增加较多热度
-
-            dialogue.context = DialogueContext(
-                stage_index=None,
-                related_dialogue_indices=related_indices,
-                conversation_state={
-                    "intent": dialogue.intent_analysis.intent,
-                    "confidence": dialogue.intent_analysis.confidence,
-                    "analyzed_at": datetime.now(timezone(timedelta(hours=8))).isoformat()
-                }
-            )
+                    if related_dialogue and related_dialogue.opera_id == opera_id:
+                        related_dialogue.update_heat(0.3)
 
     def get_dialogue(self, dialogue_index: int) -> Optional[ProcessingDialogue]:
         """根据对话索引获取ProcessingDialogue"""
@@ -573,3 +575,192 @@ class DialoguePool(CamelBaseModel):
             except Exception as e:
                 print(f"处理Staff {staff_id} 时发生错误: {str(e)}")
                 continue
+
+
+class DialogueAnalyzer:
+    """对话分析器
+
+    使用CrewAI实现的对话分析器，负责：
+    1. 意图识别
+    2. 上下文关联分析
+    3. Opera隔离
+    """
+
+    def __init__(self):
+        """初始化对话分析器"""
+        # 创建意图分析Agent
+        self.intent_analyzer = Agent(
+            role='意图分析专家',
+            goal='准确识别和描述对话意图',
+            backstory="""你是一个专业的对话意图分析专家，擅长：
+            1. 从对话内容中识别出说话者的真实意图
+            2. 用简洁的语言描述意图
+            3. 理解对话的上下文关系
+            4. 确保信息安全，不会泄露跨Opera的信息
+
+            在描述意图时，你应该：
+            1. 使用简洁的语言
+            2. 包含关键动作和目标
+            3. 如果是工具调用，说明调用的工具
+            4. 如果是任务相关，说明任务类型
+            """,
+            tools=[_SHARED_DIALOGUE_TOOL],
+            verbose=True,
+            llm=llm
+        )
+
+        # 创建上下文分析Agent
+        self.context_analyzer = Agent(
+            role='上下文关联专家',
+            goal='分析对话间的关联性和上下文依赖',
+            backstory="""你是一个专业的对话上下文分析专家，擅长：
+            1. 识别对话之间的关联关系
+            2. 构建对话的上下文依赖图
+            3. 确保Opera之间的信息隔离
+            4. 维护对话的时序关系
+            """,
+            # tools=[_SHARED_DIALOGUE_TOOL],
+            verbose=True,
+            llm=llm
+        )
+
+    def analyze_intent(self, dialogue: ProcessingDialogue) -> IntentAnalysis:
+        """分析单个对话的意图
+
+        Args:
+            dialogue: 要分析的对话
+
+        Returns:
+            IntentAnalysis: 意图分析结果
+        """
+        # 创建意图分析任务
+        task = Task(
+            description=f"""分析以下对话的意图，用一句话描述说话者想要做什么：
+
+            对话信息：
+            1. 内容：{dialogue.text}
+            2. 类型：{dialogue.type.name}
+            3. 是否为旁白：{dialogue.is_narratage}
+            4. 是否为悄悄话：{dialogue.is_whisper}
+            5. 标签：{dialogue.tags}
+            6. 是否提及其他Staff：{bool(dialogue.mentioned_staff_ids)}
+
+            要求：
+            1. 用一句简洁的话描述意图
+            2. 包含关键动作和目标
+            3. 如果是工具调用，说明调用的工具
+            4. 如果是任务相关，说明任务类型
+            """,
+            expected_output="一句简洁的话描述对话意图，包含动作和目标, 如果是无意义的对话则返回空字符串",
+            agent=self.intent_analyzer
+        )
+
+        # 执行分析
+        crew = Crew(
+            agents=[self.intent_analyzer],
+            tasks=[task],
+            verbose=True
+        )
+        result = crew.kickoff()
+
+        # 从CrewOutput中提取实际的字符串内容
+        intent_str = ""
+        if result and hasattr(result, 'raw'):
+            # 如果raw是JSON字符串，尝试解析它
+            try:
+                import json
+                intent_str = json.loads(result.raw)
+            except (json.JSONDecodeError, AttributeError):
+                # 如果不是JSON，直接使用raw值，去掉可能的引号
+                intent_str = result.raw.strip('"')
+        elif isinstance(result, str):
+            intent_str = result
+
+        # 如果没有有效的意图描述，使用默认值
+        if not intent_str:
+            intent_str = ""
+
+        # 返回意图分析结果
+        return IntentAnalysis(
+            intent=intent_str,
+            confidence=1,
+            parameters={
+                "text": dialogue.text,
+                "type": dialogue.type.name,
+                "is_narratage": dialogue.is_narratage,
+                "is_whisper": dialogue.is_whisper,
+                "tags": dialogue.tags,
+                "has_mentions": bool(dialogue.mentioned_staff_ids)
+            }
+        )
+
+    def analyze_context(self, dialogue: ProcessingDialogue, dialogue_pool: 'DialoguePool') -> Set[int]:
+        """分析对话的上下文关联
+
+        Args:
+            dialogue: 要分析的对话
+            dialogue_pool: 对话池
+
+        Returns:
+            Set[int]: 相关对话的索引集合
+        """
+        # 获取同一Opera下的对话
+        opera_dialogues = [
+            d for d in dialogue_pool.dialogues
+            if d.opera_id == dialogue.opera_id
+        ]
+
+        # 创建上下文分析任务
+        task = Task(
+            description=f"""分析以下对话的上下文关联：
+            当前对话：
+            - 索引：{dialogue.dialogue_index}
+            - 内容：{dialogue.text}
+            - 类型：{dialogue.type.name}
+            - 标签：{dialogue.tags}
+
+            可能相关的对话：
+            {[f"- 索引：{d.dialogue_index}, 内容：{d.text}" for d in opera_dialogues[-5:]]}
+
+            请分析这些对话之间的关联性，考虑：
+            1. 时序关系
+            2. 内容相关性
+            3. 提及关系
+            4. 对话意图
+
+            返回相关对话的索引，用逗号分隔。如果没有相关对话，返回空字符串。
+            """,
+            expected_output="逗号分隔的相关对话DialogueIndex列表，例如：1,2,3",
+            agent=self.context_analyzer
+        )
+
+        # 执行分析
+        crew = Crew(
+            agents=[self.context_analyzer],
+            tasks=[task],
+            verbose=True
+        )
+        result = crew.kickoff()
+
+        # 解析结果，提取相关对话索引
+        related_indices = set()
+        try:
+            # 从CrewOutput中提取实际的字符串内容
+            indices_str = ""
+            if result and hasattr(result, 'raw'):
+                try:
+                    import json
+                    indices_str = json.loads(result.raw)
+                except (json.JSONDecodeError, AttributeError):
+                    indices_str = result.raw.strip('"')
+            elif isinstance(result, str):
+                indices_str = result
+
+            # 解析索引列表
+            if indices_str:
+                indices = [int(idx.strip()) for idx in indices_str.split(',')]
+                related_indices.update(indices)
+        except (ValueError, AttributeError):
+            pass
+
+        return related_indices
