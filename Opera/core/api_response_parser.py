@@ -1,10 +1,11 @@
 import ast
 from typing import List, Dict, Any, TYPE_CHECKING
 
-from Opera.core.task_utils import BotTaskQueue
+
 
 if TYPE_CHECKING:
     from Opera.core.dialogue_utils import ProcessingDialogue
+    from Opera.core.task_utils import BotTaskQueue
 
 
 class ApiResponseParser:
@@ -98,6 +99,7 @@ class ApiResponseParser:
         Returns:
             BotTaskQueue: 任务队列
         """
+        from Opera.core.task_utils import BotTaskQueue
         return default_tags.get("TaskQueue", BotTaskQueue())
 
     @staticmethod

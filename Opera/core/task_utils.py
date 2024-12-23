@@ -178,13 +178,25 @@ class BotTaskQueue(CamelBaseModel):
             ]
 
             # 更新DefaultTags
-            current_tags["taskStates"] = task_states
+            current_tags["TaskStates"] = task_states
 
             # 更新bot的DefaultTags
             update_result = _SHARED_BOT_TOOL.run(
                 action="update",
                 bot_id=self.bot_id,
-                data=BotForUpdate(default_tags=json.dumps(current_tags))
+                data=BotForUpdate(
+                    name=None,
+                    is_description_updated=False,
+                    description=None,
+                    is_call_shell_on_opera_started_updated=False,
+                    call_shell_on_opera_started=None,
+                    is_default_tags_updated=True,
+                    default_tags=json.dumps(current_tags),
+                    is_default_roles_updated=False,
+                    default_roles=None,
+                    is_default_permissions_updated=False,
+                    default_permissions=None
+                )
             )
 
             # 检查更新结果
@@ -240,7 +252,7 @@ class BotTaskQueue(CamelBaseModel):
             # 获取DefaultTags中的任务状态
             try:
                 current_tags = json.loads(bot_data.get("defaultTags", "{}"))
-                task_states = current_tags.get("taskStates", [])
+                task_states = current_tags.get("TaskStates", [])
             except json.JSONDecodeError:
                 print(f"解析Bot {bot_id} 的DefaultTags失败")
                 return queue
