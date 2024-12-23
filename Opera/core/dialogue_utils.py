@@ -67,6 +67,13 @@ class ProcessingDialogue(CamelBaseModel):
     基于SignalR客户端中接收到的的MessageReceivedArgs，添加了处理相关的属性和状态。
     用于跟踪和管理对话的处理过程。
     """
+
+    def __init__(self, **data):
+        # 处理 text 参数
+        if 'text' in data:
+            data['text_content'] = data.pop('text')
+        super().__init__(**data)
+
     # 基础对话信息
     dialogue_index: int = Field(..., description="对话索引")
     created_at: datetime = Field(default_factory=lambda: datetime.now(
@@ -417,7 +424,7 @@ class DialoguePool(CamelBaseModel):
 
                 # 3. 更新对话上下文
                 dialogue.context = DialogueContext(
-                    stage_index=None,  # TODO: 实现阶段分析
+                    stage_index=None,
                     related_dialogue_indices=list(related_indices),
                     conversation_state={
                         "intent": dialogue.intent_analysis.intent,

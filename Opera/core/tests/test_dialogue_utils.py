@@ -247,7 +247,7 @@ class TestDialogueAnalysis(AsyncTestCase):
 
         # 创建测试用的对话 - Opera 1
         self.dialogue1 = ProcessingDialogue(
-            dialogue_index=1,
+            dialogue_index=29,
             opera_id=self.test_opera_id1,
             type=DialogueType.NORMAL,
             priority=DialoguePriority.NORMAL,
@@ -258,7 +258,7 @@ class TestDialogueAnalysis(AsyncTestCase):
         )
 
         self.dialogue2 = ProcessingDialogue(
-            dialogue_index=2,
+            dialogue_index=30,
             opera_id=self.test_opera_id1,
             type=DialogueType.NORMAL,
             priority=DialoguePriority.NORMAL,
