@@ -70,7 +70,7 @@ async def main():
         print(f"- 状态: {task.status}")
         print(f"- 描述: {task.description}")
         print(f"- 源对话索引: {task.source_dialogue_index}")
-        print(f"- 源Staff ID: {task.source_staff_id}")
+        print(f"- 源Staff ID: {task.response_staff_id}")
 
 if __name__ == "__main__":
     asyncio.run(main())

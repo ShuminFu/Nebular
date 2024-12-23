@@ -117,7 +117,7 @@ class IntentMind:
                 "context": dialogue.context.model_dump()
             },
             source_dialogue_index=dialogue.dialogue_index,
-            source_staff_id=dialogue.receiver_staff_ids[0]
+            response_staff_id=dialogue.receiver_staff_ids[0]
         )
 
         # 更新对话状态为已完成

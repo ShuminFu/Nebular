@@ -439,6 +439,8 @@ class DialoguePool(CamelBaseModel):
                     if related_dialogue and related_dialogue.opera_id == opera_id:
                         related_dialogue.update_heat(0.3)
 
+                # TODO:可以根据上下文更新对话的类型(枚举值)，能够用于后续直接决定任务类型
+
     def get_dialogue(self, dialogue_index: int) -> Optional[ProcessingDialogue]:
         """根据对话索引获取ProcessingDialogue"""
         for dialogue in self.dialogues:
@@ -727,7 +729,7 @@ class DialogueAnalyzer:
             - 标签：{dialogue.tags}
 
             可能相关的对话：
-            {[f"- 索引：{d.dialogue_index}, 内容：{d.text}" for d in opera_dialogues[-5:]]}
+            {[f"- 索引：{d.dialogue_index}, 内容：{d.text}" for d in opera_dialogues[-10:]]}
 
             请分析这些对话之间的关联性，考虑：
             1. 时序关系

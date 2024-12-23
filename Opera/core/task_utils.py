@@ -74,7 +74,7 @@ class BotTask(CamelBaseModel):
     
     # 来源信息
     source_dialogue_index: Optional[int] = Field(default=None, description="源对话索引")
-    source_staff_id: Optional[UUID] = Field(default=None, description="源Staff ID")
+    response_staff_id: Optional[UUID] = Field(default=None, description="源Staff ID")
     
     # 执行信息
     progress: int = Field(default=0, description="任务进度(0-100)，暂时无用")
@@ -108,7 +108,7 @@ class PersistentTaskState(BotTask):
     
     # 来源信息（可选）
     source_dialogue_index: Optional[int] = Field(default=None, description="源对话索引")
-    source_staff_id: Optional[UUID] = Field(default=None, description="源Staff ID")
+    response_staff_id: Optional[UUID] = Field(default=None, description="源Staff ID")
     
     # 执行状态（必需）
     progress: int = Field(..., description="任务进度")
@@ -127,7 +127,7 @@ class PersistentTaskState(BotTask):
             description=task.description,
             parameters=task.parameters,
             source_dialogue_index=task.source_dialogue_index,
-            source_staff_id=task.source_staff_id,
+            response_staff_id=task.response_staff_id,
             progress=task.progress,
             result=task.result,
             error_message=task.error_message
@@ -270,7 +270,7 @@ class BotTaskQueue(CamelBaseModel):
                         description=task_state["description"],
                         parameters=task_state["parameters"],
                         source_dialogue_index=task_state.get("sourceDialogueIndex"),
-                        source_staff_id=task_state.get("sourceStaffId"),
+                        response_staff_id=task_state.get("responseStaffId"),
                         progress=task_state["progress"],
                         result=task_state.get("result"),
                         error_message=task_state.get("errorMessage")
