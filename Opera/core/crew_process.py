@@ -6,7 +6,7 @@ import multiprocessing
 from abc import ABC, abstractmethod
 from crewai import Agent, Task, Crew
 from Opera.FastAPI.models import BotForUpdate
-from Opera.core.logger_config import get_logger, get_logger_with_trace_id
+from Opera.core.logger_config import get_logger_with_trace_id
 from Opera.core.api_response_parser import ApiResponseParser
 from Opera.signalr_client.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 from ai_core.configs.config import CREW_MANAGER_INIT, DEFAULT_CREW_MANAGER
