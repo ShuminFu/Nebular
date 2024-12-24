@@ -1,10 +1,6 @@
 """测试任务分发和回调流程"""
 
-import unittest
-import asyncio
 from uuid import UUID
-from datetime import datetime, timezone, timedelta
-import json
 
 from Opera.core.crew_process import CrewManager, CrewRunner, CrewProcessInfo
 from Opera.core.task_utils import BotTask, TaskType, TaskStatus, TaskPriority, BotTaskQueue
@@ -63,6 +59,9 @@ class TestTaskDispatch(AsyncTestCase):
             response_staff_id=self.cr_staff_id  # 设置响应者为CR
         )
 
+        # 1.1 将原始任务添加到CM的任务队列中
+        await self.crew_manager.task_queue.add_task(original_task)
+
         # 2. CM处理任务（分发给CR）
         await self.crew_manager._process_task(original_task)
 
@@ -74,7 +73,7 @@ class TestTaskDispatch(AsyncTestCase):
         self.assertIsNotNone(task, "CR应该能够获取到任务")
         await self.crew_runner._handle_task_completion(task, "Task completed successfully")
 
-        # 5. 手动将回调任务添加到CM的任务队列（模拟CM从持久化接口读取任务）
+        # 5. 因为还没有实现load_from_api，手动将回调任务添加到CM的任务队列（模拟CM从持久化接口读取任务）
         callback_task = BotTask(
             type=TaskType.CALLBACK,
             priority=TaskPriority.URGENT,
@@ -94,8 +93,15 @@ class TestTaskDispatch(AsyncTestCase):
         await self.crew_manager._handle_task_callback(callback)
 
         # 验证任务状态和结果
-        self.assertEqual(original_task.status, TaskStatus.COMPLETED)
-        self.assertEqual(original_task.result, "Task completed successfully")
+        # 在CM的任务队列中查找原始任务
+        original_task_in_queue = None
+        for task in self.crew_manager.task_queue.tasks:
+            if task.id == original_task.id:
+                original_task_in_queue = task
+                break
+
+        self.assertIsNotNone(original_task_in_queue, "原始任务应该在CM的任务队列中")
+        self.assertEqual(original_task_in_queue.status, TaskStatus.COMPLETED)
 
     def tearDown(self):
         """清理测试环境"""

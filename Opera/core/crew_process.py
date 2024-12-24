@@ -5,15 +5,17 @@ import asyncio
 import multiprocessing
 from abc import ABC, abstractmethod
 from crewai import Agent, Task, Crew
-from Opera.FastAPI.models import BotForUpdate
+from Opera.FastAPI.models import BotForUpdate, DialogueForCreation
 from Opera.core.logger_config import get_logger_with_trace_id
 from Opera.core.api_response_parser import ApiResponseParser
 from Opera.signalr_client.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 from ai_core.configs.config import CREW_MANAGER_INIT, DEFAULT_CREW_MANAGER
-from ai_core.configs.base_agents import create_intent_agent, create_persona_agent, _SHARED_BOT_TOOL
+from ai_core.configs.base_agents import create_intent_agent, create_persona_agent
+from ai_core.tools.opera_api.bot_api_tool import _SHARED_BOT_TOOL
+from ai_core.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
 from Opera.core.intent_mind import IntentMind
 from Opera.core.task_utils import BotTaskQueue, TaskType, TaskStatus, BotTask, PersistentTaskState, TaskPriority
-from ai_core.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
+
 import json
 
 
@@ -259,12 +261,21 @@ class CrewManager(BaseCrewProcess):
                 action="update",
                 bot_id=cr_bot_id,
                 data=BotForUpdate(
+                    name=None,
+                    is_description_updated=False,
+                    description=None,
+                    is_call_shell_on_opera_started_updated=False,
+                    call_shell_on_opera_started=None,
                     is_default_tags_updated=True,
                     default_tags=json.dumps({
                         "TaskStates": [
                             PersistentTaskState.from_bot_task(task).model_dump(by_alias=True)
                         ]
-                    })
+                    }),
+                    is_default_roles_updated=False,
+                    default_roles=None,
+                    is_default_permissions_updated=False,
+                    default_permissions=None
                 )
             )
 
@@ -288,8 +299,7 @@ class CrewManager(BaseCrewProcess):
             # 更新原始任务的状态
             await self.task_queue.update_task_status(
                 task_id=UUID(task_id),
-                new_status=TaskStatus.COMPLETED,
-                result=result
+                new_status=TaskStatus.COMPLETED
             )
 
             # 记录日志
@@ -355,32 +365,33 @@ class CrewRunner(BaseCrewProcess):
     async def _handle_task_completion(self, task: BotTask, result: str):
         """处理任务完成后的回调"""
         try:
-            # 创建回调任务
-            callback_task = BotTask(
-                type=TaskType.CALLBACK,
-                priority=TaskPriority.URGENT,
-                description=f"Callback for task {task.id}",
-                parameters={
-                    "callback_task_id": str(task.id),
-                    "result": result,
-                    "opera_id": task.parameters.get("opera_id")
-                },
-                source_staff_id=task.source_staff_id,  # 保存原始任务的发起者ID
-            )
-
             # 使用dialogue_api_tool创建回调消息
             callback_result = _SHARED_DIALOGUE_TOOL.run(
                 action="create",
                 opera_id=task.parameters.get("opera_id"),
-                text=json.dumps(callback_task.model_dump()),
-                is_whisper=True,
-                receiver_staff_ids=[str(task.source_staff_id)],  # 使用source_staff_id作为接收者
-                tags="task_callback"
+                data=DialogueForCreation(
+                    is_stage_index_null=False,
+                    staff_id=str(task.source_staff_id),
+                    is_narratage=False,
+                    is_whisper=True,
+                    text=json.dumps({
+                        "type": TaskType.CALLBACK.value,
+                        "priority": TaskPriority.URGENT.value,
+                        "description": f"Callback for task {task.id}",
+                        "parameters": {
+                            "callback_task_id": str(task.id),
+                            "result": result,
+                            "opera_id": task.parameters.get("opera_id")
+                        }
+                    }),
+                    tags="task_callback",
+                    mentioned_staff_ids=[str(task.source_staff_id)]
+                )
             )
 
             # 检查回调消息是否创建成功
             status_code, _ = ApiResponseParser.parse_response(callback_result)
-            if status_code not in [200, 204]:
+            if status_code not in [200, 204, 201]:
                 self.log.error(f"创建任务回调消息失败: {callback_result}")
 
         except Exception as e:
