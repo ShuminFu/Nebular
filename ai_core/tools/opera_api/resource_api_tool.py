@@ -185,3 +185,6 @@ class ResourceTool(BaseApiTool):
 
         except Exception as e:
             return f"操作失败: {str(e)}"
+
+
+_SHARED_RESOURCE_TOOL = ResourceTool()

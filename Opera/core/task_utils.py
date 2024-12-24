@@ -22,7 +22,7 @@ class TaskPriority(IntEnum):
 
 class TaskType(IntEnum):
     """任务类型枚举"""
-        # 基础对话任务
+    # 基础对话任务
     CONVERSATION = 10  # 基础对话处理，不一定需要回复，比如CrewRunner仅回复被Mentioned或者Whispered的对话
     CHAT_PLANNING = 11  # 对话策略规划
     CHAT_RESPONSE = 12  # 对话响应生成
@@ -43,6 +43,9 @@ class TaskType(IntEnum):
     CREW_LIFECYCLE = 41  # CrewRunner的生命周期管理
     STAGE_MANAGEMENT = 42  # Opera Stage 管理
     ROLE_ASSIGNMENT = 43  # 发言角色分配
+
+    # 资源管理任务
+    RESOURCE_CREATION = 50  # 资源创建任务
 
 
 class TaskStatus(IntEnum):

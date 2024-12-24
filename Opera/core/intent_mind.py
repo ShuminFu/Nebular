@@ -41,6 +41,8 @@ class IntentMind:
                 return DialoguePriority.URGENT
             if "urgent" in message.tags.lower():
                 return DialoguePriority.URGENT
+            if "code_resource" in message.tags.lower():
+                return DialoguePriority.HIGH
         if message.mentioned_staff_ids:
             return DialoguePriority.HIGH
         return DialoguePriority.NORMAL
@@ -71,6 +73,8 @@ class IntentMind:
                 return DialogueType.SYSTEM
             if "task_callback" in message.tags.lower():
                 return DialogueType.SYSTEM  # 任务回调也作为系统消息处理
+            if "code_resource" in message.tags.lower():
+                return DialogueType.CODE_RESOURCE
 
         # 检查是否是旁白
         if message.is_narratage:
@@ -87,18 +91,36 @@ class IntentMind:
         # 默认为普通对话
         return DialogueType.NORMAL
 
-    def _create_task_from_dialogue(self, dialogue: ProcessingDialogue) -> BotTask:
-        """从对话创建任务
-
-        基于对话类型进行初步的任务类型判断，后续会通过意图分析来更新更具体的任务类型。
-        创建任务后会将对话状态更新为已完成。
-
+    def _parse_code_resource(self, content: str) -> tuple[dict, str]:
+        """解析代码资源内容
+        
         Args:
-            dialogue: 处理中的对话对象
-
+            content: 原始消息内容
+            
         Returns:
-            BotTask: 创建的任务对象
+            tuple[dict, str]: (元数据字典, 代码内容)
         """
+        # 分离元数据和代码内容
+        lines = content.split("\n")
+        metadata = {}
+        code_start = 0
+
+        # 查找元数据部分
+        for i, line in enumerate(lines):
+            if line.strip() == "---":
+                code_start = i + 1
+                break
+            if line.startswith("@"):
+                key, value = line[1:].split(":", 1)
+                metadata[key.strip()] = value.strip()
+
+        # 提取代码内容
+        code = "\n".join(lines[code_start:])
+
+        return metadata, code
+
+    def _create_task_from_dialogue(self, dialogue: ProcessingDialogue) -> BotTask:
+        """从对话创建任务"""
         self.dialogue_pool.update_dialogue_status(dialogue.dialogue_index, ProcessingStatus.PROCESSING)
 
         # 基于对话类型进行初步的任务类型判断
@@ -131,6 +153,24 @@ class IntentMind:
                         pass  # 如果无法解析任务类型，保持默认的CALLBACK类型
             except json.JSONDecodeError:
                 pass
+
+        elif dialogue.type == DialogueType.CODE_RESOURCE:
+            task_type = TaskType.RESOURCE_CREATION
+            # 解析代码资源信息
+            try:
+                # 尝试解析代码块中的元数据
+                metadata, code = self._parse_code_resource(dialogue.text)
+
+                task_parameters.update({
+                    "resource_type": "code",
+                    "file_path": metadata.get("file"),
+                    "description": metadata.get("description"),
+                    "tags": metadata.get("tags", "").split(","),
+                    "code_content": code
+                })
+            except Exception as e:
+                print(f"解析代码资源失败: {str(e)}")
+                task_type = TaskType.ERROR
 
         elif dialogue.type == DialogueType.SYSTEM:
             task_type = TaskType.SYSTEM

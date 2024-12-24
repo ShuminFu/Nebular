@@ -34,6 +34,7 @@ class DialogueType(IntEnum):
     MENTION = 3     # 提及对话（@某人）
     NARRATAGE = 4   # 旁白
     SYSTEM = 5      # 系统消息
+    CODE_RESOURCE = 6  # 代码资源
 
 
 class ProcessingStatus(IntEnum):

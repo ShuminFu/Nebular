@@ -13,6 +13,7 @@ from ai_core.configs.config import CREW_MANAGER_INIT, DEFAULT_CREW_MANAGER
 from ai_core.configs.base_agents import create_intent_agent, create_persona_agent
 from ai_core.tools.opera_api.bot_api_tool import _SHARED_BOT_TOOL
 from ai_core.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
+from ai_core.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL
 from Opera.core.intent_mind import IntentMind
 from Opera.core.task_utils import BotTaskQueue, TaskType, TaskStatus, BotTask, PersistentTaskState, TaskPriority
 
@@ -239,7 +240,10 @@ class CrewManager(BaseCrewProcess):
             await self._update_cr_task_queue(cr_process.bot_id, task)
         else:
             # CM自己处理的任务
-            await super()._process_task(task)
+            if task.type == TaskType.RESOURCE_CREATION:
+                await self._handle_resource_creation(task)
+            else:
+                await super()._process_task(task)
 
     async def _update_cr_task_queue(self, cr_bot_id: UUID, task: BotTask):
         """更新CrewRunner的任务队列"""
@@ -318,6 +322,71 @@ class CrewManager(BaseCrewProcess):
         except Exception as e:
             self.log.error(f"处理任务回调时发生错误: {str(e)}")
             raise
+
+    async def _handle_resource_creation(self, task: BotTask):
+        """处理资源创建任务"""
+        try:
+            # 从任务参数中获取资源信息
+            file_path = task.parameters.get("file_path")
+            description = task.parameters.get("description")
+            tags = task.parameters.get("tags", [])
+            code_content = task.parameters.get("code_content")
+            opera_id = task.parameters.get("opera_id")
+
+            if not all([file_path, code_content, opera_id]):
+                raise ValueError("缺少必要的资源信息")
+
+            # TODO: 使用resource_api_tool创建资源
+            # 这里是占位代码，实际实现时需要替换为真实的API调用
+            resource_result = _SHARED_RESOURCE_TOOL.run(
+                action="create",
+                opera_id=opera_id,
+                data={
+                    "path": file_path,
+                    "content": code_content,
+                    "description": description,
+                    "tags": tags,
+                    "type": "code",
+                    "metadata": {
+                        "creator_staff_id": str(task.source_staff_id),
+                        "source_dialogue_index": task.source_dialogue_index
+                    }
+                }
+            )
+
+            # 解析API响应
+            status_code, data = ApiResponseParser.parse_response(resource_result)
+            if status_code in [200, 201, 204]:
+                # 更新任务状态为完成
+                await self.task_queue.update_task_status(
+                    task_id=task.id,
+                    new_status=TaskStatus.COMPLETED
+                )
+                # 设置任务结果
+                task.result = {
+                    "resource_id": data.get("id"),
+                    "path": file_path,
+                    "status": "success"
+                }
+                self.log.info(f"资源创建成功: {file_path}")
+            else:
+                raise Exception(f"资源创建失败: {data.get('message', '未知错误')}")
+
+        except Exception as e:
+            self.log.error(f"处理资源创建任务时发生错误: {str(e)}")
+            # 更新任务状态为失败
+            await self.task_queue.update_task_status(
+                task_id=task.id,
+                new_status=TaskStatus.FAILED
+            )
+            # 设置错误信息
+            task.error_message = str(e)
+            # 设置任务结果
+            task.result = {
+                "path": task.parameters.get("file_path"),
+                "status": "failed",
+                "error": str(e)
+            }
 
 
 class CrewRunner(BaseCrewProcess):
