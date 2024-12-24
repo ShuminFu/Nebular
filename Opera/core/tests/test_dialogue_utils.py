@@ -88,7 +88,7 @@ class TestDialoguePool(AsyncTestCase):
             status=ProcessingStatus.COMPLETED,
             receiver_staff_ids=[self.test_staff_id1],
             created_at=datetime.now(timezone(timedelta(hours=8))),
-            text="Test dialogue 1"
+            text_content="Test dialogue 1"
         )
 
         self.dialogue2 = ProcessingDialogue(
@@ -99,7 +99,7 @@ class TestDialoguePool(AsyncTestCase):
             status=ProcessingStatus.PENDING,
             receiver_staff_ids=[self.test_staff_id1, self.test_staff_id2],
             created_at=datetime.now(timezone(timedelta(hours=8))),
-            text="Test dialogue 2"
+            text_content="Test dialogue 2"
         )
 
         # 添加对话到对话池

@@ -114,10 +114,12 @@ class IntentMind:
                 "mentioned_staff_ids": [str(id) for id in (dialogue.mentioned_staff_ids or [])],
                 "dialogue_type": dialogue.type.name,
                 "intent": dialogue.intent_analysis.model_dump() if dialogue.intent_analysis else None,
-                "context": dialogue.context.model_dump()
+                "context": dialogue.context.model_dump(),
+                "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None
             },
             source_dialogue_index=dialogue.dialogue_index,
-            response_staff_id=dialogue.receiver_staff_ids[0]
+            response_staff_id=dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None,
+            source_staff_id=dialogue.sender_staff_id  # 设置源Staff ID为对话的发送者
         )
 
         # 更新对话状态为已完成
