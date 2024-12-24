@@ -196,6 +196,8 @@ class IntentMind:
         if analyzed_dialogue and analyzed_dialogue.status == ProcessingStatus.PENDING:
             task = self._create_task_from_dialogue(analyzed_dialogue)
             await self.task_queue.add_task(task)
+            # 更新对话状态为已完成
+            self.dialogue_pool.update_dialogue_status(dialogue_index, ProcessingStatus.COMPLETED)
 
     def get_staff_dialogues(self, staff_id: UUID) -> Set[int]:
         """获取对话发送人为指定Staff的所有对话索引"""

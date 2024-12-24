@@ -306,6 +306,12 @@ class CrewManager(BaseCrewProcess):
                 new_status=TaskStatus.COMPLETED
             )
 
+            # 更新当前回调任务的状态
+            await self.task_queue.update_task_status(
+                task_id=task.id,
+                new_status=TaskStatus.COMPLETED
+            )
+
             # 记录日志
             self.log.info(f"任务 {task_id} 已完成，结果: {result}")
 
