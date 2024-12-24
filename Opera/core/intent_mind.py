@@ -6,12 +6,13 @@
 
 from typing import Set, Dict
 from uuid import UUID
+import json
 
 from Opera.core.dialogue_utils import (
     ProcessingDialogue, DialoguePool, DialoguePriority, DialogueType,
     ProcessingStatus
 )
-from Opera.core.task_utils import BotTask, BotTaskQueue, TaskType
+from Opera.core.task_utils import BotTask, BotTaskQueue, TaskType, TaskPriority
 from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 
 
@@ -34,8 +35,12 @@ class IntentMind:
 
         基于对话的属性（如标签、提及的Staff等）确定优先级
         """
-        if message.tags and "urgent" in message.tags.lower():
-            return DialoguePriority.URGENT
+        if message.tags:
+            # 检查是否是任务回调，任务回调应该是紧急优先级
+            if "task_callback" in message.tags.lower():
+                return DialoguePriority.URGENT
+            if "urgent" in message.tags.lower():
+                return DialoguePriority.URGENT
         if message.mentioned_staff_ids:
             return DialoguePriority.HIGH
         return DialoguePriority.NORMAL
@@ -45,11 +50,11 @@ class IntentMind:
 
         基于对话的属性确定类型：
         1. 系统消息（通过tags判断）
-        2. 旁白（is_narratage）
-        3. 私密对话（is_whisper）- 私密对话同时也是提及对话
-        4. 提及对话（mentioned_staff_ids非空）
-        5. 普通对话（其他情况）
-
+        2. 任务回调（通过tags判断）
+        3. 旁白（is_narratage）
+        4. 私密对话（is_whisper）- 私密对话同时也是提及对话
+        5. 提及对话（mentioned_staff_ids非空）
+        6. 普通对话（其他情况）
         注意：
         - whisper类型的对话自动被视为mention类型
         - mention类型的对话不一定是whisper类型
@@ -60,9 +65,12 @@ class IntentMind:
         Returns:
             DialogueType: 对话类型枚举值
         """
-        # 首先检查是否是系统消息
-        if message.tags and "system" in message.tags.lower():
-            return DialogueType.SYSTEM
+        # 首先检查是否是系统消息或任务回调
+        if message.tags:
+            if "system" in message.tags.lower():
+                return DialogueType.SYSTEM
+            if "task_callback" in message.tags.lower():
+                return DialogueType.SYSTEM  # 任务回调也作为系统消息处理
 
         # 检查是否是旁白
         if message.is_narratage:
@@ -95,28 +103,48 @@ class IntentMind:
 
         # 基于对话类型进行初步的任务类型判断
         task_type = TaskType.CONVERSATION  # 默认为基础对话处理
+        task_priority = dialogue.priority
+        task_parameters = {
+            "text": dialogue.text,
+            "tags": dialogue.tags,
+            "mentioned_staff_ids": [str(id) for id in (dialogue.mentioned_staff_ids or [])],
+            "dialogue_type": dialogue.type.name,
+            "intent": dialogue.intent_analysis.model_dump() if dialogue.intent_analysis else None,
+            "context": dialogue.context.model_dump() if dialogue.context else None,
+            "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None
+        }
 
-        if dialogue.type == DialogueType.SYSTEM:
-            task_type = TaskType.SYSTEM  # 系统消息
+        # 检查是否是任务回调
+        if dialogue.tags and "task_callback" in dialogue.tags.lower():
+            task_type = TaskType.CALLBACK
+            task_priority = TaskPriority.URGENT
+            # 尝试从对话文本中解析任务回调信息
+            try:
+                callback_data = json.loads(dialogue.text)
+                # 更新任务参数
+                task_parameters.update(callback_data.get("parameters", {}))
+                # 如果callback_data中指定了任务类型，使用它
+                if "type" in callback_data:
+                    try:
+                        task_type = TaskType[callback_data["type"]]
+                    except (KeyError, ValueError):
+                        pass  # 如果无法解析任务类型，保持默认的CALLBACK类型
+            except json.JSONDecodeError:
+                pass
+
+        elif dialogue.type == DialogueType.SYSTEM:
+            task_type = TaskType.SYSTEM
         elif dialogue.type in [DialogueType.WHISPER, DialogueType.MENTION]:
-            task_type = TaskType.CHAT_RESPONSE  # 需要响应的对话
+            task_type = TaskType.CHAT_RESPONSE
         elif dialogue.type == DialogueType.NARRATAGE:
-            task_type = TaskType.ANALYSIS  # 旁白需要分析
+            task_type = TaskType.ANALYSIS
 
         # 创建任务
         task = BotTask(
-            priority=dialogue.priority,
+            priority=task_priority,
             type=task_type,
             description=f"Process dialogue {dialogue.dialogue_index} from staff {dialogue.sender_staff_id}",
-            parameters={
-                "text": dialogue.text,
-                "tags": dialogue.tags,
-                "mentioned_staff_ids": [str(id) for id in (dialogue.mentioned_staff_ids or [])],
-                "dialogue_type": dialogue.type.name,
-                "intent": dialogue.intent_analysis.model_dump() if dialogue.intent_analysis else None,
-                "context": dialogue.context.model_dump(),
-                "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None
-            },
+            parameters=task_parameters,
             source_dialogue_index=dialogue.dialogue_index,
             response_staff_id=dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None,
             source_staff_id=dialogue.sender_staff_id  # 设置源Staff ID为对话的发送者

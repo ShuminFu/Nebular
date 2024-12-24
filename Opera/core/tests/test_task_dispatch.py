@@ -1,10 +1,14 @@
 """测试任务分发和回调流程"""
 
 from uuid import UUID
+import json
 
 from Opera.core.crew_process import CrewManager, CrewRunner, CrewProcessInfo
 from Opera.core.task_utils import BotTask, TaskType, TaskStatus, TaskPriority, BotTaskQueue
 from Opera.core.tests.test_task_utils import AsyncTestCase
+from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
+from Opera.core.dialogue_utils import DialogueType, DialoguePriority, ProcessingStatus
+from Opera.core.intent_mind import IntentMind
 
 
 class TestTaskDispatch(AsyncTestCase):
@@ -23,6 +27,8 @@ class TestTaskDispatch(AsyncTestCase):
         self.crew_manager.bot_id = self.cm_bot_id
         # 为CM创建任务队列
         self.crew_manager.task_queue = BotTaskQueue(bot_id=self.cm_bot_id)
+        # 初始化intent_processor
+        self.crew_manager.intent_processor = IntentMind(self.crew_manager.task_queue)
 
         # 创建CrewRunner实例
         self.crew_runner = CrewRunner({}, self.cr_bot_id)
@@ -44,6 +50,92 @@ class TestTaskDispatch(AsyncTestCase):
     def test_task_dispatch_and_callback(self):
         """测试任务分发和回调的完整流程"""
         self.run_async(self._test_task_dispatch_and_callback())
+
+    def test_task_callback_via_dialogue(self):
+        """测试通过对话进行任务回调的功能"""
+        self.run_async(self._test_task_callback_via_dialogue())
+
+    async def _test_task_callback_via_dialogue(self):
+        # 1. 创建一个原始任务
+        original_task = BotTask(
+            type=TaskType.CHAT_RESPONSE,
+            priority=TaskPriority.NORMAL,
+            description="Test task for dialogue callback",
+            parameters={
+                "description": "CM原先有一个任务，发送给CR之后，自己保留等待回调的那一份",
+                "opera_id": str(self.test_opera_id)
+            },
+            source_staff_id=self.user_staff_id,
+            response_staff_id=self.cr_staff_id
+        )
+
+        # 2. 将原始任务添加到CM的任务队列
+        await self.crew_manager.task_queue.add_task(original_task)
+
+        # 3. 模拟CR完成任务之后，通过对话发送这个任务的回调
+        callback_data = {
+            "type": TaskType.CALLBACK.value,
+            "priority": TaskPriority.URGENT.value,
+            "description": f"Callback for task {original_task.id}",
+            "parameters": {
+                "callback_task_id": str(original_task.id),
+                "result": "Task completed via dialogue",
+                "opera_id": str(self.test_opera_id)
+            }
+        }
+        from datetime import datetime, timezone
+        # 创建一个模拟的对话消息
+        callback_message = MessageReceivedArgs(
+            index=37,
+            text=json.dumps(callback_data),
+            tags="task_callback",
+            is_whisper=True,
+            is_narratage=False,
+            sender_staff_id=self.cr_staff_id,
+            mentioned_staff_ids=[self.cm_staff_id],
+            opera_id=self.test_opera_id,
+            receiver_staff_ids=[self.cm_staff_id],
+            time=datetime.now(timezone.utc).isoformat(),  # 使用UTC时间并包含时区信息
+            stage_index=2
+        )
+
+        # 4. 让CM处理回调消息
+        await self.crew_manager._handle_message(callback_message)
+
+        # 5. 验证回调任务是否被正确创建和处理
+        # 获取最新的任务
+        callback_task = self.crew_manager.task_queue.get_next_task()
+
+        # 验证回调任务的属性
+        self.assertIsNotNone(callback_task, "应该创建了回调任务")
+        self.assertEqual(callback_task.type, TaskType.CALLBACK)
+        self.assertEqual(callback_task.priority, TaskPriority.URGENT)
+        self.assertEqual(
+            callback_task.parameters.get("callback_task_id"),
+            str(original_task.id)
+        )
+        self.assertEqual(
+            callback_task.parameters.get("opera_id"),
+            str(self.test_opera_id)
+        )
+
+        # 6. 让CM处理回调任务
+        await self.crew_manager._handle_task_callback(callback_task)
+
+        # 7. 验证原始任务的状态
+        original_task_in_queue = None
+        for task in self.crew_manager.task_queue.tasks:
+            if task.id == original_task.id:
+                original_task_in_queue = task
+                break
+
+        self.assertIsNotNone(original_task_in_queue, "原始任务应该在CM的任务队列中")
+        self.assertEqual(original_task_in_queue.status, TaskStatus.COMPLETED)
+
+        # # 8. 验证对话池中的处理状态
+        # dialogue = self.crew_manager.intent_processor.dialogue_pool.get_dialogue(37)  # index=1
+        # self.assertIsNotNone(dialogue, "对话应该被添加到对话池中")
+        # self.assertEqual(dialogue.status, ProcessingStatus.COMPLETED)
 
     async def _test_task_dispatch_and_callback(self):
         # 1. 创建一个测试任务
@@ -115,3 +207,6 @@ class TestTaskDispatch(AsyncTestCase):
         # 清理任务队列
         self.crew_manager.task_queue.tasks.clear()
         self.crew_runner.task_queue.tasks.clear()
+        # 清理对话池
+        if hasattr(self.crew_manager, 'intent_processor'):
+            self.crew_manager.intent_processor.dialogue_pool.dialogues.clear()

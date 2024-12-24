@@ -146,6 +146,10 @@ class BaseCrewProcess(ABC):
         """处理分析类型的任务"""
         pass
 
+    async def _handle_task_callback(self, task: BotTask):
+        """处理任务回调"""
+        pass
+
 
 class CrewManager(BaseCrewProcess):
     """管理所有工作型Crew的进程"""
