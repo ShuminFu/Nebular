@@ -34,11 +34,11 @@ tasks = [
     #     agent=bot_manager
     # ),
     #
-    # Task(
-    #     description="获取所有Bot的列表",
-    #     expected_output="返回系统中所有Bot的列表",
-    #     agent=bot_manager
-    # ),
+    Task(
+        description="获取所有Bot的列表",
+        expected_output="返回系统中所有Bot的列表",
+        agent=bot_manager
+    ),
 
     # Task(
     #     description="获取Bot'e822fd9b-a360-4eb7-b217-c4f86f2dcee6'的信息",
