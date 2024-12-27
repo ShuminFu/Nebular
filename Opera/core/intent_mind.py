@@ -7,6 +7,7 @@
 from typing import Set, Dict
 from uuid import UUID
 import json
+import re
 
 from Opera.core.dialogue_utils import (
     ProcessingDialogue, DialoguePool, DialoguePriority, DialogueType,
@@ -21,8 +22,9 @@ class IntentMind:
 
     负责：
     1. 接收和管理Staff的对话
-    2. 分析对话意图
+    2. 分析对话意图（通过DialoguePool的分析器）
     3. 转换为任务并进行调度
+    4. 识别和处理代码资源
     """
 
     def __init__(self, task_queue: BotTaskQueue):
@@ -41,7 +43,8 @@ class IntentMind:
                 return DialoguePriority.URGENT
             if "urgent" in message.tags.lower():
                 return DialoguePriority.URGENT
-            if "code_resource" in message.tags.lower():
+            # 代码资源相关的对话优先级提高
+            if any(tag in message.tags.lower() for tag in ["code_resource", "code", "script", "function"]):
                 return DialoguePriority.HIGH
         if message.mentioned_staff_ids:
             return DialoguePriority.HIGH
@@ -72,9 +75,14 @@ class IntentMind:
             if "system" in message.tags.lower():
                 return DialogueType.SYSTEM
             if "task_callback" in message.tags.lower():
-                return DialogueType.SYSTEM  # 任务回调也作为系统消息处理
-            if "code_resource" in message.tags.lower():
+                return DialogueType.SYSTEM
+            # 检查代码相关标签
+            if any(tag in message.tags.lower() for tag in ["code_resource", "code", "script", "function"]):
                 return DialogueType.CODE_RESOURCE
+
+        # 如果消息内容看起来像代码，将其标记为代码资源
+        if self._is_code_content(message.text):
+            return DialogueType.CODE_RESOURCE
 
         # 检查是否是旁白
         if message.is_narratage:
@@ -90,6 +98,56 @@ class IntentMind:
 
         # 默认为普通对话
         return DialogueType.NORMAL
+
+    def _is_code_content(self, text: str) -> bool:
+        """判断文本是否包含代码内容
+        
+        通过以下特征判断：
+        1. 包含常见的编程语言关键字
+        2. 包含函数/类定义
+        3. 包含代码注释
+        4. 具有代码缩进结构
+        5. 包含特定的代码标记（如@file, @description等）
+        
+        Args:
+            text: 要分析的文本
+            
+        Returns:
+            bool: 是否是代码内容
+        """
+        if not text:
+            return False
+
+        # 检查是否已经是标准格式的代码资源
+        if any(marker in text for marker in ['@file:', '@description:', '@tags:', '@version:']):
+            return True
+
+        # 常见编程语言关键字
+        keywords = r'\b(def|class|function|import|from|return|if|else|for|while|try|catch|async|await)\b'
+
+        # 函数或类定义模式
+        definitions = r'(def\s+\w+\s*\(|class\s+\w+\s*[:\(])'
+
+        # 代码注释模式
+        comments = r'(#.*$|\/\/.*$|\/\*[\s\S]*?\*\/)'
+
+        # 代码缩进结构
+        indentation = r'^\s{2,}.*$'
+
+        # 检查文本是否符合上述任一模式
+        patterns = [keywords, definitions, comments, indentation]
+        text_lines = text.split('\n')
+
+        # 统计符合模式的行数
+        pattern_matches = 0
+        for line in text_lines:
+            for pattern in patterns:
+                if re.search(pattern, line, re.MULTILINE):
+                    pattern_matches += 1
+                    break
+
+        # 如果超过30%的行符合代码模式，则认为是代码内容
+        return pattern_matches / len(text_lines) > 0.3 if text_lines else False
 
     def _parse_code_resource(self, content: str) -> tuple[dict, str]:
         """解析代码资源内容
@@ -208,9 +266,6 @@ class IntentMind:
             source_staff_id=dialogue.sender_staff_id  # 设置源Staff ID为对话的发送者
         )
 
-        # 更新对话状态为已完成
-        self.dialogue_pool.update_dialogue_status(dialogue.dialogue_index, ProcessingStatus.COMPLETED)
-
         return task
 
     async def _process_single_message(self, message: MessageReceivedArgs) -> int:
@@ -246,7 +301,7 @@ class IntentMind:
         """处理单个MessageReceivedArgs消息"""
         dialogue_index = await self._process_single_message(message)
 
-        # 分析对话
+        # 分析对话 - 使用DialoguePool的分析器
         self.dialogue_pool.analyze_dialogues()
 
         # 从对话池中获取已分析的对话来创建任务
