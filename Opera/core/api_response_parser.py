@@ -4,7 +4,7 @@ from typing import List, Dict, Any, TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from Opera.core.dialogue_utils import ProcessingDialogue
+    from Opera.core.dialogue.models import ProcessingDialogue
     from Opera.core.task_utils import BotTaskQueue
 
 
@@ -112,5 +112,5 @@ class ApiResponseParser:
         Returns:
             list: 正在处理的对话列表
         """
-        from Opera.core.dialogue_utils import ProcessingDialogue
+        from Opera.core.dialogue.models import ProcessingDialogue
         return parameters.get("ProcessingDialogues", [])

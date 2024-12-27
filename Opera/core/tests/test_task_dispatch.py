@@ -7,7 +7,7 @@ from Opera.core.crew_process import CrewManager, CrewRunner, CrewProcessInfo
 from Opera.core.task_utils import BotTask, TaskType, TaskStatus, TaskPriority, BotTaskQueue
 from Opera.core.tests.test_task_utils import AsyncTestCase
 from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
-from Opera.core.dialogue_utils import DialogueType, DialoguePriority, ProcessingStatus
+from Opera.core.dialogue.enums import DialoguePriority, DialogueType, ProcessingStatus
 from Opera.core.intent_mind import IntentMind
 
 

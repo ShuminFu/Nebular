@@ -9,10 +9,9 @@ from uuid import UUID
 import json
 import re
 
-from Opera.core.dialogue_utils import (
-    ProcessingDialogue, DialoguePool, DialoguePriority, DialogueType,
-    ProcessingStatus
-)
+from Opera.core.dialogue.pools import DialoguePool
+from Opera.core.dialogue.models import ProcessingDialogue
+from Opera.core.dialogue.enums import DialoguePriority, DialogueType, ProcessingStatus
 from Opera.core.task_utils import BotTask, BotTaskQueue, TaskType, TaskPriority
 from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 

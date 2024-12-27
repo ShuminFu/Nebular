@@ -4,11 +4,9 @@ from datetime import datetime, timezone, timedelta
 import json
 import asyncio
 
-from Opera.core.dialogue_utils import (
-    ProcessingDialogue, DialogueType, DialoguePool,
-    PersistentDialogueState, DialoguePriority, ProcessingStatus,
-    IntentAnalysis, DialogueContext
-)
+from Opera.core.dialogue.pools import DialoguePool
+from Opera.core.dialogue.models import DialogueContext, IntentAnalysis, ProcessingDialogue, PersistentDialogueState
+from Opera.core.dialogue.enums import DialoguePriority, DialogueType, ProcessingStatus
 from ai_core.tools.opera_api.staff_api_tool import _SHARED_STAFF_TOOL
 from Opera.core.api_response_parser import ApiResponseParser
 
