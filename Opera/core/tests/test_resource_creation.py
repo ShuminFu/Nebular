@@ -302,6 +302,73 @@ def some_function():
         self.assertEqual(updated_task.status, TaskStatus.FAILED)
         self.assertIn("缺少必要的资源信息", updated_task.error_message)
 
+    async def test_code_generation_request(self):
+        """测试代码生成请求的处理流程
+        
+        测试场景：
+        1. 用户请求生成一个Python脚本
+        2. 系统识别这是代码生成请求
+        3. 分析意图和需求
+        4. 创建相应的任务
+        """
+        # 创建一个代码生成请求的消息
+        message = MessageReceivedArgs(
+            index=1,
+            text="""请帮我写一个Python脚本，用来处理CSV文件：
+            1. 需要使用pandas库
+            2. 读取sales.csv文件
+            3. 计算每个产品的总销售额
+            4. 生成销售报告
+            5. 将结果保存到新的CSV文件中""",
+            tags="",  # 初始没有标签，系统应该自动识别为代码请求
+            sender_staff_id=self.user_staff_id,
+            opera_id=self.test_opera_id,
+            is_whisper=False,
+            is_narratage=False,
+            mentioned_staff_ids=[self.cm_staff_id],  # 提到了CM
+            receiver_staff_ids=[self.cm_staff_id],
+            time=self.test_time,
+            stage_index=1
+        )
+
+        # 处理消息
+        await self.crew_manager._handle_message(message)
+
+        # 获取创建的任务
+        task = self.crew_manager.task_queue.get_next_task()
+
+        # 验证任务类型
+        self.assertEqual(task.type, TaskType.RESOURCE_CREATION)
+
+        # 验证任务优先级（代码生成请求应该是高优先级）
+        self.assertEqual(task.priority, TaskPriority.HIGH)
+
+        # 验证任务参数
+        self.assertTrue("code_request" in task.parameters.get("tags", []))
+        self.assertTrue("code_type_python" in task.parameters.get("tags", []))
+        self.assertTrue("framework_pandas" in task.parameters.get("tags", []))
+
+        # 验证意图分析结果
+        intent_analysis = task.parameters.get("intent")
+        self.assertIsNotNone(intent_analysis)
+        self.assertNotEqual(intent_analysis.get("intent", ""), "")  # 意图不应该为空
+
+        # 验证代码生成的具体要求被正确捕获
+        code_details = task.parameters.get("code_details", {})
+        self.assertEqual(code_details.get("type"), "python")
+        self.assertIn("pandas", code_details.get("frameworks", []))
+        requirements = code_details.get("requirements", [])
+        self.assertTrue(any("CSV" in req for req in requirements))
+        self.assertTrue(any("sales" in req for req in requirements))
+
+        # 验证任务描述
+        self.assertIn("Python", task.description)
+        self.assertIn("CSV", task.description)
+
+        # 验证源和目标Staff ID
+        self.assertEqual(task.source_staff_id, self.user_staff_id)
+        self.assertEqual(task.response_staff_id, self.cm_staff_id)
+
     def tearDown(self):
         """清理测试环境"""
         self.run_async(self._tearDown())
