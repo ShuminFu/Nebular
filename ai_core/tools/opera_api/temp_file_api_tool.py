@@ -127,3 +127,6 @@ class TempFileTool(BaseApiTool):
         if response['status_code'] == 204:  # 删除操作成功
             return "操作成功"
         return str(response['data'])
+
+
+_SHARED_TEMP_FILE_TOOL = TempFileTool()

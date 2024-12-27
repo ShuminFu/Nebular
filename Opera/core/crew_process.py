@@ -5,7 +5,7 @@ import asyncio
 import multiprocessing
 from abc import ABC, abstractmethod
 from crewai import Agent, Task, Crew
-from Opera.FastAPI.models import BotForUpdate, DialogueForCreation
+from Opera.FastAPI.models import BotForUpdate, DialogueForCreation, ResourceForCreation
 from Opera.core.logger_config import get_logger_with_trace_id
 from Opera.core.api_response_parser import ApiResponseParser
 from Opera.signalr_client.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
@@ -13,7 +13,8 @@ from ai_core.configs.config import CREW_MANAGER_INIT, DEFAULT_CREW_MANAGER
 from ai_core.configs.base_agents import create_intent_agent, create_persona_agent
 from ai_core.tools.opera_api.bot_api_tool import _SHARED_BOT_TOOL
 from ai_core.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
-from ai_core.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL
+from ai_core.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL, Resource
+from ai_core.tools.opera_api.temp_file_api_tool import _SHARED_TEMP_FILE_TOOL
 from Opera.core.intent_mind import IntentMind
 from Opera.core.task_utils import BotTaskQueue, TaskType, TaskStatus, BotTask, PersistentTaskState, TaskPriority
 
@@ -28,6 +29,87 @@ class CrewProcessInfo:
     opera_ids: List[UUID]  # 一个Bot可以在多个Opera中
     roles: Dict[UUID, List[str]]  # opera_id -> roles
     staff_ids: Dict[UUID, List[UUID]]  # opera_id -> staff_ids
+
+
+class CodeMonkey:
+    """负责资源的搬运"""
+
+    def __init__(self, task_queue: BotTaskQueue, logger):
+        self.task_queue = task_queue
+        self.log = logger
+
+    async def handle_resource_creation(self, task: BotTask):
+        """处理资源创建任务"""
+        try:
+            # 从任务参数中获取资源信息
+            file_path = task.parameters.get("file_path")
+            description = task.parameters.get("description")
+            tags = task.parameters.get("tags", [])
+            code_content = task.parameters.get("code_content")
+            opera_id = task.parameters.get("opera_id")
+            mime_type = task.parameters.get("mime_type", "text/plain")
+
+            if not all([file_path, code_content, opera_id]):
+                raise ValueError("缺少必要的资源信息")
+
+            # 1. 先将代码内容上传为临时文件
+            temp_file_result = await asyncio.to_thread(
+                _SHARED_TEMP_FILE_TOOL.run,
+                operation="upload",
+                content=code_content.encode('utf-8')
+            )
+            if not isinstance(temp_file_result, str) or "成功上传临时文件" not in temp_file_result:
+                raise Exception(f"上传临时文件失败: {temp_file_result}")
+
+            # 从返回的消息中提取temp_file_id，格式为: '成功上传临时文件，ID: uuid, 长度: xx 字节'
+            temp_file_id = temp_file_result.split("ID: ")[1].split(",")[0].strip()
+
+            # 2. 创建资源
+            resource_result = await asyncio.to_thread(
+                _SHARED_RESOURCE_TOOL.run,
+                action="create",
+                opera_id=opera_id,
+                data=ResourceForCreation(
+                    name=file_path,
+                    description=description,
+                    mime_type=mime_type,
+                    last_update_staff_name=str(task.response_staff_id),
+                    temp_file_id=temp_file_id
+                )
+            )
+
+            # 直接使用Resource对象
+            if isinstance(resource_result, Resource):
+                # 更新任务状态为完成
+                await self.task_queue.update_task_status(
+                    task_id=task.id,
+                    new_status=TaskStatus.COMPLETED
+                )
+                # 设置任务结果
+                task.result = {
+                    "resource_id": str(resource_result.id),
+                    "path": file_path,
+                    "status": "success"
+                }
+                self.log.info(f"资源创建成功: {file_path}")
+            else:
+                raise Exception(f"资源创建失败: {resource_result}")
+
+        except Exception as e:
+            self.log.error(f"处理资源创建任务时发生错误: {str(e)}")
+            # 更新任务状态为失败
+            await self.task_queue.update_task_status(
+                task_id=task.id,
+                new_status=TaskStatus.FAILED
+            )
+            # 设置错误信息
+            task.error_message = str(e)
+            # 设置任务结果
+            task.result = {
+                "path": task.parameters.get("file_path"),
+                "status": "failed",
+                "error": str(e)
+            }
 
 
 class BaseCrewProcess(ABC):
@@ -45,8 +127,8 @@ class BaseCrewProcess(ABC):
 
     async def setup(self):
         """初始化设置"""
-        self.intent_agent = create_intent_agent()
-        self.persona_agent = create_persona_agent()
+        # self.intent_agent = create_intent_agent() # 无实际用途，占位
+        # self.persona_agent = create_persona_agent()  # 无实际用途，占位
 
         self.task_queue = BotTaskQueue(bot_id=self.bot_id)
         self.intent_processor = IntentMind(self.task_queue)
@@ -160,6 +242,12 @@ class CrewManager(BaseCrewProcess):
         self.crew_processes: Dict[UUID, CrewProcessInfo] = {}
         self._staff_id_cache: Dict[str, UUID] = {}  # opera_id -> staff_id 的缓存
 
+    async def setup(self):
+        """初始化设置"""
+        await super().setup()
+        # 创建资源处理器
+        self.resource_handler = CodeMonkey(self.task_queue, self.log)
+
     async def _get_cm_staff_id(self, opera_id: str) -> Optional[UUID]:
         """获取CrewManager在指定Opera中的staff_id
         
@@ -241,7 +329,7 @@ class CrewManager(BaseCrewProcess):
         else:
             # CM自己处理的任务
             if task.type == TaskType.RESOURCE_CREATION:
-                await self._handle_resource_creation(task)
+                await self.resource_handler.handle_resource_creation(task)
             else:
                 await super()._process_task(task)
 
@@ -322,71 +410,6 @@ class CrewManager(BaseCrewProcess):
         except Exception as e:
             self.log.error(f"处理任务回调时发生错误: {str(e)}")
             raise
-
-    async def _handle_resource_creation(self, task: BotTask):
-        """处理资源创建任务"""
-        try:
-            # 从任务参数中获取资源信息
-            file_path = task.parameters.get("file_path")
-            description = task.parameters.get("description")
-            tags = task.parameters.get("tags", [])
-            code_content = task.parameters.get("code_content")
-            opera_id = task.parameters.get("opera_id")
-
-            if not all([file_path, code_content, opera_id]):
-                raise ValueError("缺少必要的资源信息")
-
-            # TODO: 使用resource_api_tool创建资源
-            # 这里是占位代码，实际实现时需要替换为真实的API调用
-            resource_result = _SHARED_RESOURCE_TOOL.run(
-                action="create",
-                opera_id=opera_id,
-                data={
-                    "path": file_path,
-                    "content": code_content,
-                    "description": description,
-                    "tags": tags,
-                    "type": "code",
-                    "metadata": {
-                        "creator_staff_id": str(task.source_staff_id),
-                        "source_dialogue_index": task.source_dialogue_index
-                    }
-                }
-            )
-
-            # 解析API响应
-            status_code, data = ApiResponseParser.parse_response(resource_result)
-            if status_code in [200, 201, 204]:
-                # 更新任务状态为完成
-                await self.task_queue.update_task_status(
-                    task_id=task.id,
-                    new_status=TaskStatus.COMPLETED
-                )
-                # 设置任务结果
-                task.result = {
-                    "resource_id": data.get("id"),
-                    "path": file_path,
-                    "status": "success"
-                }
-                self.log.info(f"资源创建成功: {file_path}")
-            else:
-                raise Exception(f"资源创建失败: {data.get('message', '未知错误')}")
-
-        except Exception as e:
-            self.log.error(f"处理资源创建任务时发生错误: {str(e)}")
-            # 更新任务状态为失败
-            await self.task_queue.update_task_status(
-                task_id=task.id,
-                new_status=TaskStatus.FAILED
-            )
-            # 设置错误信息
-            task.error_message = str(e)
-            # 设置任务结果
-            task.result = {
-                "path": task.parameters.get("file_path"),
-                "status": "failed",
-                "error": str(e)
-            }
 
 
 class CrewRunner(BaseCrewProcess):

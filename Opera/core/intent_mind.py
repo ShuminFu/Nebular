@@ -161,12 +161,30 @@ class IntentMind:
                 # 尝试解析代码块中的元数据
                 metadata, code = self._parse_code_resource(dialogue.text)
 
+                # 根据文件扩展名确定mime_type
+                file_path = metadata.get("file", "")
+                mime_type = "text/plain"
+                if file_path:
+                    ext = file_path.split('.')[-1].lower()
+                    mime_type_map = {
+                        'py': 'text/x-python',
+                        'js': 'application/javascript',
+                        'html': 'text/html',
+                        'css': 'text/css',
+                        'json': 'application/json',
+                        'xml': 'application/xml',
+                        'md': 'text/markdown',
+                        'txt': 'text/plain'
+                    }
+                    mime_type = mime_type_map.get(ext, 'text/plain')
+
                 task_parameters.update({
                     "resource_type": "code",
                     "file_path": metadata.get("file"),
                     "description": metadata.get("description"),
                     "tags": metadata.get("tags", "").split(","),
-                    "code_content": code
+                    "code_content": code,
+                    "mime_type": mime_type
                 })
             except Exception as e:
                 print(f"解析代码资源失败: {str(e)}")
