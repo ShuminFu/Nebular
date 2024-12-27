@@ -424,8 +424,24 @@ class DialoguePool(CamelBaseModel):
                 related_indices = self._analyzer.analyze_context(dialogue, temp_pool)
 
                 # 3. 更新对话上下文
+                # 获取当前对话和相关对话中的最大stage_index
+                current_stage_index = dialogue.context.stage_index if dialogue.context else None
+                related_stage_indices = [
+                    d.context.stage_index
+                    for d in temp_pool.dialogues
+                    if d.dialogue_index in related_indices
+                    and d.context
+                    and d.context.stage_index is not None
+                ]
+
+                # 如果有相关对话的stage_index，使用最大值；否则保持当前值
+                max_stage_index = max(
+                    [i for i in [current_stage_index] + related_stage_indices if i is not None],
+                    default=current_stage_index
+                )
+
                 dialogue.context = DialogueContext(
-                    stage_index=None,
+                    stage_index=max_stage_index,
                     related_dialogue_indices=list(related_indices),
                     conversation_state={
                         "intent": dialogue.intent_analysis.intent,
@@ -756,20 +772,41 @@ class DialogueAnalyzer:
         related_indices = set()
         try:
             # 从CrewOutput中提取实际的字符串内容
-            indices_str = ""
             if result and hasattr(result, 'raw'):
-                try:
-                    import json
-                    indices_str = json.loads(result.raw)
-                except (json.JSONDecodeError, AttributeError):
-                    indices_str = result.raw.strip('"')
+                # 如果raw是整数，直接添加到集合中
+                if isinstance(result.raw, int):
+                    related_indices.add(result.raw)
+                else:
+                    # 尝试解析为JSON或字符串
+                    try:
+                        import json
+                        indices_str = json.loads(result.raw)
+                        if isinstance(indices_str, int):
+                            related_indices.add(indices_str)
+                        elif isinstance(indices_str, str):
+                            indices = [int(idx.strip()) for idx in indices_str.split(',')]
+                            related_indices.update(indices)
+                    except (json.JSONDecodeError, AttributeError):
+                        # 如果不是JSON，直接使用raw值
+                        indices_str = result.raw.strip('"')
+                        if indices_str:
+                            try:
+                                if ',' in indices_str:
+                                    indices = [int(idx.strip()) for idx in indices_str.split(',')]
+                                    related_indices.update(indices)
+                                else:
+                                    related_indices.add(int(indices_str))
+                            except ValueError:
+                                pass
             elif isinstance(result, str):
-                indices_str = result
-
-            # 解析索引列表
-            if indices_str:
-                indices = [int(idx.strip()) for idx in indices_str.split(',')]
-                related_indices.update(indices)
+                if ',' in result:
+                    indices = [int(idx.strip()) for idx in result.split(',')]
+                    related_indices.update(indices)
+                else:
+                    try:
+                        related_indices.add(int(result))
+                    except ValueError:
+                        pass
         except (ValueError, AttributeError):
             pass
 
