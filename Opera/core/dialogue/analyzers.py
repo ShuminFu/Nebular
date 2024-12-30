@@ -3,12 +3,11 @@ from typing import Set
 
 from crewai import Agent, Task, Crew
 
-from Opera.core.dialogue.pools import DialoguePool
 from Opera.core.dialogue.enums import DialogueType
 from Opera.core.dialogue.models import ProcessingDialogue, IntentAnalysis
 from ai_core.configs.config import llm
 from ai_core.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
-
+from Opera.core.dialogue.pools import DialoguePool
 
 class DialogueAnalyzer:
     """对话分析器
@@ -201,7 +200,7 @@ class DialogueAnalyzer:
                 }
             )
 
-    def analyze_context(self, dialogue: ProcessingDialogue, dialogue_pool: 'DialoguePool') -> Set[int]:
+    def analyze_context(self, dialogue: ProcessingDialogue, dialogue_pool: DialoguePool) -> Set[int]:
         """分析对话的上下文关联
 
         增强对代码生成请求的上下文分析：
@@ -216,6 +215,7 @@ class DialogueAnalyzer:
         Returns:
             Set[int]: 相关对话的索引集合
         """
+
         # 获取同一Opera下的对话
         opera_dialogues = [
             d for d in dialogue_pool.dialogues

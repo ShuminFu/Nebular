@@ -2,11 +2,9 @@ import unittest
 from uuid import UUID
 from datetime import datetime, timezone
 from Opera.core.crew_process import CrewManager
-from Opera.core.task_utils import BotTaskQueue, TaskType, TaskStatus, BotTask
+from Opera.core.task_utils import TaskType, TaskStatus, BotTask
 from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 from Opera.core.tests.test_task_utils import AsyncTestCase
-from Opera.core.intent_mind import IntentMind
-from Opera.core.api_response_parser import ApiResponseParser
 from ai_core.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL
 from ai_core.tools.opera_api.resource_api_tool import Resource
 import asyncio
