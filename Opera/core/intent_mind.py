@@ -4,10 +4,11 @@
 主要用于CrewManager和CrewRunner的对话处理和任务管理的桥接。
 """
 
-from typing import Set, Dict
+from typing import Set, Dict, Optional
 from uuid import UUID
 import json
 import re
+import random
 
 from Opera.core.dialogue.pools import DialoguePool
 from Opera.core.dialogue.models import ProcessingDialogue
@@ -176,6 +177,44 @@ class IntentMind:
 
         return metadata, code
 
+    def _select_code_resource_handler(self, dialogue: ProcessingDialogue, code_details: dict) -> Optional[UUID]:
+        """选择合适的CR来处理代码生成任务
+        
+        选择策略：
+        1. 如果只有一个CR，直接选择
+        2. 如果有多个CR，根据以下因素选择：
+           - 代码类型匹配（比如Python专家）
+           - 框架经验（比如pandas专家）
+           - 当前任务负载
+           - 历史成功率
+        
+        Args:
+            dialogue: 当前对话
+            code_details: 代码相关信息
+
+        Returns:
+            Optional[UUID]: 选中的CR的staff_id
+        """
+        # 获取所有可能的CR（排除CM自己）
+        crs = [
+            staff_id for staff_id in dialogue.receiver_staff_ids
+            if staff_id != dialogue.sender_staff_id
+        ]
+
+        if not crs:
+            return None
+        elif len(crs) == 1:
+            return crs[0]
+
+        # TODO: 实现更复杂的CR选择逻辑
+        # 1. 从staff的parameters中获取专长信息, 或者通过api接口获取他们的prompt
+        # 2. 匹配代码类型和框架需求
+        # 3. 考虑当前任务队列负载
+        # 4. 考虑历史完成率
+
+        # 暂时随机选择一个CR
+        return random.choice(crs)
+
     def _create_task_from_dialogue(self, dialogue: ProcessingDialogue) -> BotTask:
         """从对话创建任务"""
         self.dialogue_pool.update_dialogue_status(dialogue.dialogue_index, ProcessingStatus.PROCESSING)
@@ -227,6 +266,11 @@ class IntentMind:
                     "code_details": code_details,
                     "mime_type": "text/x-python"  # 默认为Python，后续可以根据代码类型扩展
                 })
+
+                # 选择合适的CR来处理代码生成任务
+                selected_cr = self._select_code_resource_handler(dialogue, code_details)
+                if selected_cr:
+                    task_parameters["selected_cr_id"] = str(selected_cr)  # 记录选中的CR
             else:
                 # 如果不是代码生成请求，则作为普通资源创建处理
                 task_type = TaskType.RESOURCE_CREATION
@@ -250,7 +294,10 @@ class IntentMind:
             description=f"Process dialogue {dialogue.dialogue_index} from staff {dialogue.sender_staff_id}",
             parameters=task_parameters,
             source_dialogue_index=dialogue.dialogue_index,
-            response_staff_id=dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None,
+            response_staff_id=(
+                UUID(task_parameters["selected_cr_id"]) if task_parameters.get("selected_cr_id")
+                else (dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None)
+            ),
             source_staff_id=dialogue.sender_staff_id  # 设置源Staff ID为对话的发送者
         )
 
