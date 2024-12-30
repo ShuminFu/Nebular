@@ -212,40 +212,29 @@ class IntentMind:
                 pass
 
         elif dialogue.type == DialogueType.CODE_RESOURCE:
-            task_type = TaskType.RESOURCE_CREATION
-            # 解析代码资源信息
-            try:
-                # 尝试解析代码块中的元数据
-                metadata, code = self._parse_code_resource(dialogue.text)
+            # 从intent_analysis中获取代码生成相关信息
+            if dialogue.intent_analysis and dialogue.intent_analysis.parameters.get("is_code_request"):
+                task_type = TaskType.RESOURCE_GENERATION
+                task_priority = TaskPriority.HIGH
+                code_details = dialogue.intent_analysis.parameters.get("code_details", {})
 
-                # 根据文件扩展名确定mime_type
-                file_path = metadata.get("file", "")
-                mime_type = "text/plain"
-                if file_path:
-                    ext = file_path.split('.')[-1].lower()
-                    mime_type_map = {
-                        'py': 'text/x-python',
-                        'js': 'application/javascript',
-                        'html': 'text/html',
-                        'css': 'text/css',
-                        'json': 'application/json',
-                        'xml': 'application/xml',
-                        'md': 'text/markdown',
-                        'txt': 'text/plain'
-                    }
-                    mime_type = mime_type_map.get(ext, 'text/plain')
-
+                # 使用intent_analysis中的信息更新任务参数
                 task_parameters.update({
                     "resource_type": "code",
-                    "file_path": metadata.get("file"),
-                    "description": metadata.get("description"),
-                    "tags": metadata.get("tags", "").split(","),
-                    "code_content": code,
-                    "mime_type": mime_type
+                    "file_path": code_details.get("file_path", f"src/{code_details.get('type', 'python').lower()}/main.{code_details.get('type', 'py').lower()}"),
+                    "description": code_details.get("purpose", ""),
+                    "tags": dialogue.tags.split(",") if dialogue.tags else [],
+                    "code_details": code_details,
+                    "mime_type": "text/x-python"  # 默认为Python，后续可以根据代码类型扩展
                 })
-            except Exception as e:
-                print(f"解析代码资源失败: {str(e)}")
-                task_type = TaskType.ERROR
+            else:
+                # 如果不是代码生成请求，则作为普通资源创建处理
+                task_type = TaskType.RESOURCE_CREATION
+                task_parameters.update({
+                    "resource_type": "code",
+                    "code_content": dialogue.text,
+                    "mime_type": "text/x-python"  # 默认为Python，后续可以根据文件扩展名确定
+                })
 
         elif dialogue.type == DialogueType.SYSTEM:
             task_type = TaskType.SYSTEM

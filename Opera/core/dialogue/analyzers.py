@@ -113,20 +113,21 @@ class DialogueAnalyzer:
                - 列出关键需求和约束
                - 标注是否需要特定的框架或库
 
-            返回格式（JSON）：
-            {
+            返回格式示例（JSON）：
+            {{
                 "intent": "意图描述，无意义对话则返回空字符串",
                 "reason": "如果intent为空，说明原因",
                 "is_code_request": true/false,
-                "code_details": {  # 仅在is_code_request为true时需要
+                "code_details": {{  # 仅在is_code_request为true时需要
+                    "file_path": "src/xxx.py",
                     "type": "代码类型",
                     "purpose": "用途描述",
                     "requirements": ["需求1", "需求2"],
                     "frameworks": ["框架1", "框架2"]
-                }
-            }
+                }}
+            }}
             """,
-            expected_output="描述对话意图，包含动作和目标的JSON，如果是无意义的对话则intent字段返回空字符串",
+            expected_output="描述对话意图，包含动作和目标的JSON，如果是无意义的对话则intent字段返回空字符串, 文件名要考虑context中的项目结构信息",
             agent=self.intent_analyzer
         )
 
@@ -140,7 +141,15 @@ class DialogueAnalyzer:
 
         # 解析结果
         try:
-            analysis_result = json.loads(str(result))
+            # 从CrewOutput中提取JSON字符串
+            result_str = result.raw
+            # 移除可能的Markdown代码块标记
+            if result_str.startswith('```json\n'):
+                result_str = result_str[8:]
+            if result_str.endswith('\n```'):
+                result_str = result_str[:-4]
+
+            analysis_result = json.loads(result_str)
             intent = analysis_result.get("intent", "").strip()
 
             # 如果意图为空（无意义对话），返回基本分析结果

@@ -45,7 +45,8 @@ class TaskType(IntEnum):
     ROLE_ASSIGNMENT = 43  # 发言角色分配
 
     # 资源管理任务
-    RESOURCE_CREATION = 50  # 资源创建任务
+    RESOURCE_CREATION = 50  # 资源创建任务, 需要调用工具创建资源, 由cm处理
+    RESOURCE_GENERATION = 51  # 资源生成任务, 需要调用工具生成资源, 由cr处理
 
 
 class TaskStatus(IntEnum):
