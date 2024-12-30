@@ -4,7 +4,7 @@
 主要用于CrewManager和CrewRunner的对话处理和任务管理的桥接。
 """
 
-from typing import Set, Dict, Optional
+from typing import Set, Dict, Optional, Union, List
 from uuid import UUID
 import json
 import re
@@ -215,8 +215,8 @@ class IntentMind:
         # 暂时随机选择一个CR
         return random.choice(crs)
 
-    def _create_task_from_dialogue(self, dialogue: ProcessingDialogue) -> BotTask:
-        """从对话创建任务"""
+    def _create_task_from_dialogue(self, dialogue: ProcessingDialogue) -> Union[BotTask, List[BotTask]]:
+        """从对话创建任务，支持返回多个任务"""
         self.dialogue_pool.update_dialogue_status(dialogue.dialogue_index, ProcessingStatus.PROCESSING)
 
         # 基于对话类型进行初步的任务类型判断
@@ -257,20 +257,55 @@ class IntentMind:
                 task_priority = TaskPriority.HIGH
                 code_details = dialogue.intent_analysis.parameters.get("code_details", {})
 
-                # 使用intent_analysis中的信息更新任务参数
-                task_parameters.update({
-                    "resource_type": "code",
-                    "file_path": code_details.get("file_path", f"src/{code_details.get('type', 'python').lower()}/main.{code_details.get('type', 'py').lower()}"),
-                    "description": code_details.get("purpose", ""),
-                    "tags": dialogue.tags.split(",") if dialogue.tags else [],
-                    "code_details": code_details,
-                    "mime_type": "text/x-python"  # 默认为Python，后续可以根据代码类型扩展
-                })
+                # 获取需要生成的文件列表
+                resources = code_details.get("resources", [])
+                if not resources:
+                    # 如果没有明确指定resources，创建默认的单文件资源
+                    resources = [{
+                        "file_path": code_details.get("file_path", f"src/{code_details.get('type', 'python').lower()}/main.{code_details.get('type', 'py').lower()}"),
+                        "type": code_details.get("type", "python"),
+                        "mime_type": "text/x-python"
+                    }]
 
-                # 选择合适的CR来处理代码生成任务
-                selected_cr = self._select_code_resource_handler(dialogue, code_details)
-                if selected_cr:
-                    task_parameters["selected_cr_id"] = str(selected_cr)  # 记录选中的CR
+                # 为每个文件创建独立的CODE_GENERATION任务
+                tasks = []
+                for resource in resources:
+                    # 选择合适的CR来处理代码生成任务
+                    selected_cr = self._select_code_resource_handler(dialogue, code_details)
+
+                    task = BotTask(
+                        type=TaskType.CODE_GENERATION,
+                        priority=TaskPriority.HIGH,
+                        description=f"生成代码文件: {resource['file_path']}",
+                        parameters={
+                            "file_path": resource["file_path"],
+                            "file_type": resource["type"],
+                            "mime_type": resource["mime_type"],
+                            "description": resource.get("description", ""),
+                            "references": resource.get("references", []),
+                            "code_details": {  # 保留完整的代码细节，便于上下文理解
+                                "project_type": code_details.get("project_type"),
+                                "project_description": code_details.get("project_description"),
+                                "requirements": code_details.get("requirements", []),
+                                "frameworks": code_details.get("frameworks", []),
+                                "resources": resources  # 包含所有资源信息，便于理解文件间关系
+                            },
+                            "dialogue_context": {
+                                "text": dialogue.text,
+                                "type": dialogue.type.name,
+                                "tags": dialogue.tags,
+                                "intent": dialogue.intent_analysis.model_dump() if dialogue.intent_analysis else None,
+                            },
+                            "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None
+                        },
+                        source_dialogue_index=dialogue.dialogue_index,
+                        source_staff_id=dialogue.sender_staff_id,
+                        response_staff_id=selected_cr if selected_cr else (
+                            dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None
+                        )
+                    )
+                    tasks.append(task)
+                return tasks
             else:
                 # 如果不是代码生成请求，则作为普通资源创建处理
                 task_type = TaskType.RESOURCE_CREATION
@@ -287,17 +322,23 @@ class IntentMind:
         elif dialogue.type == DialogueType.NARRATAGE:
             task_type = TaskType.ANALYSIS
 
-        # 创建任务
+        # 创建单个任务
+        # 如果是代码相关的任务，需要选择合适的CR
+        if task_type in [TaskType.RESOURCE_CREATION, TaskType.RESOURCE_GENERATION]:
+            selected_cr = self._select_code_resource_handler(dialogue, task_parameters.get("code_details", {}))
+            response_staff_id = selected_cr if selected_cr else (
+                dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None
+            )
+        else:
+            response_staff_id = dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None
+
         task = BotTask(
             priority=task_priority,
             type=task_type,
             description=f"Process dialogue {dialogue.dialogue_index} from staff {dialogue.sender_staff_id}",
             parameters=task_parameters,
             source_dialogue_index=dialogue.dialogue_index,
-            response_staff_id=(
-                UUID(task_parameters["selected_cr_id"]) if task_parameters.get("selected_cr_id")
-                else (dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None)
-            ),
+            response_staff_id=response_staff_id,
             source_staff_id=dialogue.sender_staff_id  # 设置源Staff ID为对话的发送者
         )
 

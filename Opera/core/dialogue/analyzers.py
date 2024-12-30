@@ -75,6 +75,7 @@ class DialogueAnalyzer:
         2. 提取代码类型和要求
         3. 分析代码生成的上下文
         4. 识别并过滤无意义对话
+        5. 支持多文件代码生成场景
 
         Args:
             dialogue: 要分析的对话
@@ -112,22 +113,52 @@ class DialogueAnalyzer:
                - 描述代码的用途和功能
                - 列出关键需求和约束
                - 标注是否需要特定的框架或库
+               - 识别需要生成的所有文件
+               - 确定每个文件的类型和用途
+               - 识别文件之间的关联（如HTML引用CSS和JS）
+               - 确定项目的整体结构
 
             返回格式示例（JSON）：
             {{
                 "intent": "意图描述，无意义对话则返回空字符串",
                 "reason": "如果intent为空，说明原因",
                 "is_code_request": true/false,
-                "code_details": {{  # 仅在is_code_request为true时需要
-                    "file_path": "src/xxx.py",
-                    "type": "代码类型",
-                    "purpose": "用途描述",
+                "code_details": {{
+                    "project_type": "web/python/java等项目类型",
+                    "project_description": "项目整体描述",
+                    "resources": [
+                        {{
+                            "file_path": "src/html/index.html",
+                            "type": "html",
+                            "mime_type": "text/html",
+                            "description": "主页面文件",
+                            "references": ["style.css", "main.js"]
+                        }},
+                        {{
+                            "file_path": "src/css/style.css",
+                            "type": "css",
+                            "mime_type": "text/css",
+                            "description": "样式文件"
+                        }},
+                        {{
+                            "file_path": "src/js/main.js",
+                            "type": "javascript",
+                            "mime_type": "text/javascript",
+                            "description": "交互脚本"
+                        }}
+                    ],
                     "requirements": ["需求1", "需求2"],
                     "frameworks": ["框架1", "框架2"]
                 }}
             }}
+
+            注意：
+            1. 对于前端项目，需要生成完整的文件结构
+            2. 对于后端项目，需要包含必要的配置文件
+            3. 文件路径要符合项目最佳实践
+            4. MIME类型必须准确
             """,
-            expected_output="描述对话意图，包含动作和目标的JSON，如果是无意义的对话则intent字段返回空字符串, 文件名要考虑context中的项目结构信息",
+            expected_output="描述对话意图，包含动作和目标的JSON，如果是无意义的对话则intent字段返回空字符串, 文件名要考虑context中的项目结构信息, 包含完整的多文件代码生成信息",
             agent=self.intent_analyzer
         )
 
@@ -139,9 +170,8 @@ class DialogueAnalyzer:
         )
         result = crew.kickoff()
 
-        # 解析结果
         try:
-            # 从CrewOutput中提取JSON字符串
+            # 解析结果
             result_str = result.raw
             # 移除可能的Markdown代码块标记
             if result_str.startswith('```json\n'):
@@ -165,18 +195,34 @@ class DialogueAnalyzer:
                     }
                 )
 
-            # 如果是代码生成请求，添加特殊标记
+            # 如果是代码生成请求，处理多文件信息
             if analysis_result.get("is_code_request"):
                 code_details = analysis_result.get("code_details", {})
-                code_type = code_details.get("type", "").lower()
 
-                # 更新对话标签
+                # 获取所有文件的类型，用于标签
+                file_types = set()
+                frameworks = set()
+
+                # 处理每个资源文件的信息
+                for resource in code_details.get("resources", []):
+                    file_type = resource.get("type", "").lower()
+                    file_types.add(f"code_type_{file_type}")
+
+                    # 添加MIME类型映射
+                    if "mime_type" not in resource:
+                        resource["mime_type"] = self._get_mime_type(resource["file_path"])
+
+                # 收集所有框架
+                frameworks.update(code_details.get("frameworks", []))
+
+                # 构建标签列表
                 code_tags = [
                     "code_request",  # 标记这是一个代码生成请求
-                    f"code_type_{code_type}",  # 代码类型标记
-                    *[f"framework_{f.lower()}" for f in code_details.get("frameworks", [])]  # 框架标记
+                    *file_types,  # 添加所有文件类型标签
+                    *[f"framework_{f.lower()}" for f in frameworks]  # 添加框架标签
                 ]
 
+                # 更新对话标签
                 if dialogue.tags:
                     dialogue.tags = f"{dialogue.tags},{','.join(code_tags)}"
                 else:
@@ -196,6 +242,7 @@ class DialogueAnalyzer:
                     "code_details": analysis_result.get("code_details", {})
                 }
             )
+
         except json.JSONDecodeError:
             # 如果解析失败，返回基本的意图分析，视为无意义对话
             return IntentAnalysis(
@@ -208,6 +255,23 @@ class DialogueAnalyzer:
                     "reason": "解析失败"
                 }
             )
+
+    def _get_mime_type(self, file_path: str) -> str:
+        """根据文件路径获取MIME类型"""
+        extension = file_path.lower().split('.')[-1]
+        mime_types = {
+            'py': 'text/x-python',
+            'js': 'text/javascript',
+            'html': 'text/html',
+            'css': 'text/css',
+            'json': 'application/json',
+            'xml': 'application/xml',
+            'yaml': 'text/x-yaml',
+            'yml': 'text/x-yaml',
+            'md': 'text/markdown',
+            'txt': 'text/plain'
+        }
+        return mime_types.get(extension, 'text/plain')
 
     def analyze_context(self, dialogue: ProcessingDialogue, dialogue_pool: DialoguePool) -> Set[int]:
         """分析对话的上下文关联

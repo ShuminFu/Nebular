@@ -431,6 +431,73 @@ class CrewManager(BaseCrewProcess):
         # 实现CrewManager特定的分析任务处理逻辑
         pass
 
+    async def _handle_code_generation(self, task: BotTask):
+        """处理单个代码生成任务"""
+        try:
+            # 创建代码生成Agent
+            code_gen_agent = Agent(
+                name="代码生成专家",
+                role="专业程序员",
+                goal=f"生成{task.parameters['file_type']}代码文件",
+                backstory=f"""你是一个专业的程序员，专注于生成高质量的{task.parameters['file_type']}代码。
+                你需要理解整个项目的上下文，但只负责生成{task.parameters['file_path']}文件。
+                要考虑文件之间的引用关系：{task.parameters.get('references', [])}"""
+            )
+
+            # 创建代码生成任务
+            gen_task = Task(
+                description=f"""根据以下信息生成代码：
+                1. 文件路径：{task.parameters['file_path']}
+                2. 文件类型：{task.parameters['file_type']}
+                3. 需求描述：{task.parameters['dialogue_context']['text']}
+                4. 项目信息：
+                   - 类型：{task.parameters['code_details']['project_type']}
+                   - 描述：{task.parameters['code_details']['project_description']}
+                   - 框架：{task.parameters['code_details']['frameworks']}
+                5. 相关文件：{task.parameters['code_details']['resources']}
+                6. 引用关系：{task.parameters.get('references', [])}
+
+                请生成符合要求的代码内容。
+                """,
+                agent=code_gen_agent
+            )
+
+            # 执行生成
+            crew = Crew(
+                agents=[code_gen_agent],
+                tasks=[gen_task]
+            )
+
+            code_content = crew.kickoff()
+
+            # 创建资源
+            resource_task = BotTask(
+                type=TaskType.RESOURCE_CREATION,
+                priority=task.priority,
+                description=f"保存生成的代码: {task.parameters['file_path']}",
+                parameters={
+                    "file_path": task.parameters['file_path'],
+                    "mime_type": task.parameters['mime_type'],
+                    "code_content": code_content,
+                    "opera_id": task.parameters['opera_id']
+                }
+            )
+
+            # 使用资源处理器保存代码
+            await self.resource_handler.handle_resource_creation(resource_task)
+
+            # 更新任务状态
+            task.result = {
+                "file_path": task.parameters['file_path'],
+                "resource_task_result": resource_task.result
+            }
+            await self.task_queue.update_task_status(task.id, TaskStatus.COMPLETED)
+
+        except Exception as e:
+            self.log.error(f"代码生成失败: {str(e)}")
+            await self.task_queue.update_task_status(task.id, TaskStatus.FAILED)
+            task.error_message = str(e)
+
     async def _process_task(self, task: BotTask):
         # 检查任务是否需要由CR执行
         if task.response_staff_id in self.crew_processes:
