@@ -1,3 +1,9 @@
+"""
+测试资源创建功能, 主要流程：
+CM received `raw message` -> into processing dialogue & ==code_request== -> ==BotTask== -> dispatch -> CR
+CR taskqueue updated by code_request tag -> Generate code -> say it out
+CM received `raw message` -> into processing dialogue & ==code_creation== -> BotTask -> CM's CodeMonkey 
+"""
 import unittest
 from uuid import UUID
 from datetime import datetime, timezone

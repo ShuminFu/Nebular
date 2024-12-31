@@ -1,7 +1,7 @@
 """Opera SignalR 任务队列的数据模型定义。"""
 
 from pydantic import Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, timezone, timedelta
 from uuid import UUID, uuid4
 from enum import IntEnum
@@ -300,10 +300,22 @@ class BotTaskQueue(CamelBaseModel):
             # 发生错误时返回空队列
             return cls(bot_id=bot_id, **kwargs)
 
-    async def add_task(self, task: BotTask) -> None:
-        """添加任务并更新计数器"""
-        self.tasks.append(task)
-        self.status_counter[task.status.name.lower()] += 1
+    async def add_task(self, task: Union[BotTask, List[BotTask]]) -> None:
+        """添加任务并更新计数器
+        
+        Args:
+            task: 单个BotTask对象或BotTask列表
+        """
+        if isinstance(task, list):
+            # 如果是列表，则逐个添加任务
+            for t in task:
+                self.tasks.append(t)
+                self.status_counter[t.status.name.lower()] += 1
+        else:
+            # 如果是单个任务，直接添加
+            self.tasks.append(task)
+            self.status_counter[task.status.name.lower()] += 1
+
         # 添加任务后持久化
         await self._persist_to_api()
     

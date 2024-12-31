@@ -274,7 +274,7 @@ class IntentMind:
                     selected_cr = self._select_code_resource_handler(dialogue, code_details)
 
                     task = BotTask(
-                        type=TaskType.CODE_GENERATION,
+                        type=TaskType.RESOURCE_GENERATION,
                         priority=TaskPriority.HIGH,
                         description=f"生成代码文件: {resource['file_path']}",
                         parameters={
