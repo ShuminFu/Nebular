@@ -26,3 +26,24 @@ class ProcessingStatus(IntEnum):
     PROCESSING = 2
     COMPLETED = 3
     FAILED = 4
+
+
+# MIME类型配置
+MIME_TYPE_MAPPING = {
+    "text/plain": [".txt", ".log", ".ini", ".conf"],
+    "text/x-python": [".py"],
+    "text/javascript": [".js"],
+    "text/html": [".html", ".htm"],
+    "text/css": [".css"],
+    "application/json": [".json"],
+    "application/xml": [".xml"],
+    "text/markdown": [".md"],
+    "text/x-yaml": [".yml", ".yaml"]
+}
+
+# 扩展名到MIME类型的反向映射
+EXT_TO_MIME_TYPE = {
+    ext.lstrip('.'): mime_type
+    for mime_type, exts in MIME_TYPE_MAPPING.items()
+    for ext in exts
+}

@@ -3,7 +3,7 @@ from typing import Set
 
 from crewai import Agent, Task, Crew
 
-from Opera.core.dialogue.enums import DialogueType
+from Opera.core.dialogue.enums import DialogueType, EXT_TO_MIME_TYPE
 from Opera.core.dialogue.models import ProcessingDialogue, IntentAnalysis
 from ai_core.configs.config import llm
 from ai_core.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
@@ -259,19 +259,7 @@ class DialogueAnalyzer:
     def _get_mime_type(self, file_path: str) -> str:
         """根据文件路径获取MIME类型"""
         extension = file_path.lower().split('.')[-1]
-        mime_types = {
-            'py': 'text/x-python',
-            'js': 'text/javascript',
-            'html': 'text/html',
-            'css': 'text/css',
-            'json': 'application/json',
-            'xml': 'application/xml',
-            'yaml': 'text/x-yaml',
-            'yml': 'text/x-yaml',
-            'md': 'text/markdown',
-            'txt': 'text/plain'
-        }
-        return mime_types.get(extension, 'text/plain')
+        return EXT_TO_MIME_TYPE.get(extension, "text/plain")
 
     def analyze_context(self, dialogue: ProcessingDialogue, dialogue_pool: DialoguePool) -> Set[int]:
         """分析对话的上下文关联

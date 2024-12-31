@@ -37,18 +37,6 @@ class CodeMonkey:
     def __init__(self, task_queue: BotTaskQueue, logger):
         self.task_queue = task_queue
         self.log = logger
-        # 定义允许的MIME类型白名单
-        self.allowed_mime_types = {
-            "text/plain": [".txt", ".log", ".ini", ".conf"],
-            "text/x-python": [".py"],
-            "text/javascript": [".js"],
-            "text/html": [".html", ".htm"],
-            "text/css": [".css"],
-            "application/json": [".json"],
-            "application/xml": [".xml"],
-            "text/markdown": [".md"],
-            "text/x-yaml": [".yml", ".yaml"]
-        }
         # 定义文件大小限制(100MB)
         self.max_file_size = 100 * 1024 * 1024
 
@@ -99,17 +87,18 @@ class CodeMonkey:
         Raises:
             ValueError: 当MIME类型不合法时抛出异常
         """
+        from Opera.core.dialogue.enums import MIME_TYPE_MAPPING
         import os
 
         if not mime_type:
             raise ValueError("MIME类型不能为空")
 
-        if mime_type not in self.allowed_mime_types:
+        if mime_type not in MIME_TYPE_MAPPING:
             raise ValueError(f"不支持的MIME类型: {mime_type}")
 
         # 检查文件扩展名是否匹配
         _, ext = os.path.splitext(file_path)
-        if ext.lower() not in self.allowed_mime_types[mime_type]:
+        if ext.lower() not in MIME_TYPE_MAPPING[mime_type]:
             raise ValueError(f"文件扩展名与MIME类型不匹配: {ext} vs {mime_type}")
 
         return True
