@@ -162,6 +162,7 @@ class TestMultiResourceGeneration(AsyncTestCase):
             )
 
         # 验证每个任务的属性
+        first_dialogue_context = None
         for task in tasks:
             # 验证任务类型
             self.assertEqual(task.type, TaskType.RESOURCE_GENERATION)
@@ -185,6 +186,25 @@ class TestMultiResourceGeneration(AsyncTestCase):
             # 验证是否包含所有文件的信息
             resources = code_details.get("resources", [])
             self.assertGreaterEqual(len(resources), 3, "每个任务都应该包含至少3个文件的信息")
+
+            # 验证所有任务的对话上下文是否一致
+            dialogue_context = task.parameters.get("dialogue_context", {})
+            if first_dialogue_context is None:
+                first_dialogue_context = dialogue_context
+            else:
+                # 验证对话ID一致
+                self.assertEqual(
+                    dialogue_context.get("dialogue_id"),
+                    first_dialogue_context.get("dialogue_id"),
+                    "所有任务的对话ID应该一致"
+                )
+
+                # 验证其他上下文字段一致
+                self.assertEqual(
+                    set(dialogue_context.keys()),
+                    set(first_dialogue_context.keys()),
+                    "所有任务的对话上下文字段应该一致"
+                )
 
         # 返回生成的任务列表供其他测试使用
         return tasks
