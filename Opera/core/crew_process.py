@@ -109,10 +109,8 @@ class BaseCrewProcess(ABC):
             # 根据任务类型执行不同的处理逻辑
             if task.type == TaskType.CONVERSATION:
                 await self._handle_conversation_task(task)
-            elif task.type == TaskType.ACTION:
-                await self._handle_action_task(task)
-            elif task.type == TaskType.ANALYSIS:
-                await self._handle_analysis_task(task)
+            elif task.type == TaskType.RESOURCE_GENERATION:
+                await self._handle_generation_task(task)
             elif task.type == TaskType.CALLBACK:
                 await self._handle_task_callback(task)
         except Exception as e:
@@ -138,14 +136,10 @@ class BaseCrewProcess(ABC):
         pass
 
     @abstractmethod
-    async def _handle_action_task(self, task: BotTask):
-        """处理动作类型的任务"""
+    async def _handle_generation_task(self, task: BotTask):
+        """处理生成类型的任务"""
         pass
 
-    @abstractmethod
-    async def _handle_analysis_task(self, task: BotTask):
-        """处理分析类型的任务"""
-        pass
 
     async def _handle_task_callback(self, task: BotTask):
         """处理任务回调"""
@@ -227,7 +221,7 @@ class CrewManager(BaseCrewProcess):
         # 实现CrewManager特定的对话任务处理逻辑
         pass
 
-    async def _handle_action_task(self, task: BotTask):
+    async def _handle_generation_task(self, task: BotTask):
         """处理动作类型的任务"""
         # 实现CrewManager特定的动作任务处理逻辑
         pass
@@ -434,10 +428,81 @@ class CrewRunner(BaseCrewProcess):
             verbose=True
         )
 
-    async def _handle_action_task(self, task: BotTask):
-        """处理动作类型的任务"""
-        # 实现CrewRunner特定的动作任务处理逻辑
-        pass
+    async def _handle_generation_task(self, task: BotTask):
+        """处理代码生成类型的任务"""
+        try:
+            # 使用已配置的agents
+            if not self.crew or not self.crew.agents:
+                raise Exception("Crew或agents未正确配置")
+
+            # 创建代码生成任务
+            gen_task = Task(
+                description=f"""根据以下信息生成代码：
+                1. 文件路径：{task.parameters['file_path']}
+                2. 文件类型：{task.parameters['file_type']}
+                3. 需求描述：{task.parameters['dialogue_context']['text']}
+                4. 项目信息：
+                   - 类型：{task.parameters['code_details']['project_type']}
+                   - 描述：{task.parameters['code_details']['project_description']}
+                   - 框架：{task.parameters['code_details']['frameworks']}
+                5. 相关文件：{task.parameters['code_details']['resources']}
+                6. 引用关系：{task.parameters.get('references', [])}
+
+                请生成符合要求的代码内容。
+                """,
+                agent=self.crew.agents[0]  # 使用已配置的agent
+            )
+
+            # 执行生成
+            code_content = self.crew.kickoff(gen_task)
+
+            # 创建资源
+            resource_data = ResourceForCreation(
+                file_path=task.parameters['file_path'],
+                mime_type=task.parameters['mime_type'],
+                content=code_content,
+                description=task.parameters['description'],
+                references=task.parameters.get('references', [])
+            )
+
+            # 通过dialogue发送代码生成结果
+            dialogue_data = DialogueForCreation(
+                is_stage_index_null=False,
+                staff_id=str(task.response_staff_id),
+                is_narratage=False,
+                is_whisper=False,
+                text=code_content,
+                tags="code_creation,code_type_" + task.parameters['file_type'],
+                resource=resource_data
+            )
+
+            # 使用dialogue_api_tool发送对话
+            result = _SHARED_DIALOGUE_TOOL.run(
+                action="create",
+                opera_id=task.parameters['opera_id'],
+                data=dialogue_data
+            )
+
+            # 检查结果
+            status_code, response_data = ApiResponseParser.parse_response(result)
+            if status_code not in [200, 201, 204]:
+                raise Exception(f"发送代码生成对话失败: {result}")
+
+            # 更新任务状态和结果
+            task.result = {
+                "file_path": task.parameters['file_path'],
+                "dialogue_id": response_data.get("id") if response_data else None
+            }
+
+            # 发送任务完成回调
+            await self._handle_task_completion(task, json.dumps(task.result))
+
+        except Exception as e:
+            self.log.error(f"代码生成任务处理失败: {str(e)}")
+            task.error_message = str(e)
+            task.status = TaskStatus.FAILED
+            # 发送错误回调
+            await self._handle_task_completion(task, json.dumps({"error": str(e)}))
 
     async def _handle_analysis_task(self, task: BotTask):
         """处理分析类型的任务"""

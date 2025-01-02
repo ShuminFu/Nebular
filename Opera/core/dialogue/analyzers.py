@@ -148,7 +148,7 @@ class DialogueAnalyzer:
                         }}
                     ],
                     "requirements": ["需求1", "需求2"],
-                    "frameworks": ["框架1", "框架2"]
+                    "frameworks": ["react", "vue", "@popperjs/core", "normalize.css"]
                 }}
             }}
 

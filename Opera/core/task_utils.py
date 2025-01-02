@@ -33,7 +33,7 @@ class TaskType(IntEnum):
     CONTEXT_ANALYSIS = 22  # 上下文分析，比如需要额外的RAG BOT/SEARCH BOT的帮助来收集上下文
     
     # 执行类任务
-    ACTION = 30  # 基础动作
+    EXECUTION = 30  # 基础执行
     TOOL_EXECUTION = 31  # 工具调用
     API_CALL = 32  # API调用
     CALLBACK = 33  # 任务回调

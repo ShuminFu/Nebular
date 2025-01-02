@@ -7,16 +7,19 @@ CM received `raw message` -> into processing dialogue & ==code_creation== -> Bot
 import unittest
 from uuid import UUID
 from datetime import datetime, timezone
-from Opera.core.crew_process import CrewManager
+from Opera.core.crew_process import CrewManager, CrewRunner
 from Opera.core.task_utils import TaskType, TaskStatus, BotTask
+from Opera.core.api_response_parser import ApiResponseParser
 from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 from Opera.core.tests.test_task_utils import AsyncTestCase, TaskPriority
-from ai_core.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL
-from ai_core.tools.opera_api.resource_api_tool import Resource
+from ai_core.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL, Resource
+from ai_core.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
 import asyncio
 
 
 class TestResourceCreation(AsyncTestCase):
+    """测试资源创建/搬运功能，即由codemonkey对已经生成的资源文件进行opera上的resource创建。"""
+
     def setUp(self):
         """设置测试环境"""
         # 创建测试用的Bot IDs
@@ -312,7 +315,7 @@ def some_function():
 
     async def _test_code_generation_request(self):
         """测试代码生成请求的处理流程
-        
+
         测试场景：
         1. 用户请求生成一个Python脚本
         2. 系统识别这是代码生成请求
@@ -407,6 +410,206 @@ def some_function():
                         action="delete",
                         opera_id=str(self.test_opera_id),
                         resource_id=resource.id
+                    )
+        except Exception as e:
+            print(f"清理资源时出错: {e}")
+
+
+class TestResourceGeneration(AsyncTestCase):
+    """测试资源的生成任务，由CR执行并且发送tagged dialogue"""
+
+    def setUp(self):
+        """设置测试环境"""
+        # 创建测试用的Bot IDs
+        self.cr_bot_id = UUID('5b5857d6-4664-452e-a37c-80a628ca28a1')  # CR的Bot ID
+        self.test_opera_id = UUID('96028f82-9f76-4372-976c-f0c5a054db79')  # 测试用Opera ID
+        self.user_staff_id = UUID('c2a71833-4403-4d08-8ef6-23e6327832b2')  # 用户的Staff ID
+        self.cr_staff_id = UUID('ab01d4f7-bbf1-44aa-a55b-cbc7d62fbfbc')  # CR的Staff ID
+
+        # 创建测试用的agent配置
+        self.test_config = {
+            'agents': [
+                {
+                    'name': '代码生成专家',
+                    'role': '专业程序员',
+                    'goal': '生成高质量的代码文件',
+                    'backstory': '你是一个专业的程序员，专注于生成高质量的代码。你需要理解项目的上下文，并生成符合要求的代码。',
+                    'tools': []
+                }
+            ],
+            'process': 'sequential'
+        }
+
+        # 创建CrewRunner实例
+        self.crew_runner = CrewRunner(config=self.test_config, bot_id=self.cr_bot_id)
+        self.crew_runner.bot_id = self.cr_bot_id
+
+        # 设置通用的测试时间
+        self.test_time = datetime.now(timezone.utc).isoformat()
+
+        # 初始化CrewRunner
+        self.run_async(self._init_crew_runner())
+
+    async def _init_crew_runner(self):
+        """初始化CrewRunner，但不进入主循环"""
+        original_is_running = self.crew_runner.is_running
+        self.crew_runner.is_running = False
+        try:
+            await self.crew_runner.run()
+        finally:
+            self.crew_runner.is_running = original_is_running
+
+    def test_code_generation_task(self):
+        """测试代码生成任务的处理"""
+        self.run_async(self._test_code_generation_task())
+
+    async def _test_code_generation_task(self):
+        # 创建一个代码生成任务
+        task = BotTask(
+            id=UUID('93c9e569-e529-4644-947b-b98c16d4d7a4'),
+            type=TaskType.RESOURCE_GENERATION,
+            status=TaskStatus.PENDING,
+            priority=TaskPriority.HIGH,
+            description='生成代码文件: src/js/product-modal.js',
+            parameters={
+                'file_path': 'src/js/product-modal.js',
+                'file_type': 'javascript',
+                'mime_type': 'text/javascript',
+                'description': 'JavaScript file for displaying product details in a modal',
+                'references': [],
+                'code_details': {
+                    'project_type': 'web',
+                    'project_description': 'A responsive product showcase webpage with grid layout and filtering capability.',
+                    'requirements': [
+                        'Responsive grid layout for products',
+                        'Product filtering capability',
+                        'Product detail view in a modal'
+                    ],
+                    'frameworks': ['normalize.css', '@popperjs/core'],
+                    'resources': [
+                        {
+                            'file_path': 'src/html/index.html',
+                            'type': 'html',
+                            'mime_type': 'text/html',
+                            'description': 'Main page with responsive grid layout for product showcase',
+                            'references': [
+                                'src/css/main.css',
+                                'src/css/product-card.css',
+                                'src/js/main.js',
+                                'src/js/product-modal.js'
+                            ]
+                        }
+                    ]
+                },
+                'dialogue_context': {
+                    'text': '请创建一个响应式的产品展示页面，包含产品详情模态框功能',
+                    'type': 'CODE_RESOURCE'
+                },
+                'opera_id': str(self.test_opera_id)
+            },
+            source_staff_id=self.user_staff_id,
+            response_staff_id=self.cr_staff_id
+        )
+
+        # 将任务添加到队列中
+        await self.crew_runner.task_queue.add_task(task)
+
+        # 执行代码生成
+        await self.crew_runner._handle_generation_task(task)
+
+        # 从任务队列中获取更新后的任务
+        updated_task = next(t for t in self.crew_runner.task_queue.tasks if t.id == task.id)
+
+        # 验证任务状态
+        self.assertEqual(updated_task.status, TaskStatus.COMPLETED)
+        self.assertIsNotNone(updated_task.result)
+        self.assertIsNotNone(updated_task.result.get("file_path"))
+        self.assertIsNotNone(updated_task.result.get("dialogue_id"))
+
+        # 验证生成的代码是否已通过dialogue发送
+        dialogue_result = _SHARED_DIALOGUE_TOOL.run(
+            action="get",
+            opera_id=str(self.test_opera_id),
+            dialogue_id=UUID(updated_task.result["dialogue_id"])
+        )
+        status_code, dialogue_data = ApiResponseParser.parse_response(dialogue_result)
+
+        # 验证对话消息
+        self.assertEqual(status_code, 200)
+        self.assertIsNotNone(dialogue_data)
+        self.assertEqual(dialogue_data["staffId"], str(task.response_staff_id))
+        self.assertIn("code_creation", dialogue_data["tags"])
+        self.assertIn("code_type_javascript", dialogue_data["tags"])
+
+        # 验证生成的代码内容
+        self.assertIsNotNone(dialogue_data.get("resource"))
+        self.assertEqual(dialogue_data["resource"]["filePath"], task.parameters["file_path"])
+        self.assertEqual(dialogue_data["resource"]["mimeType"], task.parameters["mime_type"])
+
+    def test_code_generation_error_handling(self):
+        """测试代码生成过程中的错误处理"""
+        self.run_async(self._test_code_generation_error_handling())
+
+    async def _test_code_generation_error_handling(self):
+        # 创建一个缺少必要参数的任务
+        task = BotTask(
+            id=UUID('93c9e569-e529-4644-947b-b98c16d4d7a5'),
+            type=TaskType.RESOURCE_GENERATION,
+            status=TaskStatus.PENDING,
+            priority=TaskPriority.HIGH,
+            description='生成代码文件: test.js',
+            parameters={
+                'file_path': 'test.js',
+                # 缺少其他必要参数
+                'opera_id': str(self.test_opera_id)
+            },
+            source_staff_id=self.user_staff_id,
+            response_staff_id=self.cr_staff_id
+        )
+
+        # 将任务添加到队列中
+        await self.crew_runner.task_queue.add_task(task)
+
+        # 执行代码生成
+        await self.crew_runner._handle_generation_task(task)
+
+        # 从任务队列中获取更新后的任务
+        updated_task = next(t for t in self.crew_runner.task_queue.tasks if t.id == task.id)
+
+        # 验证任务状态和错误信息
+        self.assertEqual(updated_task.status, TaskStatus.FAILED)
+        self.assertIsNotNone(updated_task.error_message)
+
+    def tearDown(self):
+        """清理测试环境"""
+        self.run_async(self._tearDown())
+
+    async def _tearDown(self):
+        # 清理任务队列
+        self.crew_runner.task_queue.tasks.clear()
+
+        # 清理测试过程中创建的对话
+        if self.crew_runner.client:
+            await self.crew_runner.client.disconnect()
+
+        # 清理生成的资源和对话
+        try:
+            # 获取测试期间创建的对话
+            dialogues = _SHARED_DIALOGUE_TOOL.run(
+                action="get_filtered",
+                opera_id=str(self.test_opera_id),
+                data={
+                    "tags": ["code_creation"]
+                }
+            )
+
+            # 删除测试创建的对话
+            if dialogues:
+                for dialogue in dialogues:
+                    _SHARED_DIALOGUE_TOOL.run(
+                        action="delete",
+                        opera_id=str(self.test_opera_id),
+                        dialogue_id=dialogue.id
                     )
         except Exception as e:
             print(f"清理资源时出错: {e}")
