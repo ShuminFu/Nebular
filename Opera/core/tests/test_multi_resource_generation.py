@@ -1,11 +1,13 @@
 import unittest
 from uuid import UUID
 from datetime import datetime, timezone
-from Opera.core.crew_process import CrewManager
+from Opera.core.crew_process import CrewManager, CrewRunner
 from Opera.core.task_utils import TaskType, TaskStatus, TaskPriority, BotTask
 from Opera.signalr_client.opera_signalr_client import MessageReceivedArgs
 from Opera.core.tests.test_task_utils import AsyncTestCase
+from Opera.core.api_response_parser import ApiResponseParser
 from ai_core.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL, Resource
+from ai_core.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
 import asyncio
 
 
@@ -78,20 +80,20 @@ class TestMultiResourceGeneration(AsyncTestCase):
             stage_index=1
         )
 
-    def test_multiple_file_generation(self):
-        """测试多文件生成功能"""
-        self.run_async(self._test_multiple_file_generation())
+    def test_multiple_file_generation_request(self):
+        """测试通过对话请求多文件生成功能"""
+        self.run_async(self._test_multiple_file_generation_request())
 
-    def test_parallel_task_processing(self):
-        """测试并行处理多个任务"""
-        self.run_async(self._test_parallel_task_processing())
+    def test_parallel_task_generation(self):
+        """测试并行处理多个资源生成任务"""
+        self.run_async(self._test_parallel_task_generation())
 
     def test_task_error_handling(self):
         """测试任务错误处理"""
         self.run_async(self._test_task_error_handling())
 
-    async def _test_multiple_file_generation(self):
-        """测试多文件生成功能的具体实现"""
+    async def _test_multiple_file_generation_request(self):
+        """测试通过对话请求多文件生成功能的具体实现"""
         # 创建测试消息
         message = self.create_test_message(
             """请创建一个响应式的产品展示页面，包含以下功能：
@@ -209,40 +211,145 @@ class TestMultiResourceGeneration(AsyncTestCase):
         # 返回生成的任务列表供其他测试使用
         return tasks
 
-    async def _test_parallel_task_processing(self):
-        """测试并行处理多个资源创建任务"""
-        # 复用_test_multiple_file_generation生成的任务
-        tasks = await self._test_multiple_file_generation()
+    async def _test_parallel_task_generation(self):
+        """测试并行处理多个资源生成任务
+        
+        工作流程：
+        1. CM接收用户请求 -> 创建resource generation tasks
+        2. CR处理这些generation tasks -> 通过dialogue发送生成的代码
+        3. CM接收到CODE_RESOURCE消息 -> 创建code creation tasks
+        4. CM处理code creation tasks -> 创建最终的资源
+        """
+        # 复用_test_multiple_file_generation_request生成的generation tasks
+        generation_tasks = await self._test_multiple_file_generation_request()
 
-        # 并行处理所有任务
+        # 创建CR实例来处理generation tasks
+        cr_bot_id = UUID('894c1763-22b2-418c-9a18-3c40b88d28bc')
+        cr_staff_id = UUID('06ec00fc-9546-40b0-b180-b482ba0e0e27')
+
+        # 创建测试用的agent配置
+        test_config = {
+            'agents': [
+                {
+                    'name': '前端架构专家',
+                    'role': '资深前端工程师',
+                    'goal': '设计和实现高质量的前端代码，确保代码的可维护性和性能',
+                    'backstory': '''你是一个经验丰富的前端架构师，擅长：
+                    1. 响应式布局设计和实现
+                    2. 组件化开发和模块化设计
+                    3. 性能优化和最佳实践
+                    4. 主流前端框架和工具的使用
+                    5. 代码质量和架构设计''',
+                    'tools': []
+                }
+            ],
+            'process': 'sequential',
+            'verbose': True
+        }
+
+        crew_runner = CrewRunner(config=test_config, bot_id=cr_bot_id)
+
+        # 初始化CrewRunner
+        original_is_running = crew_runner.is_running
+        crew_runner.is_running = False
+        try:
+            await crew_runner.run()
+        finally:
+            crew_runner.is_running = original_is_running
+
+        # 记录开始时间
         start_time = asyncio.get_event_loop().time()
-        await asyncio.gather(
-            *[self.crew_manager.resource_handler.handle_resource_creation(task) for task in tasks]
+
+        # CR并行处理所有generation tasks
+        generation_results = await asyncio.gather(
+            *[crew_runner._handle_generation_task(task) for task in generation_tasks]
         )
+
+        # 验证CR的处理结果
+        for task in generation_tasks:
+            # 从任务队列中获取更新后的任务
+            updated_task = next(t for t in crew_runner.task_queue.tasks if t.id == task.id)
+
+            # 验证任务状态
+            self.assertEqual(updated_task.status, TaskStatus.COMPLETED)
+            self.assertIsNotNone(updated_task.result)
+            self.assertIsNotNone(updated_task.result.get("text"))
+            self.assertIsNotNone(updated_task.result.get("dialogue_id"))
+
+            # 验证生成的代码是否已通过dialogue发送
+            dialogue_result = await asyncio.to_thread(
+                _SHARED_DIALOGUE_TOOL.run,
+                action="get",
+                opera_id=str(self.test_opera_id),
+                dialogue_index=updated_task.result["dialogue_id"]
+            )
+            status_code, dialogue_data = ApiResponseParser.parse_response(dialogue_result)
+
+            # 验证对话消息
+            self.assertEqual(status_code, 200)
+            self.assertIsNotNone(dialogue_data)
+            self.assertEqual(dialogue_data["staffId"], str(cr_staff_id))
+            self.assertIn("CODE_RESOURCE", dialogue_data["tags"])
+
+            # 模拟CM接收到CODE_RESOURCE消息
+            message = MessageReceivedArgs(
+                index=dialogue_data["index"],
+                text=dialogue_data["text"],
+                tags=dialogue_data["tags"],
+                sender_staff_id=cr_staff_id,
+                opera_id=self.test_opera_id,
+                is_whisper=False,
+                is_narratage=False,
+                mentioned_staff_ids=None,
+                receiver_staff_ids=[self.cm_staff_id],
+                time=self.test_time,
+                stage_index=1
+            )
+
+            # CM处理CODE_RESOURCE消息，创建code creation task
+            await self.crew_manager._handle_message(message)
+
+        # 获取所有creation tasks
+        creation_tasks = []
+        while True:
+            task = self.crew_manager.task_queue.get_next_task()
+            if not task:
+                break
+            if task.type == TaskType.RESOURCE_CREATION:
+                creation_tasks.append(task)
+                # 更新任务状态为RUNNING
+                await self.crew_manager.task_queue.update_task_status(task.id, TaskStatus.RUNNING)
+
+        # CM并行处理所有creation tasks
+        await asyncio.gather(
+            *[self.crew_manager.resource_handler.handle_resource_creation(task) for task in creation_tasks]
+        )
+
         end_time = asyncio.get_event_loop().time()
 
-        # 验证总处理时间
-        processing_time = end_time - start_time
-        # self.assertLess(
-        #     processing_time,
-        #     2.0,  # 考虑到多个文件的API调用开销，设置为2秒
-        #     "并行处理的总时间应该在合理范围内"
-        # )
+        # 验证所有creation tasks的结果
+        for task in creation_tasks:
+            # 从任务队列中获取更新后的任务
+            updated_task = next(t for t in self.crew_manager.task_queue.tasks if t.id == task.id)
 
-        # 验证所有任务是否都完成了
-        for task in tasks:
-            self.assertEqual(task.status, TaskStatus.COMPLETED)
-            self.assertIsNotNone(task.result.get("resource_id"))
+            # 验证任务状态
+            self.assertEqual(updated_task.status, TaskStatus.COMPLETED)
+            self.assertIsNotNone(updated_task.result.get("resource_id"))
 
             # 验证资源是否存在
             resource_result = await asyncio.to_thread(
                 _SHARED_RESOURCE_TOOL.run,
                 action="get",
                 opera_id=str(self.test_opera_id),
-                resource_id=UUID(task.result["resource_id"])
+                resource_id=UUID(updated_task.result["resource_id"])
             )
             self.assertIsInstance(resource_result, Resource)
             self.assertEqual(resource_result.name, task.parameters["file_path"])
+
+        # 清理CR实例
+        if crew_runner.client:
+            await crew_runner.client.disconnect()
+        crew_runner.task_queue.tasks.clear()
 
     async def _test_task_error_handling(self):
         """测试任务错误处理的具体实现"""
