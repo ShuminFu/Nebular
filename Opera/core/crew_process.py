@@ -140,7 +140,6 @@ class BaseCrewProcess(ABC):
         """处理生成类型的任务"""
         pass
 
-
     async def _handle_task_callback(self, task: BotTask):
         """处理任务回调"""
         pass
@@ -447,23 +446,27 @@ class CrewRunner(BaseCrewProcess):
                    - 框架：{task.parameters['code_details']['frameworks']}
                 5. 相关文件：{task.parameters['code_details']['resources']}
                 6. 引用关系：{task.parameters.get('references', [])}
-
-                请生成符合要求的代码内容。
                 """,
-                agent=self.crew.agents[0]  # 使用已配置的agent
+                agent=self.crew.agents[0],  # 使用已配置的agent
+                expected_output=f"""
+                @file: {task.parameters['file_path']}
+                @description: [简要描述文件的主要功能和用途]
+                @tags: [相关标签，如framework_xxx,feature_xxx等，用逗号分隔]
+                @version: 1.0.0
+                @version_id: [UUID格式的版本ID]
+                ---
+                [完整的代码实现，包含：
+                1. 必要的导入语句
+                2. 类型定义（如果需要）
+                3. 主要功能实现
+                4. 错误处理
+                5. 导出语句（如果需要）]"""
             )
 
             # 执行生成
-            code_content = self.crew.kickoff(gen_task)
-
-            # 创建资源
-            resource_data = ResourceForCreation(
-                file_path=task.parameters['file_path'],
-                mime_type=task.parameters['mime_type'],
-                content=code_content,
-                description=task.parameters['description'],
-                references=task.parameters.get('references', [])
-            )
+            self.crew.tasks = [gen_task]
+            result = self.crew.kickoff()
+            code_content = result.raw if hasattr(result, 'raw') else str(result)
 
             # 通过dialogue发送代码生成结果
             dialogue_data = DialogueForCreation(
@@ -472,8 +475,8 @@ class CrewRunner(BaseCrewProcess):
                 is_narratage=False,
                 is_whisper=False,
                 text=code_content,
-                tags="code_creation,code_type_" + task.parameters['file_type'],
-                resource=resource_data
+                tags="CODE_RESOURCE",
+                # mentioned_staff_ids=[str(task.source_staff_id)]
             )
 
             # 使用dialogue_api_tool发送对话
@@ -489,20 +492,33 @@ class CrewRunner(BaseCrewProcess):
                 raise Exception(f"发送代码生成对话失败: {result}")
 
             # 更新任务状态和结果
+            task.status = TaskStatus.COMPLETED
             task.result = {
-                "file_path": task.parameters['file_path'],
-                "dialogue_id": response_data.get("id") if response_data else None
+                "dialogue_id": response_data["index"],
+                "status": "success",
+                "text": response_data["text"]
             }
 
             # 发送任务完成回调
-            await self._handle_task_completion(task, json.dumps(task.result))
+            callback_result = {
+                "callback_task_id": str(task.id),
+                "result": task.result
+            }
+            await self._handle_task_completion(task, json.dumps(callback_result))
 
         except Exception as e:
             self.log.error(f"代码生成任务处理失败: {str(e)}")
             task.error_message = str(e)
             task.status = TaskStatus.FAILED
             # 发送错误回调
-            await self._handle_task_completion(task, json.dumps({"error": str(e)}))
+            callback_result = {
+                "callback_task_id": str(task.id),
+                "result": {
+                    "status": "failed",
+                    "error": str(e)
+                }
+            }
+            await self._handle_task_completion(task, json.dumps(callback_result))
 
     async def _handle_analysis_task(self, task: BotTask):
         """处理分析类型的任务"""

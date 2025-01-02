@@ -421,28 +421,59 @@ class TestResourceGeneration(AsyncTestCase):
     def setUp(self):
         """设置测试环境"""
         # 创建测试用的Bot IDs
-        self.cr_bot_id = UUID('5b5857d6-4664-452e-a37c-80a628ca28a1')  # CR的Bot ID
+        self.cr_bot_id = UUID('894c1763-22b2-418c-9a18-3c40b88d28bc')  # CR的Bot ID
         self.test_opera_id = UUID('96028f82-9f76-4372-976c-f0c5a054db79')  # 测试用Opera ID
-        self.user_staff_id = UUID('c2a71833-4403-4d08-8ef6-23e6327832b2')  # 用户的Staff ID
-        self.cr_staff_id = UUID('ab01d4f7-bbf1-44aa-a55b-cbc7d62fbfbc')  # CR的Staff ID
+        self.user_staff_id = UUID('ab01d4f7-bbf1-44aa-a55b-cbc7d62fbfbc')  # 用户的Staff ID
+        self.cr_staff_id = UUID('06ec00fc-9546-40b0-b180-b482ba0e0e27')  # CR的Staff ID
 
         # 创建测试用的agent配置
         self.test_config = {
             'agents': [
                 {
-                    'name': '代码生成专家',
-                    'role': '专业程序员',
-                    'goal': '生成高质量的代码文件',
-                    'backstory': '你是一个专业的程序员，专注于生成高质量的代码。你需要理解项目的上下文，并生成符合要求的代码。',
+                    'name': '前端架构专家',
+                    'role': '资深前端工程师',
+                    'goal': '设计和实现高质量的前端代码，确保代码的可维护性和性能',
+                    'backstory': '''你是一个经验丰富的前端架构师，擅长：
+                    1. 响应式布局设计和实现
+                    2. 组件化开发和模块化设计
+                    3. 性能优化和最佳实践
+                    4. 主流前端框架和工具的使用
+                    5. 代码质量和架构设计
+                    
+                    你需要：
+                    1. 理解整个项目的结构和依赖关系
+                    2. 确保生成的代码符合现代前端开发标准
+                    3. 正确处理文件间的引用关系
+                    4. 实现响应式和交互功能
+                    5. 遵循代码最佳实践''',
+                    'tools': []
+                },
+                {
+                    'name': 'UI交互专家',
+                    'role': 'UI/UX工程师',
+                    'goal': '实现流畅的用户交互和优秀的用户体验',
+                    'backstory': '''你是一个专注于用户体验的UI工程师，擅长：
+                    1. 交互设计和实现
+                    2. 动画效果开发
+                    3. 用户体验优化
+                    4. 无障碍设计
+                    5. 响应式UI组件开发
+                    
+                    你需要：
+                    1. 设计流畅的交互体验
+                    2. 实现符合直觉的用户界面
+                    3. 确保跨设备的一致性
+                    4. 优化加载和响应速度
+                    5. 处理各种边界情况''',
                     'tools': []
                 }
             ],
-            'process': 'sequential'
+            'process': 'sequential',  # 使用协作模式，决定是否让多个专家共同完成任务
+            'verbose': True
         }
 
         # 创建CrewRunner实例
         self.crew_runner = CrewRunner(config=self.test_config, bot_id=self.cr_bot_id)
-        self.crew_runner.bot_id = self.cr_bot_id
 
         # 设置通用的测试时间
         self.test_time = datetime.now(timezone.utc).isoformat()
@@ -523,14 +554,14 @@ class TestResourceGeneration(AsyncTestCase):
         # 验证任务状态
         self.assertEqual(updated_task.status, TaskStatus.COMPLETED)
         self.assertIsNotNone(updated_task.result)
-        self.assertIsNotNone(updated_task.result.get("file_path"))
+        self.assertIsNotNone(updated_task.result.get("text"))
         self.assertIsNotNone(updated_task.result.get("dialogue_id"))
 
         # 验证生成的代码是否已通过dialogue发送
         dialogue_result = _SHARED_DIALOGUE_TOOL.run(
             action="get",
             opera_id=str(self.test_opera_id),
-            dialogue_id=UUID(updated_task.result["dialogue_id"])
+            dialogue_index=updated_task.result["dialogue_id"]
         )
         status_code, dialogue_data = ApiResponseParser.parse_response(dialogue_result)
 
@@ -538,13 +569,7 @@ class TestResourceGeneration(AsyncTestCase):
         self.assertEqual(status_code, 200)
         self.assertIsNotNone(dialogue_data)
         self.assertEqual(dialogue_data["staffId"], str(task.response_staff_id))
-        self.assertIn("code_creation", dialogue_data["tags"])
-        self.assertIn("code_type_javascript", dialogue_data["tags"])
-
-        # 验证生成的代码内容
-        self.assertIsNotNone(dialogue_data.get("resource"))
-        self.assertEqual(dialogue_data["resource"]["filePath"], task.parameters["file_path"])
-        self.assertEqual(dialogue_data["resource"]["mimeType"], task.parameters["mime_type"])
+        self.assertIn("CODE_RESOURCE", dialogue_data["tags"])
 
     def test_code_generation_error_handling(self):
         """测试代码生成过程中的错误处理"""
