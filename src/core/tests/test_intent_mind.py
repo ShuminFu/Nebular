@@ -3,9 +3,9 @@ import asyncio
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
 
-from src.nebular_core.intent_mind import IntentMind
-from src.nebular_core.task_utils import BotTaskQueue
-from src.opera_service.signalr_client import MessageReceivedArgs
+from src.core.intent_mind import IntentMind
+from src.core.task_utils import BotTaskQueue
+from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
 
 
 async def main():

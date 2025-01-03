@@ -1,5 +1,5 @@
 from crewai import Agent, Task, Crew, LLM
-from src.crewai_core.tools.opera_api.bot_api_tool import BotTool
+from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
 
 llm_oneapi = LLM(
     model="gpt-4o",

@@ -4,7 +4,7 @@ from crewai import LLM, Agent, Crew, Task
 from dotenv import load_dotenv
 from pathlib import Path
 
-from src.crewai_core.tools.opera_api.bot_api_tool import BotTool
+from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
 
 env_path = Path(__file__).parent / '.env'
 load_dotenv(env_path)

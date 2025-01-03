@@ -3,7 +3,7 @@
 from typing import Optional, Type, ClassVar
 from uuid import UUID
 from pydantic import BaseModel, Field
-from src.crewai_core.tools.opera_api.base_api_tool import BaseApiTool
+from src.crewai_ext.tools.opera_api.base_api_tool import BaseApiTool
 
 
 class TempFileToolSchema(BaseModel):

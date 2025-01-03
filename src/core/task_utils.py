@@ -5,9 +5,9 @@ from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, timezone, timedelta
 from uuid import UUID, uuid4
 from enum import IntEnum
-from src.opera_service.FastAPI.models import BotForUpdate, CamelBaseModel
-from src.crewai_core.tools.opera_api.bot_api_tool import _SHARED_BOT_TOOL
-from src.nebular_core.api_response_parser import ApiResponseParser
+from src.opera_service.api.models import BotForUpdate, CamelBaseModel
+from src.crewai_ext.tools.opera_api.bot_api_tool import _SHARED_BOT_TOOL
+from src.core.api_response_parser import ApiResponseParser
 import json
 
 

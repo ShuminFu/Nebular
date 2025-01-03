@@ -1,8 +1,8 @@
 """Dialogue API工具使用示例，展示了如何使用DialogueTool进行对话的创建和查询等操作。"""
 
 from crewai import Agent, Task, Crew
-from src.crewai_core.tools.opera_api.dialogue_api_tool import DialogueTool
-from src.crewai_core.configs.config import llm
+from src.crewai_ext.tools.opera_api.dialogue_api_tool import DialogueTool
+from src.crewai_ext.configs.config import llm
 
 
 # 创建Dialogue管理工具

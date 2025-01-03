@@ -3,7 +3,7 @@
 from typing import Type, Optional, Dict, Any, Union
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, ValidationError
-from src.opera_service.FastAPI.models import (
+from src.opera_service.api.models import (
     StaffInvitationForCreation,
     StaffInvitationForAcceptance
 )

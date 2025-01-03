@@ -2,7 +2,7 @@
 from fastapi import APIRouter
 from typing import Optional
 from uuid import UUID
-from src.opera_service.FastAPI.models import OperaProperty, OperaPropertyForUpdate
+from src.opera_service.api.models import OperaProperty, OperaPropertyForUpdate
 
 router = APIRouter(
     prefix="/src/{opera_id}/Property",

@@ -1,10 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from src.opera_service.FastAPI.routers import (
+from src.opera_service.api.routers import (
     opera, resource,
     stage
 )
-from src.opera_service.FastAPI.routers import bot, temp_file, dialogue, opera_property, invitation, staff
+from src.opera_service.api.routers import bot, temp_file, dialogue, opera_property, invitation, staff
 
 app = FastAPI(
     title="src API",

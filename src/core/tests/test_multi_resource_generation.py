@@ -1,13 +1,13 @@
 import unittest
 from uuid import UUID
 from datetime import datetime, timezone
-from src.nebular_core.crew_process import CrewManager, CrewRunner
-from src.nebular_core.task_utils import TaskType, TaskStatus, TaskPriority
-from src.opera_service.signalr_client import MessageReceivedArgs
-from src.nebular_core.tests.test_task_utils import AsyncTestCase
-from src.nebular_core.api_response_parser import ApiResponseParser
-from src.crewai_core.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL, Resource
-from src.crewai_core.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
+from src.core.crew_process import CrewManager, CrewRunner
+from src.core.task_utils import TaskType, TaskStatus, TaskPriority
+from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
+from src.core.tests.test_task_utils import AsyncTestCase
+from src.core.api_response_parser import ApiResponseParser
+from src.crewai_ext.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL, Resource
+from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
 import asyncio
 
 
@@ -182,7 +182,7 @@ class TestMultiResourceGeneration(AsyncTestCase):
             # 验证项目级别的上下文
             code_details = task.parameters.get("code_details", {})
             self.assertEqual(code_details.get("project_type"), "web")
-            self.assertIn("@popperjs/nebular_core", code_details.get("frameworks", []))
+            self.assertIn("@popperjs/core", code_details.get("frameworks", []))
             self.assertIn("normalize.css", code_details.get("frameworks", []))
 
             # 验证是否包含所有文件的信息

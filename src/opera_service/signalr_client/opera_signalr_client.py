@@ -13,8 +13,8 @@ from dataclasses import dataclass
 
 from pysignalr.client import SignalRClient
 from pysignalr.messages import CompletionMessage
-from src.nebular_core.logger_config import get_logger, get_logger_with_trace_id
-from src.crewai_core.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
+from src.core.logger_config import get_logger, get_logger_with_trace_id
+from src.crewai_ext.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
 
 # 获取logger实例
 logger = get_logger(__name__, log_file="logs/opera_signalr.log")

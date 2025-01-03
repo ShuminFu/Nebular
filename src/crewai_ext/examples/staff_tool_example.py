@@ -1,8 +1,8 @@
 """Staff API工具使用示例，展示了如何使用StaffTool进行Staff的创建、查询、更新等操作。"""
 
 from crewai import Agent, Task, Crew
-from src.crewai_core.tools.opera_api.staff_api_tool import StaffTool
-from src.crewai_core.configs.config import llm
+from src.crewai_ext.tools.opera_api.staff_api_tool import StaffTool
+from src.crewai_ext.configs.config import llm
 
 
 # 创建Staff管理工具

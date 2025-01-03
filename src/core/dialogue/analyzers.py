@@ -3,11 +3,11 @@ from typing import Set
 
 from crewai import Agent, Task, Crew
 
-from src.nebular_core.dialogue.enums import DialogueType, EXT_TO_MIME_TYPE
-from src.nebular_core.dialogue.models import ProcessingDialogue, IntentAnalysis
-from src.crewai_core.configs import llm
-from src.crewai_core.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
-from src.nebular_core.dialogue.pools import DialoguePool
+from src.core.dialogue.enums import DialogueType, EXT_TO_MIME_TYPE
+from src.core.dialogue.models import ProcessingDialogue, IntentAnalysis
+from src.crewai_ext.configs.config import llm
+from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
+from src.core.dialogue.pools import DialoguePool
 
 class DialogueAnalyzer:
     """对话分析器

@@ -1,11 +1,12 @@
 import ast
+import json
 from typing import List, Dict, Any, TYPE_CHECKING
 
 
 
 if TYPE_CHECKING:
-    from src.nebular_core.dialogue.models import ProcessingDialogue
-    from src.nebular_core.task_utils import BotTaskQueue
+    from src.core.dialogue.models import ProcessingDialogue
+    from src.core.task_utils import BotTaskQueue
 
 
 class ApiResponseParser:
@@ -61,8 +62,20 @@ class ApiResponseParser:
         Returns:
             dict: 解析后的defaultTags字典
         """
-        default_tags = ast.literal_eval(bot_data.get("defaultTags", "{}"))
-        return default_tags
+        default_tags_str = bot_data.get("defaultTags", "{}")
+        if isinstance(default_tags_str, dict):
+            return default_tags_str
+
+        try:
+            # 首先尝试使用ast.literal_eval
+            return ast.literal_eval(default_tags_str)
+        except (ValueError, SyntaxError):
+            try:
+                # 如果ast.literal_eval失败，尝试使用json.loads
+                return json.loads(default_tags_str)
+            except json.JSONDecodeError:
+                # 如果两种方法都失败，返回空字典
+                return {}
 
     @staticmethod
     def parse_parameters(bot_data: dict) -> dict:
@@ -99,7 +112,7 @@ class ApiResponseParser:
         Returns:
             BotTaskQueue: 任务队列
         """
-        from src.nebular_core.task_utils import BotTaskQueue
+        from src.core.task_utils import BotTaskQueue
         return default_tags.get("TaskQueue", BotTaskQueue())
 
     @staticmethod
@@ -112,5 +125,5 @@ class ApiResponseParser:
         Returns:
             list: 正在处理的对话列表
         """
-        from src.nebular_core.dialogue.models import ProcessingDialogue
+        from src.core.dialogue.models import ProcessingDialogue
         return parameters.get("ProcessingDialogues", [])

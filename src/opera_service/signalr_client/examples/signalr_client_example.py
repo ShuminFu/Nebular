@@ -1,7 +1,7 @@
 import asyncio
 from uuid import UUID
 from contextlib import suppress
-from src.opera_core.signalr_client.opera_signalr_client import OperaSignalRClient
+from src.opera_service.signalr_client.opera_signalr_client import OperaSignalRClient
 
 BOT_ID = "4a4857d6-4664-452e-a37c-80a628ca28a0"
 

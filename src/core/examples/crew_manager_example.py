@@ -1,11 +1,11 @@
 import asyncio
 import multiprocessing
 from uuid import UUID
-from src.nebular_core.logger_config import get_logger, get_logger_with_trace_id
-from src.crewai_core.tools.opera_api.bot_api_tool import BotTool
-from src.nebular_core.crew_process import CrewManager, CrewRunner
-from src.nebular_core.api_response_parser import ApiResponseParser
-import backoff  # 需要添加到requirements.txt
+from src.core.logger_config import get_logger, get_logger_with_trace_id
+from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
+from src.core.crew_process import CrewManager, CrewRunner
+from src.core.api_response_parser import ApiResponseParser
+import backoff
 
 # 获取logger实例
 logger = get_logger(__name__, log_file="logs/crew_manager.log")

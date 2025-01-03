@@ -4,11 +4,11 @@ from datetime import datetime, timezone, timedelta
 import json
 import asyncio
 
-from src.nebular_core.dialogue.pools import DialoguePool
-from src.nebular_core.dialogue.models import DialogueContext, IntentAnalysis, ProcessingDialogue
-from src.nebular_core.dialogue.enums import DialoguePriority, DialogueType, ProcessingStatus
-from src.crewai_core.tools.opera_api.staff_api_tool import _SHARED_STAFF_TOOL
-from src.nebular_core.api_response_parser import ApiResponseParser
+from src.core.dialogue.pools import DialoguePool
+from src.core.dialogue.models import DialogueContext, IntentAnalysis, ProcessingDialogue
+from src.core.dialogue.enums import DialoguePriority, DialogueType, ProcessingStatus
+from src.crewai_ext.tools.opera_api.staff_api_tool import _SHARED_STAFF_TOOL
+from src.core.api_response_parser import ApiResponseParser
 
 
 class TestProcessingDialogue(unittest.TestCase):

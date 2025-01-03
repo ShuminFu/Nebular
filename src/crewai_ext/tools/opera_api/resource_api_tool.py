@@ -4,8 +4,8 @@ from typing import Type, Optional, Dict, Any, Union
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, ValidationError
-from src.opera_service.FastAPI.models import Resource, ResourceForCreation, ResourceForUpdate, ResourceForFilter
-from src.crewai_core.tools.opera_api.base_api_tool import BaseApiTool
+from src.opera_service.api.models import Resource, ResourceForCreation, ResourceForUpdate, ResourceForFilter
+from src.crewai_ext.tools.opera_api.base_api_tool import BaseApiTool
 
 
 class ResourceToolSchema(BaseModel):

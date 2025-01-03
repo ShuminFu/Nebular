@@ -1,4 +1,5 @@
 # pylint: skip-file
+from src.crewai_ext.configs.config import llm
 from crewai import Agent, Crew, Task
 
 # Uncomment the following line to use an example of a custom tool
@@ -14,7 +15,6 @@ llm_oneapi = LLM(
     base_url="http://10.1.11.55:3000/v1"
 )
 
-from src.crewai_core.configs import llm
 # @CrewBase
 # class LatestAiDevelopment:
 # 	"""LatestAiDevelopment crew"""

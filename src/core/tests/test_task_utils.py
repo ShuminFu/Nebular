@@ -4,12 +4,12 @@ from datetime import datetime, timezone, timedelta
 import json
 import asyncio
 
-from src.nebular_core.task_utils import (
+from src.core.task_utils import (
     BotTask, TaskType, TaskPriority, TaskStatus,
     BotTaskQueue
 )
-from src.crewai_core.tools.opera_api.bot_api_tool import _SHARED_BOT_TOOL
-from src.nebular_core.api_response_parser import ApiResponseParser
+from src.crewai_ext.tools.opera_api.bot_api_tool import _SHARED_BOT_TOOL
+from src.core.api_response_parser import ApiResponseParser
 
 
 class AsyncTestCase(unittest.TestCase):

@@ -1,8 +1,8 @@
 """Opera属性管理API工具使用示例，展示了如何使用PropertyTool进行属性的获取和更新操作。"""
 
 from crewai import Agent, Task, Crew
-from src.crewai_core.tools.opera_api.property_api_tool import PropertyTool
-from src.crewai_core.configs.config import llm
+from src.crewai_ext.tools.opera_api.property_api_tool import PropertyTool
+from src.crewai_ext.configs.config import llm
 
 
 # 创建Property管理工具

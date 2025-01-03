@@ -1,4 +1,4 @@
-"""src FastAPI 应用的数据模型定义。
+"""src api 应用的数据模型定义。
 
 包含了所有与Opera相关的Pydantic模型，用于请求和响应的数据验证与序列化。
 包括Bot、src、Resource、TempFile等相关模型。

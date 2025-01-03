@@ -10,11 +10,11 @@ import json
 import re
 import random
 
-from src.nebular_core.dialogue.pools import DialoguePool
-from src.nebular_core.dialogue.models import ProcessingDialogue
-from src.nebular_core.dialogue.enums import DialoguePriority, DialogueType, ProcessingStatus
-from src.nebular_core.task_utils import BotTask, BotTaskQueue, TaskType, TaskPriority
-from src.opera_service.signalr_client import MessageReceivedArgs
+from src.core.dialogue.pools import DialoguePool
+from src.core.dialogue.models import ProcessingDialogue
+from src.core.dialogue.enums import DialoguePriority, DialogueType, ProcessingStatus
+from src.core.task_utils import BotTask, BotTaskQueue, TaskType, TaskPriority
+from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
 
 
 class IntentMind:
@@ -398,5 +398,5 @@ class IntentMind:
 
 
 if __name__ == '__main__':
-    from src.nebular_core.tests.test_intent_mind import main
+    from src.core.tests.test_intent_mind import main
     main()

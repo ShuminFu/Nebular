@@ -7,7 +7,7 @@ from typing import Type, Optional, Dict, Any, Union
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, ValidationError
 
-from src.opera_service.FastAPI.models import OperaPropertyForUpdate
+from src.opera_service.api.models import OperaPropertyForUpdate
 from .base_api_tool import BaseApiTool
 
 

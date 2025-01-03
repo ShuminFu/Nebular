@@ -1,10 +1,10 @@
 import os
 import re
-from src.nebular_core.task_utils import BotTaskQueue, TaskStatus, BotTask
-from src.crewai_core.tools.opera_api.temp_file_api_tool import _SHARED_TEMP_FILE_TOOL
-from src.crewai_core.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL, Resource
-from src.opera_service.FastAPI.models import ResourceForCreation
-from src.nebular_core.dialogue.enums import MIME_TYPE_MAPPING
+from src.core.task_utils import BotTaskQueue, TaskStatus, BotTask
+from src.crewai_ext.tools.opera_api.temp_file_api_tool import _SHARED_TEMP_FILE_TOOL
+from src.crewai_ext.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL, Resource
+from src.opera_service.api.models import ResourceForCreation
+from src.core.dialogue.enums import MIME_TYPE_MAPPING
 import asyncio
 
 

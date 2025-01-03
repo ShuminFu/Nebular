@@ -3,11 +3,11 @@
 from uuid import UUID
 import json
 
-from src.nebular_core.crew_process import CrewManager, CrewRunner, CrewProcessInfo
-from src.nebular_core.task_utils import BotTask, TaskType, TaskStatus, TaskPriority, BotTaskQueue
-from src.nebular_core.tests.test_task_utils import AsyncTestCase
-from src.opera_service.signalr_client import MessageReceivedArgs
-from src.nebular_core.intent_mind import IntentMind
+from src.core.crew_process import CrewManager, CrewRunner, CrewProcessInfo
+from src.core.task_utils import BotTask, TaskType, TaskStatus, TaskPriority, BotTaskQueue
+from src.core.tests.test_task_utils import AsyncTestCase
+from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
+from src.core.intent_mind import IntentMind
 
 
 class TestTaskDispatch(AsyncTestCase):

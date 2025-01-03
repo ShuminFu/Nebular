@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 from typing import List, Optional
 from uuid import UUID
-from src.opera_service.FastAPI.models import Resource, ResourceForCreation, ResourceForUpdate, ResourceForFilter
+from src.opera_service.api.models import Resource, ResourceForCreation, ResourceForUpdate, ResourceForFilter
 
 router = APIRouter(
     prefix="/src/{opera_id}/Resource",

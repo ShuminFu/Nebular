@@ -7,11 +7,11 @@ from uuid import UUID
 
 from pydantic import Field
 
-from src.opera_service.FastAPI.models import CamelBaseModel, StaffForUpdate
-from src.nebular_core.api_response_parser import ApiResponseParser
-from src.nebular_core.dialogue.enums import ProcessingStatus
-from src.nebular_core.dialogue.models import ProcessingDialogue, DialogueContext, PersistentDialogueState
-from src.crewai_core.tools.opera_api.staff_api_tool import _SHARED_STAFF_TOOL
+from src.opera_service.api.models import CamelBaseModel, StaffForUpdate
+from src.core.api_response_parser import ApiResponseParser
+from src.core.dialogue.enums import ProcessingStatus
+from src.core.dialogue.models import ProcessingDialogue, DialogueContext, PersistentDialogueState
+from src.crewai_ext.tools.opera_api.staff_api_tool import _SHARED_STAFF_TOOL
 
 
 class DialoguePool(CamelBaseModel):
@@ -37,7 +37,7 @@ class DialoguePool(CamelBaseModel):
     def __init__(self, **data):
         """初始化对话池，创建对话分析器实例"""
         super().__init__(**data)
-        from src.nebular_core.dialogue.analyzers import DialogueAnalyzer  # 延迟导入，避免循环依赖
+        from src.core.dialogue.analyzers import DialogueAnalyzer  # 延迟导入，避免循环依赖
         self._analyzer = DialogueAnalyzer()
 
     @classmethod

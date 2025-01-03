@@ -13,7 +13,7 @@
    - 更新任务状态
 
 使用方法:
-    from crewai_core.configs.base_agents import create_intent_mind_agent, create_persona_switch_agent
+    from crewai_ext.configs.config.base_agents import create_intent_mind_agent, create_persona_switch_agent
     
     # 创建IntentMind Agent
     intent_mind = create_intent_mind_agent()
@@ -27,15 +27,15 @@
 
 测试:
     直接运行此脚本进行Agent功能测试:
-    python -m crewai_core.configs.base_agents
+    python -m crewai_ext.configs.config.base_agents
 """
 
 from crewai import Agent, Task, Crew
 from typing import List
-from src.crewai_core.tools.opera_api.bot_api_tool import BotTool
-from src.crewai_core.tools.opera_api.dialogue_api_tool import DialogueTool
-from src.crewai_core.tools.opera_api.staff_api_tool import StaffTool
-from src.crewai_core.configs.config import llm
+from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
+from src.crewai_ext.tools.opera_api.dialogue_api_tool import DialogueTool
+from src.crewai_ext.tools.opera_api.staff_api_tool import StaffTool
+from src.crewai_ext.configs.config import llm
 
 def create_intent_agent(tools: List = None) -> Agent:
     """

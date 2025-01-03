@@ -1,5 +1,5 @@
 import asyncio
-from src.opera_core.signalr_client.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
+from src.opera_service.signalr_client.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 from loguru import logger
 import sys
 
