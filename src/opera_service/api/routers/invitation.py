@@ -4,7 +4,7 @@ from uuid import UUID
 from models import StaffInvitation, StaffInvitationForCreation, StaffInvitationForAcceptance
 
 router = APIRouter(
-    prefix="/src/{opera_id}/StaffInvitation",
+    prefix="/Opera/{opera_id}/StaffInvitation",
     tags=["StaffInvitation"]
 )
 
@@ -14,7 +14,7 @@ async def get_all_staff_invitations(opera_id: UUID):
     获取所有职员邀请
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         
     返回:
         List[StaffInvitation]: 职员邀请列表，包含:
@@ -45,7 +45,7 @@ async def get_staff_invitation(opera_id: UUID, invitation_id: UUID):
     获取指定职员邀请
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         invitation_id (UUID): 邀请ID
         
     返回:
@@ -72,7 +72,7 @@ async def create_staff_invitation(opera_id: UUID, invitation: StaffInvitationFor
     创建职员邀请
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         invitation (StaffInvitationForCreation): 邀请创建信息
             - bot_id (UUID): Bot ID
             - parameter (str): 参数
@@ -105,7 +105,7 @@ async def delete_staff_invitation(opera_id: UUID, invitation_id: UUID):
     删除职员邀请
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         invitation_id (UUID): 邀请ID
         
     返回:
@@ -125,7 +125,7 @@ async def accept_staff_invitation(opera_id: UUID, invitation_id: UUID, acceptanc
     接受职员邀请
 
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         invitation_id (UUID): 邀请ID
         acceptance (StaffInvitationForAcceptance): 接受邀请的信息
             - name (str): 职员名称

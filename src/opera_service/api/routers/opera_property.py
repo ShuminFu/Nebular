@@ -5,7 +5,7 @@ from uuid import UUID
 from src.opera_service.api.models import OperaProperty, OperaPropertyForUpdate
 
 router = APIRouter(
-    prefix="/src/{opera_id}/Property",
+    prefix="/Opera/{opera_id}/Property",
     tags=["OperaProperty"]
 )
 
@@ -15,7 +15,7 @@ async def get_all_properties(opera_id: UUID, force: Optional[bool] = None):
     获取所有属性
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         force (bool, optional): 当指定且为true时，强制穿透缓存，从数据库读取
         
     返回:
@@ -38,7 +38,7 @@ async def update_properties(opera_id: UUID, property: OperaPropertyForUpdate):
     更新属性
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         property (OperaPropertyForUpdate): 属性更新信息
             - properties (Dict[str, str], optional): 要更新或新增的属性键值对
             - properties_to_remove (List[str], optional): 要删除的属性键列表

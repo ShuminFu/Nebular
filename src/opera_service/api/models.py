@@ -1,7 +1,7 @@
-"""src api 应用的数据模型定义。
+""" Opera api 应用的数据模型定义。
 
 包含了所有与Opera相关的Pydantic模型，用于请求和响应的数据验证与序列化。
-包括Bot、src、Resource、TempFile等相关模型。
+包括Bot、Opera、Resource、TempFile等相关模型。
 """
 
 from pydantic import BaseModel, Field, field_validator, AliasGenerator
@@ -150,7 +150,7 @@ class OperaForUpdate(CamelBaseModel):
 
 class Opera(OperaBase):
     """Opera响应模型"""
-    id: UUID = Field(..., description="src ID")
+    id: UUID = Field(..., description="Opera ID")
     parent_id: Optional[UUID] = Field(None, description="父Opera ID")
     database_name: str = Field(..., description="数据库名称")
 

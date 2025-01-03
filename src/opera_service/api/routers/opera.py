@@ -4,8 +4,8 @@ from uuid import UUID
 from models import Opera, OperaWithMaintenanceState, OperaForCreation, OperaForUpdate
 
 router = APIRouter(
-    prefix="/src",
-    tags=["src"]
+    prefix="/Opera",
+    tags=["Opera"]
 )
 
 @router.get("/", response_model=List[OperaWithMaintenanceState])
@@ -18,7 +18,7 @@ async def get_all_operas(parent_id: Optional[UUID] = None):
         
     返回:
         List[OperaWithMaintenanceState]: Opera列表，每个Opera包含:
-            - id (UUID): src ID
+            - id (UUID): Opera ID
             - parent_id (UUID, optional): 父Opera ID
             - name (str): Opera名称
             - description (str, optional): Opera描述
@@ -36,7 +36,7 @@ async def get_opera(opera_id: UUID):
     获取指定Opera
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         
     返回:
         OperaWithMaintenanceState: Opera信息
@@ -59,8 +59,8 @@ async def create_opera(opera: OperaForCreation):
             - database_name (str): 数据库名称
             
     返回:
-        src: 创建的Opera信息，包含:
-            - id (UUID): src ID
+        Opera: 创建的Opera信息，包含:
+            - id (UUID): Opera ID
             - parent_id (UUID, optional): 父Opera ID
             - name (str): Opera名称
             - description (str, optional): Opera描述
@@ -77,7 +77,7 @@ async def update_opera(opera_id: UUID, opera: OperaForUpdate):
     更新Opera信息
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         opera (OperaForUpdate): Opera更新信息
             - name (str, optional): Opera名称
             - is_description_updated (bool): 是否更新描述
@@ -101,7 +101,7 @@ async def delete_opera(opera_id: UUID):
     删除Opera
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         
     返回:
         204: 删除成功

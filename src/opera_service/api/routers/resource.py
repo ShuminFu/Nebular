@@ -4,7 +4,7 @@ from uuid import UUID
 from src.opera_service.api.models import Resource, ResourceForCreation, ResourceForUpdate, ResourceForFilter
 
 router = APIRouter(
-    prefix="/src/{opera_id}/Resource",
+    prefix="/Opera/{opera_id}/Resource",
     tags=["Resource"]
 )
 
@@ -14,7 +14,7 @@ async def get_all_resources(opera_id: UUID):
     获取所有资源文件
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         
     返回:
         List[Resource]: 资源列表，每个资源包含:
@@ -36,7 +36,7 @@ async def get_filtered_resources(opera_id: UUID, filter: Optional[ResourceForFil
     按条件获取资源文件列表
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         filter (ResourceForFilter, optional): 过滤条件
             - name (str, optional): 精确匹配资源名称
             - name_like (str, optional): 模糊匹配资源名称
@@ -65,7 +65,7 @@ async def create_resource(opera_id: UUID, resource: ResourceForCreation):
     注意: 创建资源文件前，应先将文件上传为临时文件
 
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         resource (ResourceForCreation): 资源创建信息
             - name (str): 资源名称
             - description (str): 资源描述
@@ -96,7 +96,7 @@ async def download_resource(opera_id: UUID, resource_id: UUID):
     下载资源文件
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         resource_id (UUID): 资源文件ID
         
     返回:
@@ -116,7 +116,7 @@ async def update_resource(opera_id: UUID, resource_id: UUID, resource: ResourceF
         如需更新资源文件内容，应先将文件上传为临时文件
 
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         resource_id (UUID): 资源ID
         resource (ResourceForUpdate): 资源更新信息
             - name (str, optional): 资源名称
@@ -140,7 +140,7 @@ async def delete_resource(opera_id: UUID, resource_id: UUID):
     删除资源文件
 
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         resource_id (UUID): 资源文件ID
 
     返回:

@@ -1,4 +1,4 @@
-"""src SignalR Bot对话处理器的实现。
+""" Opera SignalR Bot对话处理器的实现。
 
 负责将Staff的对话转换为任务并管理任务队列。
 主要用于CrewManager和CrewRunner的对话处理和任务管理的桥接。

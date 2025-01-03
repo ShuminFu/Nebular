@@ -1,4 +1,4 @@
-"""src SignalR 客户端模块，用于处理与Opera服务器的实时通信。
+"""Opera SignalR 客户端模块，用于处理与Opera服务器的实时通信。
 
 提供了与Opera服务器建立SignalR连接、处理各种实时事件（如剧本创建、消息接收等）的功能。
 支持自动重连、健康检查和各种回调机制。
@@ -290,7 +290,7 @@ class OperaSignalRClient:
                 "stage_index": args["stageIndex"],
                 "stage_name": args["stageName"]
             }
-            self.log.debug(f"Stage变更详情: src ID={stage_data['opera_id']}, "
+            self.log.debug(f"Stage变更详情: Opera ID={stage_data['opera_id']}, "
                          f"阶段索引={stage_data['stage_index']}, "
                          f"阶段名称={stage_data['stage_name']}")
             await self._execute_callback("on_stage_changed", self.callbacks["on_stage_changed"], stage_data)

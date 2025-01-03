@@ -39,7 +39,7 @@ class MessageRouter:
             subscriber_id: 订阅者ID
             bot_id: Bot ID
             staff_ids: Staff ID集合
-            opera_ids: src ID集合
+            opera_ids: Opera ID集合
         """
         async with self._lock:
             queue = asyncio.Queue()

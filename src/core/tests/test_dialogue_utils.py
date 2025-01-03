@@ -243,7 +243,7 @@ class TestDialogueAnalysis(AsyncTestCase):
         # 创建测试用的对话池
         self.pool = DialoguePool()
 
-        # 创建测试用的对话 - src 1
+        # 创建测试用的对话 - Opera 1
         self.dialogue1 = ProcessingDialogue(
             dialogue_index=29,
             opera_id=self.test_opera_id1,
@@ -266,7 +266,7 @@ class TestDialogueAnalysis(AsyncTestCase):
             text="我发现循环中有一个O(n^2)的复杂度"
         )
 
-        # 创建测试用的对话 - src 2
+        # 创建测试用的对话 - Opera 2
         self.dialogue3 = ProcessingDialogue(
             dialogue_index=1,
             opera_id=self.test_opera_id2,

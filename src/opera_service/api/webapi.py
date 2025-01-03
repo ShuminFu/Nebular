@@ -7,9 +7,9 @@ from src.opera_service.api.routers import (
 from src.opera_service.api.routers import bot, temp_file, dialogue, opera_property, invitation, staff
 
 app = FastAPI(
-    title="src API",
+    title="Opera API",
     version="1.0.0",
-    description="src API服务",
+    description="Opera API服务",
     docs_url="/docs",
     redoc_url="/redoc"
 )

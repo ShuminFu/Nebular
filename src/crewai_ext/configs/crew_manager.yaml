@@ -6,7 +6,7 @@ bot_creator:
   task: "创建一个新的Bot实例并返回其ID"
 
 opera_manager:
-  name: "src Manager"
+  name: "Opera Manager"
   role: "Opera管理专家"
   goal: "管理和响应Opera中的事件和消息"
   backstory: "我是一个专业的Opera管理者，负责处理各种Opera相关的事件和消息"

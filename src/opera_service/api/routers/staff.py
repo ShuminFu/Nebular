@@ -4,7 +4,7 @@ from uuid import UUID
 from models import Staff, StaffForCreation, StaffForUpdate, StaffForFilter
 
 router = APIRouter(
-    prefix="/src/{opera_id}/Staff",
+    prefix="/Opera/{opera_id}/Staff",
     tags=["Staff"]
 )
 
@@ -15,7 +15,7 @@ async def get_all_staff(opera_id: UUID):
     获取所有职员
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         
     返回:
         List[Staff]: 职员列表，包含以下属性:
@@ -40,7 +40,7 @@ async def get_filtered_staff(opera_id: UUID, filter: Optional[StaffForFilter] = 
     按条件获取职员列表
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         filter (StaffForFilter, optional): 过滤条件
             - bot_id (UUID, optional): Bot ID
             - name (str, optional): 精确匹配名称
@@ -56,7 +56,7 @@ async def get_staff(opera_id: UUID, staff_id: UUID):
     获取指定职员
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         staff_id (UUID): 职员ID
         
     返回:
@@ -82,7 +82,7 @@ async def update_staff(opera_id: UUID, staff_id: UUID, staff: StaffForUpdate):
     更新职员信息
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         staff_id (UUID): 职员ID
         staff (StaffForUpdate): 职员更新信息
             - is_on_stage (bool, optional): 是否在台上
@@ -104,7 +104,7 @@ async def delete_staff(opera_id: UUID, staff_id: UUID):
     删除职员
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         staff_id (UUID): 职员ID
         
     返回:
@@ -128,7 +128,7 @@ async def update_staff_by_get(
     通过GET方法更新职员信息
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         staff_id (UUID): 职员ID
         is_on_stage (bool, optional): 非空则更新OnStage状态
         parameter (str, optional): 非空则更新Parameter参数
@@ -159,7 +159,7 @@ async def get_staff_by_name(
     获取指定Name的职员
 
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         name (str): 职员Name
         is_on_stage (bool, optional): 当指定且为true时，只处理OnStage的职员
 
@@ -179,7 +179,7 @@ async def get_staff_by_name_like(
     获取指定Name的职员（模糊匹配）
 
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         name_like (str): 职员Name以Like方式匹配
         is_on_stage (bool, optional): 当指定且为true时，只处理OnStage的职员
 
@@ -195,7 +195,7 @@ async def create_staff(opera_id: UUID, staff: StaffForCreation):
     创建职员
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         staff (StaffForCreation): 职员创建信息
     
     返回:

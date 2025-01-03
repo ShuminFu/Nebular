@@ -1,4 +1,4 @@
-"""src SignalR 任务队列的数据模型定义。"""
+""" Opera SignalR 任务队列的数据模型定义。"""
 
 from pydantic import Field
 from typing import List, Optional, Dict, Any, Union
@@ -41,7 +41,7 @@ class TaskType(IntEnum):
     # 管理类任务
     SYSTEM = 40  # 系统任务
     CREW_LIFECYCLE = 41  # CrewRunner的生命周期管理
-    STAGE_MANAGEMENT = 42  # src Stage 管理
+    STAGE_MANAGEMENT = 42  # Opera Stage 管理
     ROLE_ASSIGNMENT = 43  # 发言角色分配
 
     # 资源管理任务

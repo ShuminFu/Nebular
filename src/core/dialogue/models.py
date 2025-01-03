@@ -49,7 +49,7 @@ class ProcessingDialogue(CamelBaseModel):
         default=None, description="发送者Staff ID")
     receiver_staff_ids: List[UUID] = Field(
         default_factory=list, description="接收者Staff ID列表")
-    opera_id: UUID = Field(..., description="src ID")
+    opera_id: UUID = Field(..., description="Opera ID")
 
     # 对话属性
     text_content: Optional[str] = Field(

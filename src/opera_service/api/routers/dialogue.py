@@ -4,7 +4,7 @@ from uuid import UUID
 from models import Dialogue, DialogueForCreation, DialogueForFilter
 
 router = APIRouter(
-    prefix="/src/{opera_id}/Dialogue",
+    prefix="/Opera/{opera_id}/Dialogue",
     tags=["Dialogue"]
 )
 
@@ -14,7 +14,7 @@ async def get_all_dialogues(opera_id: UUID):
     获取所有对话
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         
     返回:
         List[Dialogue]: 对话列表，每个对话包含:
@@ -39,7 +39,7 @@ async def get_dialogue(opera_id: UUID, dialogue_index: int):
     获取指定对话
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         dialogue_index (int): 对话索引
         
     返回:
@@ -65,7 +65,7 @@ async def get_filtered_dialogues(opera_id: UUID, filter: Optional[DialogueForFil
     按条件获取对话列表
 
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         filter (DialogueForFilter, optional): 过滤条件
             - index_not_before (int, optional): 起始索引(包含)
             - index_not_after (int, optional): 结束索引(包含)
@@ -99,7 +99,7 @@ async def create_dialogue(opera_id: UUID, dialogue: DialogueForCreation):
     创建对话
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         dialogue (DialogueForCreation): 对话创建信息
             - is_stage_index_null (bool): 是否不关联场幕
             - staff_id (UUID, optional): 职员ID
@@ -133,7 +133,7 @@ async def get_latest_dialogue_index(opera_id: UUID):
     获取当前最后对话的Index值
     
     参数:
-        opera_id (UUID): src ID
+        opera_id (UUID): Opera ID
         
     返回:
         int: 最后对话的索引值。无对话时返回0
