@@ -84,9 +84,9 @@ class TestMultiResourceGeneration(AsyncTestCase):
         """测试通过对话请求多文件生成功能"""
         self.run_async(self._test_multiple_file_generation_request())
 
-    def test_parallel_task_generation(self):
+    def test_parallel_generation_task(self):
         """测试并行处理多个资源生成任务"""
-        self.run_async(self._test_parallel_task_generation())
+        self.run_async(self._test_parallel_generation_task())
 
     def test_task_error_handling(self):
         """测试任务错误处理"""
@@ -211,7 +211,7 @@ class TestMultiResourceGeneration(AsyncTestCase):
         # 返回生成的任务列表供其他测试使用
         return tasks
 
-    async def _test_parallel_task_generation(self):
+    async def _test_parallel_generation_task(self):
         """测试并行处理多个资源生成任务
         
         工作流程：
@@ -257,6 +257,22 @@ class TestMultiResourceGeneration(AsyncTestCase):
         finally:
             crew_runner.is_running = original_is_running
 
+        # 将所有任务添加到CrewRunner的任务队列中
+        for task in generation_tasks:
+            await crew_runner.task_queue.add_task(task)
+
+        # 验证任务是否成功添加到队列中
+        self.assertEqual(
+            len(crew_runner.task_queue.tasks),
+            len(generation_tasks),
+            f"任务队列中的任务数量({len(crew_runner.task_queue.tasks)})与预期数量({len(generation_tasks)})不匹配"
+        )
+        self.assertEqual(
+            crew_runner.task_queue.status_counter['pending'],
+            len(generation_tasks),
+            f"待处理任务数量({crew_runner.task_queue.status_counter['pending']})与预期数量({len(generation_tasks)})不匹配"
+        )
+
         # 记录开始时间
         start_time = asyncio.get_event_loop().time()
 
@@ -268,7 +284,16 @@ class TestMultiResourceGeneration(AsyncTestCase):
         # 验证CR的处理结果
         for task in generation_tasks:
             # 从任务队列中获取更新后的任务
-            updated_task = next(t for t in crew_runner.task_queue.tasks if t.id == task.id)
+            updated_task = next(
+                (t for t in crew_runner.task_queue.tasks if t.id == task.id),
+                None
+            )
+
+            # 验证任务是否存在
+            self.assertIsNotNone(
+                updated_task,
+                f"任务 {task.id} 未在CrewRunner的任务队列中找到"
+            )
 
             # 验证任务状态
             self.assertEqual(updated_task.status, TaskStatus.COMPLETED)
