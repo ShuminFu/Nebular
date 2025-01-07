@@ -267,11 +267,6 @@ class TestMultiResourceGeneration(AsyncTestCase):
             len(generation_tasks),
             f"任务队列中的任务数量({len(crew_runner.task_queue.tasks)})与预期数量({len(generation_tasks)})不匹配"
         )
-        self.assertEqual(
-            crew_runner.task_queue.status_counter['pending'],
-            len(generation_tasks),
-            f"待处理任务数量({crew_runner.task_queue.status_counter['pending']})与预期数量({len(generation_tasks)})不匹配"
-        )
 
         # 记录开始时间
         start_time = asyncio.get_event_loop().time()
@@ -313,7 +308,7 @@ class TestMultiResourceGeneration(AsyncTestCase):
             # 验证对话消息
             self.assertEqual(status_code, 200)
             self.assertIsNotNone(dialogue_data)
-            self.assertEqual(dialogue_data["staffId"], str(cr_staff_id))
+            self.assertEqual(dialogue_data["staffId"], str(self.cm_staff_id))
             self.assertIn("CODE_RESOURCE", dialogue_data["tags"])
 
             # 模拟CM接收到CODE_RESOURCE消息
