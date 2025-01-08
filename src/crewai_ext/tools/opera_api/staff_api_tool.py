@@ -160,22 +160,11 @@ class StaffTool(BaseApiTool):
             elif action == "update":
                 if not staff_id or not data:
                     raise ValueError("更新Staff需要提供staff_id和data")
-                # 如果只更新is_on_stage或parameter，使用GET方式更新
-                if (len(data.model_dump(exclude_none=True)) == 1 and 
-                    (data.is_on_stage is not None or data.parameter is not None)):
-                    params = {}
-                    if data.is_on_stage is not None:
-                        params["isOnStage"] = data.is_on_stage
-                    if data.parameter is not None:
-                        params["parameter"] = data.parameter
-                    result = self._make_request("GET", f"{base_url}/{staff_id}/Update", params=params)
-                else:
-                    # 否则使用PUT方式更新
-                    result = self._make_request(
-                        "PUT",
-                        f"{base_url}/{staff_id}",
-                        json=data.model_dump(by_alias=True)
-                    )
+                result = self._make_request(
+                    "PUT",
+                    f"{base_url}/{staff_id}",
+                    json=data.model_dump(by_alias=True)
+                )
                 return f"状态码: {result['status_code']}, " + (
                     "Staff更新成功" if result['data'] is None else f"详细内容: {str(result['data'])}")
 

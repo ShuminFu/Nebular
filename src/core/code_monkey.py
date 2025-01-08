@@ -143,7 +143,7 @@ class CodeMonkey:
                 opera_id=opera_id,
                 data=ResourceForCreation(
                     name=file_path,
-                    description=description,
+                    description=description if isinstance(description, str) else ' '.join(description) if description else "",
                     mime_type=mime_type,
                     last_update_staff_name=str(task.response_staff_id),
                     temp_file_id=temp_file_id

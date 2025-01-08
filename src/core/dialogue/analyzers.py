@@ -83,6 +83,8 @@ class DialogueAnalyzer:
         Returns:
             IntentAnalysis: 意图分析结果，对于无意义对话，intent为空字符串，confidence为0.1
         """
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         # 创建意图分析任务
         task = Task(
             description=f"""分析以下对话的意图，判断是否是有意义的对话：
@@ -132,20 +134,20 @@ class DialogueAnalyzer:
                     "project_description": "项目整体描述",
                     "resources": [
                         {{
-                            "file_path": "src/html/index.html",
+                            "file_path": "version_{timestamp}/src/html/index.html",
                             "type": "html",
                             "mime_type": "text/html",
                             "description": "主页面文件",
                             "references": ["style.css", "main.js"]
                         }},
                         {{
-                            "file_path": "src/css/style.css",
+                            "file_path": "version_{timestamp}/src/css/style.css",
                             "type": "css",
                             "mime_type": "text/css",
                             "description": "样式文件"
                         }},
                         {{
-                            "file_path": "src/js/main.js",
+                            "file_path": "version_{timestamp}/src/js/main.js",
                             "type": "javascript",
                             "mime_type": "text/javascript",
                             "description": "交互脚本"

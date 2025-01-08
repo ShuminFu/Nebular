@@ -192,6 +192,33 @@ class IntentMind:
         # 暂时随机选择一个CR
         return random.choice(crs)
 
+    def _parse_tags(self, tags_data: Union[str, List[str], None]) -> List[str]:
+        """解析tags数据，支持字符串和列表格式
+
+        Args:
+            tags_data: 可以是字符串(如 "[tag1,tag2]" 或 "tag1,tag2")，
+                      或者是字符串列表(如 ["tag1", "tag2"])，
+                      或者是None
+
+        Returns:
+            List[str]: 处理后的tags列表
+        """
+        if not tags_data:
+            return []
+
+        if isinstance(tags_data, list):
+            return [str(tag).strip() for tag in tags_data if tag]
+
+        if isinstance(tags_data, str):
+            # 移除可能存在的方括号
+            cleaned = tags_data.strip("[]")
+            if not cleaned:
+                return []
+            # 分割并清理每个tag
+            return [tag.strip() for tag in cleaned.split(",") if tag.strip()]
+
+        return []
+
     def _create_task_from_dialogue(self, dialogue: ProcessingDialogue) -> Union[BotTask, List[BotTask]]:
         """从对话创建任务，支持返回多个任务"""
         self.dialogue_pool.update_dialogue_status(dialogue.dialogue_index, ProcessingStatus.PROCESSING)
@@ -318,7 +345,7 @@ class IntentMind:
                     "file_path": file_path,
                     "mime_type": mime_type,
                     "description": metadata.get("description", ""),
-                    "tags": metadata.get("tags", "").strip("[]").split(","),
+                    "tags": self._parse_tags(metadata.get("tags")),
                     "code_content": code_content.strip(),  # 确保去除首尾空白字符
                 })
 
