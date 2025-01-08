@@ -495,7 +495,7 @@ class CrewRunner(BaseCrewProcess):
             task.result = {
                 "dialogue_id": response_data["index"],
                 "status": "success",
-                "text": response_data["text"]
+                # "text": response_data["text"]
             }
 
             # 发送任务完成回调
