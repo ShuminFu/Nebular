@@ -117,6 +117,10 @@ class DialogueAnalyzer:
                - 确定每个文件的类型和用途
                - 识别文件之间的关联（如HTML引用CSS和JS）
                - 确定项目的整体结构
+               - is_code_request字段返回true
+            4. 如果是已经生成了代码：
+               - 比如parameters的text字段中已经生成了代码或者其他资源，则is_code_request字段返回false
+               - 根据生成的代码中parameters的text字段中的头部信息获取file_path和mime_type用于返回的code_details.resrouces里。
 
             返回格式示例（JSON）：
             {{
@@ -158,7 +162,7 @@ class DialogueAnalyzer:
             3. 文件路径要符合项目最佳实践
             4. MIME类型必须准确
             """,
-            expected_output="描述对话意图，包含动作和目标的JSON，如果是无意义的对话则intent字段返回空字符串, 文件名要考虑context中的项目结构信息, 包含完整的多文件代码生成信息",
+            expected_output="描述对话意图，包含动作和目标并且遵循返回示例的格式（JSON），如果是无意义的对话则intent字段返回空字符串, 文件名要考虑context中的项目结构信息, 包含完整的多文件代码生成信息",
             agent=self.intent_analyzer
         )
 

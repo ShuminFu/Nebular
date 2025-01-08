@@ -12,9 +12,10 @@ import random
 
 from src.core.dialogue.pools import DialoguePool
 from src.core.dialogue.models import ProcessingDialogue
-from src.core.dialogue.enums import DialoguePriority, DialogueType, ProcessingStatus
+from src.core.dialogue.enums import DialoguePriority, DialogueType, ProcessingStatus, MIME_TYPE_MAPPING
 from src.core.task_utils import BotTask, BotTaskQueue, TaskType, TaskPriority
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
+from src.core.code_resource_parser import CodeResourceParser
 
 
 class IntentMind:
@@ -150,32 +151,8 @@ class IntentMind:
         return pattern_matches / len(text_lines) > 0.3 if text_lines else False
 
     def _parse_code_resource(self, content: str) -> tuple[dict, str]:
-        """解析代码资源内容
-        
-        Args:
-            content: 原始消息内容
-            
-        Returns:
-            tuple[dict, str]: (元数据字典, 代码内容)
-        """
-        # 分离元数据和代码内容
-        lines = content.split("\n")
-        metadata = {}
-        code_start = 0
-
-        # 查找元数据部分
-        for i, line in enumerate(lines):
-            if line.strip() == "---":
-                code_start = i + 1
-                break
-            if line.startswith("@"):
-                key, value = line[1:].split(":", 1)
-                metadata[key.strip()] = value.strip()
-
-        # 提取代码内容
-        code = "\n".join(lines[code_start:])
-
-        return metadata, code
+        """解析代码资源内容，使用CodeResourceParser"""
+        return CodeResourceParser.parse(content)
 
     def _select_code_resource_handler(self, dialogue: ProcessingDialogue, code_details: dict) -> Optional[UUID]:
         """选择合适的CR来处理代码生成任务
@@ -309,10 +286,40 @@ class IntentMind:
             else:
                 # 如果不是代码生成请求，则作为普通资源创建处理
                 task_type = TaskType.RESOURCE_CREATION
+
+                # 解析代码资源内容
+                metadata, code_content = self._parse_code_resource(dialogue.text)
+
+                # 从metadata中获取file_path和mime_type
+                file_path = metadata.get("file")
+                if not file_path:
+                    # 如果metadata中没有file_path，尝试从code_details中获取
+                    if dialogue.intent_analysis and dialogue.intent_analysis.parameters.get("code_details"):
+                        code_details = dialogue.intent_analysis.parameters["code_details"]
+                        resources = code_details.get("resources", [])
+                        if resources:
+                            file_path = resources[0].get("file_path")
+
+                # 根据文件扩展名确定mime_type
+                if file_path:
+                    ext = "." + file_path.split(".")[-1].lower()
+                    # 在MIME_TYPE_MAPPING中查找对应的mime_type
+                    for mime_type, extensions in MIME_TYPE_MAPPING.items():
+                        if ext in extensions:
+                            break
+                    else:
+                        mime_type = "text/plain"  # 如果没找到对应的mime_type，使用默认值
+                else:
+                    mime_type = "text/plain"
+
+                # 更新任务参数
                 task_parameters.update({
                     "resource_type": "code",
-                    "code_content": dialogue.text,
-                    "mime_type": "text/x-python"  # 默认为Python，后续可以根据文件扩展名确定
+                    "file_path": file_path,
+                    "mime_type": mime_type,
+                    "description": metadata.get("description", ""),
+                    "tags": metadata.get("tags", "").strip("[]").split(","),
+                    "code_content": code_content.strip(),  # 确保去除首尾空白字符
                 })
 
         elif dialogue.type == DialogueType.SYSTEM:
