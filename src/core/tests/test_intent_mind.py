@@ -2,10 +2,143 @@
 import asyncio
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
+import unittest
 
 from src.core.intent_mind import IntentMind
-from src.core.task_utils import BotTaskQueue
+from src.core.task_utils import BotTaskQueue, TaskType, TaskPriority
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
+from src.core.dialogue.models import ProcessingDialogue, DialogueContext
+from src.core.dialogue.enums import DialogueType, ProcessingStatus
+
+
+class TestIntentMind(unittest.TestCase):
+    """测试IntentMind的核心功能"""
+
+    def setUp(self):
+        """测试前的准备工作"""
+        self.bot_id = UUID('c2a71833-4403-4d08-8ef6-23e6327832b2')
+        self.task_queue = BotTaskQueue(bot_id=self.bot_id)
+        self.intent_mind = IntentMind(self.task_queue)
+        self.opera_id = UUID('96028f82-9f76-4372-976c-f0c5a054db79')
+        self.test_time = datetime.now(timezone(timedelta(hours=8)))
+
+    def test_create_task_from_dialogue_with_context(self):
+        """测试从带有上下文的对话创建任务"""
+        # 创建一个测试对话，包含完整的上下文信息
+        dialogue = ProcessingDialogue(
+            dialogue_index=231,
+            opera_id=self.opera_id,
+            text="```html\n<div>Test Code</div>\n```",
+            type=DialogueType.CODE_RESOURCE,
+            status=ProcessingStatus.PENDING,
+            context=DialogueContext(
+                stage_index=2,
+                related_dialogue_indices=[229, 230],
+                conversation_state={
+                    "flow": {
+                        "current_topic": "Web Development",
+                        "topic_id": "550e8400-e29b-41d4-a716-446655440000",
+                        "topic_type": "code_generation",
+                        "previous_topics": [],
+                        "status": "ongoing"
+                    },
+                    "code_context": {
+                        "requirements": ["Responsive Design"],
+                        "frameworks": ["normalize.css"],
+                        "file_structure": ["src/html/index.html"]
+                    },
+                    "decision_points": [
+                        {
+                            "decision": "Use normalize.css",
+                            "reason": "For consistent styling",
+                            "dialogue_index": 229,
+                            "topic_id": "550e8400-e29b-41d4-a716-446655440000"
+                        }
+                    ],
+                    "topic": {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "type": "code_generation",
+                        "name": "Web Development",
+                        "last_updated": self.test_time.isoformat()
+                    }
+                }
+            ),
+            timestamp=self.test_time,
+            sender_staff_id=UUID('ab01d4f7-bbf1-44aa-a55b-cbc7d62fbfbc'),
+            is_narratage=False,
+            is_whisper=False,
+            tags="CODE_RESOURCE",
+            mentioned_staff_ids=[]
+        )
+
+        # 添加相关对话到对话池
+        related_dialogue1 = ProcessingDialogue(
+            dialogue_index=229,
+            opera_id=self.opera_id,
+            text="Let's use normalize.css for consistent styling",
+            type=DialogueType.NORMAL,
+            status=ProcessingStatus.COMPLETED,
+            context=DialogueContext(
+                stage_index=2,
+                related_dialogue_indices=[],
+                conversation_state={}
+            ),
+            timestamp=self.test_time - timedelta(minutes=2)
+        )
+
+        related_dialogue2 = ProcessingDialogue(
+            dialogue_index=230,
+            opera_id=self.opera_id,
+            text="We need responsive design",
+            type=DialogueType.NORMAL,
+            status=ProcessingStatus.COMPLETED,
+            context=DialogueContext(
+                stage_index=2,
+                related_dialogue_indices=[],
+                conversation_state={}
+            ),
+            timestamp=self.test_time - timedelta(minutes=1)
+        )
+
+        self.intent_mind.dialogue_pool.dialogues = [related_dialogue1, related_dialogue2, dialogue]
+
+        # 创建任务
+        task = self.intent_mind._create_task_from_dialogue(dialogue)
+
+        # 验证任务类型和优先级
+        self.assertEqual(task.type, TaskType.RESOURCE_CREATION)
+
+        # 验证任务参数中的上下文信息
+        self.assertIn("context", task.parameters)
+        context = task.parameters["context"]
+
+        # 验证基本上下文字段
+        self.assertEqual(context["stage_index"], 2)
+        self.assertEqual(set(context["related_dialogue_indices"]), {229, 230})
+
+        # 验证对话流程信息
+        flow = context["flow"]
+        self.assertEqual(flow["topic_id"], "550e8400-e29b-41d4-a716-446655440000")
+        self.assertEqual(flow["topic_type"], "code_generation")
+        self.assertEqual(flow["current_topic"], "Web Development")
+
+        # 验证代码上下文
+        code_context = context["code_context"]
+        self.assertIn("Responsive Design", code_context["requirements"])
+        self.assertIn("normalize.css", code_context["frameworks"])
+        self.assertIn("src/html/index.html", code_context["file_structure"])
+
+        # 验证决策点
+        decision_points = context["decision_points"]
+        self.assertEqual(len(decision_points), 1)
+        self.assertEqual(decision_points[0]["dialogue_index"], 229)
+        self.assertEqual(decision_points[0]["topic_id"], "550e8400-e29b-41d4-a716-446655440000")
+
+        # 验证主题信息
+        topic = context["topic"]
+        self.assertEqual(topic["id"], "550e8400-e29b-41d4-a716-446655440000")
+        self.assertEqual(topic["type"], "code_generation")
+        self.assertEqual(topic["name"], "Web Development")
 
 
 async def main():
@@ -54,7 +187,7 @@ async def main():
         if dialogue.intent_analysis:
             print(f"- 意图: {dialogue.intent_analysis.intent}")
             print(f"- 置信度: {dialogue.intent_analysis.confidence}")
-    
+
     # 6. 检查任务队列状态
     print("\n任务队列状态:")
     print(f"- 任务数量: {len(task_queue.tasks)}")
@@ -71,6 +204,7 @@ async def main():
         print(f"- 描述: {task.description}")
         print(f"- 源对话索引: {task.source_dialogue_index}")
         print(f"- 源Staff ID: {task.response_staff_id}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

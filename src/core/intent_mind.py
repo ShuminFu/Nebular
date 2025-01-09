@@ -232,7 +232,20 @@ class IntentMind:
             "mentioned_staff_ids": [str(id) for id in (dialogue.mentioned_staff_ids or [])],
             "dialogue_type": dialogue.type.name,
             "intent": dialogue.intent_analysis.model_dump() if dialogue.intent_analysis else None,
-            "context": dialogue.context.model_dump() if dialogue.context else None,
+            "context": {
+                "stage_index": dialogue.context.stage_index,
+                "related_dialogue_indices": list(dialogue.context.related_dialogue_indices),
+                "conversation_state": dialogue.context.conversation_state,
+                "flow": dialogue.context.conversation_state.get("flow", {}),
+                "code_context": dialogue.context.conversation_state.get("code_context", {}),
+                "decision_points": dialogue.context.conversation_state.get("decision_points", []),
+                "topic": dialogue.context.conversation_state.get("topic", {
+                    "id": None,
+                    "type": None,
+                    "name": None,
+                    "last_updated": None
+                })
+            },
             "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None
         }
 
@@ -277,6 +290,20 @@ class IntentMind:
                     # 选择合适的CR来处理代码生成任务
                     selected_cr = self._select_code_resource_handler(dialogue, code_details)
 
+                    # 获取相关对话的内容
+                    related_dialogues = []
+                    if dialogue.context and dialogue.context.related_dialogue_indices:
+                        for idx in dialogue.context.related_dialogue_indices:
+                            related_dialogue = self.dialogue_pool.get_dialogue(idx)
+                            if related_dialogue:
+                                related_dialogues.append({
+                                    "index": related_dialogue.dialogue_index,
+                                    "text": related_dialogue.text,
+                                    "type": related_dialogue.type.name,
+                                    "tags": related_dialogue.tags,
+                                    "intent": related_dialogue.intent_analysis.model_dump() if related_dialogue.intent_analysis else None,
+                                })
+
                     task = BotTask(
                         type=TaskType.RESOURCE_GENERATION,
                         priority=TaskPriority.HIGH,
@@ -299,6 +326,19 @@ class IntentMind:
                                 "type": dialogue.type.name,
                                 "tags": dialogue.tags,
                                 "intent": dialogue.intent_analysis.model_dump() if dialogue.intent_analysis else None,
+                                "stage_index": dialogue.context.stage_index,
+                                "related_dialogue_indices": list(dialogue.context.related_dialogue_indices),
+                                "conversation_state": dialogue.context.conversation_state,
+                                "flow": dialogue.context.conversation_state.get("flow", {}),
+                                "code_context": dialogue.context.conversation_state.get("code_context", {}),
+                                "decision_points": dialogue.context.conversation_state.get("decision_points", []),
+                                "topic": dialogue.context.conversation_state.get("topic", {
+                                    "id": None,
+                                    "type": None,
+                                    "name": None,
+                                    "last_updated": None
+                                }),
+                                "related_dialogues": related_dialogues
                             },
                             "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None
                         },
