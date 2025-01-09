@@ -142,18 +142,17 @@ class DialoguePool(CamelBaseModel):
                 # 获取当前对话和相关对话中的最大stage_index
                 current_stage_index = dialogue.context.stage_index if dialogue.context else None
 
-                # 只有当current_stage_index为None时，才从相关对话中获取最大值
+                # 只有当current_stage_index为None时，才从对话池中获取最大值
                 if current_stage_index is None:
-                    stage_related_indices = [
+                    stage_indices = [
                         d.context.stage_index
                         for d in temp_pool.dialogues
-                        if d.dialogue_index in related_indices
-                        and d.context
+                        if d.context
                         and d.context.stage_index is not None
                     ]
 
-                    # 从相关对话中获取最大的stage_index
-                    max_stage_index = max(stage_related_indices, default=None)
+                    # 从对话池中获取最大的stage_index
+                    max_stage_index = max(stage_indices, default=None)
                 else:
                     max_stage_index = current_stage_index
 

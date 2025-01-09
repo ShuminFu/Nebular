@@ -1,6 +1,6 @@
 import ast
 import json
-from typing import List, Dict, Any, TYPE_CHECKING
+from typing import List, Dict, Any, TYPE_CHECKING, Set, Union
 
 
 
@@ -127,3 +127,65 @@ class ApiResponseParser:
         """
         from src.core.dialogue.models import ProcessingDialogue
         return parameters.get("ProcessingDialogues", [])
+
+    @staticmethod
+    def parse_crew_output(result: Any) -> Union[Set[int], str]:
+        """解析CrewOutput的通用方法
+        
+        Args:
+            result: CrewOutput对象或其他返回值
+            
+        Returns:
+            如果是数字集合则返回Set[int]，否则返回字符串
+        """
+        related_indices = set()
+
+        try:
+            # 从CrewOutput中提取实际的字符串内容
+            if result and hasattr(result, 'raw'):
+                # 如果raw是整数，直接添加到集合中
+                if isinstance(result.raw, int):
+                    related_indices.add(result.raw)
+                else:
+                    # 尝试解析为JSON或字符串
+                    try:
+                        indices_str = json.loads(result.raw)
+                        if isinstance(indices_str, int):
+                            related_indices.add(indices_str)
+                        elif isinstance(indices_str, str):
+                            indices = [int(idx.strip()) for idx in indices_str.split(',')]
+                            related_indices.update(indices)
+                        return related_indices
+                    except (json.JSONDecodeError, AttributeError):
+                        # 如果不是JSON，直接使用raw值
+                        indices_str = result.raw.strip('"')
+                        if indices_str:
+                            try:
+                                if ',' in indices_str:
+                                    indices = [int(idx.strip()) for idx in indices_str.split(',')]
+                                    related_indices.update(indices)
+                                else:
+                                    related_indices.add(int(indices_str))
+                                return related_indices
+                            except ValueError:
+                                return result.raw
+                        return result.raw
+            elif isinstance(result, str):
+                if ',' in result:
+                    try:
+                        indices = [int(idx.strip()) for idx in result.split(',')]
+                        related_indices.update(indices)
+                        return related_indices
+                    except ValueError:
+                        return result
+                else:
+                    try:
+                        related_indices.add(int(result))
+                        return related_indices
+                    except ValueError:
+                        return result
+
+            return str(result)
+
+        except Exception:
+            return str(result)

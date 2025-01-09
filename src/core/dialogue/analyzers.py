@@ -8,6 +8,7 @@ from src.core.dialogue.models import ProcessingDialogue, IntentAnalysis
 from src.crewai_ext.configs.config import llm
 from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
 from src.core.dialogue.pools import DialoguePool
+from src.core.api_response_parser import ApiResponseParser
 
 class DialogueAnalyzer:
     """对话分析器
@@ -283,11 +284,23 @@ class DialogueAnalyzer:
             Set[int]: 相关对话的索引集合
         """
 
-        # 获取同一stage_index的对话
-        stage_dialogues = [
-            d for d in dialogue_pool.dialogues
-            if d.context and d.context.stage_index == dialogue.context.stage_index
-        ]
+        # 获取当前stage和前一个stage的对话
+        current_stage = dialogue.context.stage_index if dialogue.context else None
+        stage_dialogues = []
+
+        if current_stage is not None:
+            # 获取当前stage的对话
+            stage_dialogues.extend([
+                d for d in dialogue_pool.dialogues
+                if d.context and d.context.stage_index == current_stage
+            ])
+
+            # 如果当前stage > 1，则获取前一个stage的对话
+            if current_stage > 1:
+                stage_dialogues.extend([
+                    d for d in dialogue_pool.dialogues
+                    if d.context and d.context.stage_index == current_stage - 1
+                ])
 
         # 创建上下文分析任务
         task = Task(
@@ -325,46 +338,6 @@ class DialogueAnalyzer:
         )
         result = crew.kickoff()
 
-        # 解析结果，提取相关对话索引
-        related_indices = set()
-        try:
-            # 从CrewOutput中提取实际的字符串内容
-            if result and hasattr(result, 'raw'):
-                # 如果raw是整数，直接添加到集合中
-                if isinstance(result.raw, int):
-                    related_indices.add(result.raw)
-                else:
-                    # 尝试解析为JSON或字符串
-                    try:
-                        import json
-                        indices_str = json.loads(result.raw)
-                        if isinstance(indices_str, int):
-                            related_indices.add(indices_str)
-                        elif isinstance(indices_str, str):
-                            indices = [int(idx.strip()) for idx in indices_str.split(',')]
-                            related_indices.update(indices)
-                    except (json.JSONDecodeError, AttributeError):
-                        # 如果不是JSON，直接使用raw值
-                        indices_str = result.raw.strip('"')
-                        if indices_str:
-                            try:
-                                if ',' in indices_str:
-                                    indices = [int(idx.strip()) for idx in indices_str.split(',')]
-                                    related_indices.update(indices)
-                                else:
-                                    related_indices.add(int(indices_str))
-                            except ValueError:
-                                pass
-            elif isinstance(result, str):
-                if ',' in result:
-                    indices = [int(idx.strip()) for idx in result.split(',')]
-                    related_indices.update(indices)
-                else:
-                    try:
-                        related_indices.add(int(result))
-                    except ValueError:
-                        pass
-        except (ValueError, AttributeError):
-            pass
-
-        return related_indices
+        # 使用通用解析方法解析结果
+        parsed_result = ApiResponseParser.parse_crew_output(result)
+        return parsed_result if isinstance(parsed_result, set) else set()
