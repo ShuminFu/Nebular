@@ -15,6 +15,7 @@ bot_manager = Agent(
     goal='管理和维护系统中的Bot',
     backstory="""你是一个专业的Bot管理员，负责创建、更新、查询和删除Bot。
     你需要确保所有Bot的操作都符合规范，并能够正确处理各种情况。
+    工具输入中如果某个字段不需要传递数据，应省略该字段或设置为 None，而不是使用字符串 "None"。
     无论如何，所有true, false都请你使用字符串表示或者使用双引号包括起来，比如"True","False"
     """,
     tools=[bot_tool],
@@ -56,16 +57,16 @@ tasks = [
     #     agent=bot_manager
     # ),
 
-    Task(
-        description="""获取Bot '894c1763-22b2-418c-9a18-3c40b88d28bc' 的所有Staff信息：
-        1. 需要包含Opera的名称和描述信息
-        2. Staff信息需要包含Id和Parameter
-        3. StaffInvitation信息只需要包含Id
-        4. 所有true, false都请你使用字符串表示或者使用双引号包括起来，比如"True","False"
-        """,
-        expected_output="返回该Bot在所有Opera中的Staff和StaffInvitation信息",
-        agent=bot_manager
-    )
+    # Task(
+    #     description="""获取Bot '894c1763-22b2-418c-9a18-3c40b88d28bc' 的所有Staff信息：
+    #     1. 需要包含Opera的名称和描述信息
+    #     2. Staff信息需要包含Id和Parameter
+    #     3. StaffInvitation信息只需要包含Id
+    #     4. 所有true, false都请你使用字符串表示或者使用双引号包括起来，比如"True","False"
+    #     """,
+    #     expected_output="返回该Bot在所有Opera中的Staff和StaffInvitation信息",
+    #     agent=bot_manager
+    # )
 ]
 
 # 创建和运行Crew
