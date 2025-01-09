@@ -26,18 +26,18 @@ class TaskType(IntEnum):
     CONVERSATION = 10  # 基础对话处理，不一定需要回复，比如CrewRunner仅回复被Mentioned或者Whispered的对话
     CHAT_PLANNING = 11  # 对话策略规划
     CHAT_RESPONSE = 12  # 对话响应生成
-    
+
     # 分析类任务
     ANALYSIS = 20  # 基础分析
     INTENT_ANALYSIS = 21  # 意图分析
     CONTEXT_ANALYSIS = 22  # 上下文分析，比如需要额外的RAG BOT/SEARCH BOT的帮助来收集上下文
-    
+
     # 执行类任务
     EXECUTION = 30  # 基础执行
     TOOL_EXECUTION = 31  # 工具调用
     API_CALL = 32  # API调用
     CALLBACK = 33  # 任务回调
-    
+
     # 管理类任务
     SYSTEM = 40  # 系统任务
     CREW_LIFECYCLE = 41  # CrewRunner的生命周期管理
@@ -45,8 +45,10 @@ class TaskType(IntEnum):
     ROLE_ASSIGNMENT = 43  # 发言角色分配
 
     # 资源管理任务
-    RESOURCE_CREATION = 50  # 资源创建任务, 需要调用工具创建资源, 由cm处理
-    RESOURCE_GENERATION = 51  # 资源生成任务, 需要调用工具生成资源, 由cr处理
+
+    RESOURCE_CREATION = 50  # 资源持久化任务：将生成的代码保存为Opera平台的资源文件, 需要调用工具创建资源, 由cm处理
+
+    RESOURCE_GENERATION = 51  # LLM代码生成任务：通过AI生成代码文件内容, 由cr处理
 
 
 class TaskStatus(IntEnum):
@@ -62,26 +64,26 @@ class BotTask(CamelBaseModel):
     """任务模型"""
     id: UUID = Field(default_factory=lambda: UUID(int=uuid4().int), description="任务唯一标识")
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone(timedelta(hours=8))), 
+        default_factory=lambda: datetime.now(timezone(timedelta(hours=8))),
         description="创建时间 (UTC+8)"
     )
     started_at: Optional[datetime] = Field(default=None, description="开始时间")
     completed_at: Optional[datetime] = Field(default=None, description="完成时间")
-    
+
     # 任务基本信息
     priority: TaskPriority = Field(default=TaskPriority.NORMAL, description="任务优先级")
     type: TaskType = Field(..., description="任务类型")
     status: TaskStatus = Field(default=TaskStatus.PENDING, description="任务状态")
-    
+
     # 任务内容
     description: str = Field(..., description="任务描述,由intent而来")
     parameters: Dict[str, Any] = Field(default_factory=dict, description="任务参数，由processing_dialogue的text以及context组成")
-    
+
     # 来源信息
     source_dialogue_index: Optional[int] = Field(default=None, description="源对话索引")
     response_staff_id: Optional[UUID] = Field(default=None, description="响应Staff ID")
     source_staff_id: Optional[UUID] = Field(default=None, description="源Staff ID，用于追踪任务的发起者")
-    
+
     # 执行信息
     progress: int = Field(default=0, description="任务进度(0-100)，暂时无用")
     result: Optional[Any] = Field(default=None, description="任务结果")
@@ -92,7 +94,7 @@ class BotTask(CamelBaseModel):
 
 class PersistentTaskState(BotTask):
     """持久化的任务状态模型
-    
+
     继承自BotTask，但只保留需要持久化的关键状态信息。
     """
     class Config:
@@ -102,21 +104,21 @@ class PersistentTaskState(BotTask):
     # 任务标识（必需）
     id: UUID = Field(..., description="任务唯一标识")
     created_at: datetime = Field(..., description="创建时间")
-    
+
     # 任务基本信息（必需）
     priority: TaskPriority = Field(..., description="任务优先级")
     type: TaskType = Field(..., description="任务类型")
     status: TaskStatus = Field(..., description="任务状态")
-    
+
     # 任务内容（必需）
     description: str = Field(..., description="任务描述")
     parameters: Dict[str, Any] = Field(..., description="任务参数")
-    
+
     # 来源信息（可选）
     source_dialogue_index: Optional[int] = Field(default=None, description="源对话索引")
     response_staff_id: Optional[UUID] = Field(default=None, description="响应Staff ID")
     source_staff_id: Optional[UUID] = Field(default=None, description="源Staff ID")
-    
+
     # 执行状态（必需）
     progress: int = Field(..., description="任务进度")
     result: Optional[Any] = Field(default=None, description="任务结果")
@@ -153,7 +155,7 @@ class BotTaskQueue(CamelBaseModel):
 
     async def _persist_to_api(self) -> None:
         """将任务队列状态持久化到API
-        
+
         将任务队列中的每个任务以PersistentTaskState的形式持久化到Bot的DefaultTags中。
         步骤：
         1. 获取Bot当前的DefaultTags
@@ -231,32 +233,32 @@ class BotTaskQueue(CamelBaseModel):
     @classmethod
     async def restore_from_api(cls, bot_id: UUID, **kwargs) -> "BotTaskQueue":
         """从API恢复任务队列状态的工厂方法
-        
+
         从Bot的DefaultTags中恢复持久化的任务状态。
-        
+
         Args:
             bot_id: Bot ID
             **kwargs: 配置参数，可能包括时间范围、过滤条件等
-        
+
         Returns:
             BotTaskQueue: 恢复的任务队列实例
         """
         try:
             # 创建一个新的任务队列实例
             queue = cls(bot_id=bot_id, **kwargs)
-            
+
             # 获取Bot信息
             get_result = _SHARED_BOT_TOOL.run(
                 action="get",
                 bot_id=bot_id
             )
-            
+
             # 解析API响应
             status_code, bot_data = ApiResponseParser.parse_response(get_result)
             if status_code != 200 or not bot_data:
                 print(f"获取Bot {bot_id} 失败")
                 return queue
-            
+
             # 获取DefaultTags中的任务状态
             try:
                 current_tags = json.loads(bot_data.get("defaultTags", "{}"))
@@ -264,7 +266,7 @@ class BotTaskQueue(CamelBaseModel):
             except json.JSONDecodeError:
                 print(f"解析Bot {bot_id} 的DefaultTags失败")
                 return queue
-            
+
             # 将持久化状态转换为BotTask对象
             for task_state in task_states:
                 try:
@@ -285,16 +287,16 @@ class BotTaskQueue(CamelBaseModel):
                         error_message=task_state.get("errorMessage")
                     )
                     queue.tasks.append(task)
-                    
+
                     # 更新状态计数器
                     queue.status_counter[task.status.name.lower()] += 1
-                    
+
                 except (KeyError, ValueError) as e:
                     print(f"转换任务状态失败: {str(e)}")
                     continue
-            
+
             return queue
-            
+
         except Exception as e:
             print(f"恢复Bot {bot_id} 的任务状态时发生错误: {str(e)}")
             # 发生错误时返回空队列
@@ -302,7 +304,7 @@ class BotTaskQueue(CamelBaseModel):
 
     async def add_task(self, task: Union[BotTask, List[BotTask]]) -> None:
         """添加任务并更新计数器
-        
+
         Args:
             task: 单个BotTask对象或BotTask列表
         """
@@ -318,34 +320,34 @@ class BotTaskQueue(CamelBaseModel):
 
         # 添加任务后持久化
         await self._persist_to_api()
-    
+
     async def update_task_status(self, task_id: UUID, new_status: TaskStatus) -> None:
         """更新任务状态并维护计数器"""
         for task in self.tasks:
             if task.id == task_id:
                 old_status = task.status
                 task.status = new_status
-                
+
                 # 更新时间戳
                 if new_status == TaskStatus.RUNNING:
                     task.started_at = datetime.now(timezone(timedelta(hours=8)))
                 elif new_status in [TaskStatus.COMPLETED, TaskStatus.FAILED]:
                     task.completed_at = datetime.now(timezone(timedelta(hours=8)))
-                
+
                 # 更新计数器
                 self.status_counter[old_status.name.lower()] -= 1
                 self.status_counter[new_status.name.lower()] += 1
                 # 状态更新后持久化
                 await self._persist_to_api()
                 break
-    
+
     def get_next_task(self) -> Optional[BotTask]:
         """获取下一个待处理的任务（按优先级排序，同优先级按创建时间FIFO）"""
         pending_tasks = [
-            task for task in self.tasks 
+            task for task in self.tasks
             if task.status == TaskStatus.PENDING
         ]
         if not pending_tasks:
             return None
-        
+
         return max(pending_tasks, key=lambda x: (x.priority, x.created_at.timestamp()))
