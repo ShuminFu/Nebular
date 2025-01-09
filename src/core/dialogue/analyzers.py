@@ -283,10 +283,10 @@ class DialogueAnalyzer:
             Set[int]: 相关对话的索引集合
         """
 
-        # 获取同一Opera下的对话
-        opera_dialogues = [
+        # 获取同一stage_index的对话
+        stage_dialogues = [
             d for d in dialogue_pool.dialogues
-            if d.opera_id == dialogue.opera_id
+            if d.context and d.context.stage_index == dialogue.context.stage_index
         ]
 
         # 创建上下文分析任务
@@ -298,9 +298,10 @@ class DialogueAnalyzer:
             - 内容：{dialogue.text}
             - 类型：{dialogue.type.name}
             - 标签：{dialogue.tags}
+            - 阶段：{dialogue.context.stage_index if dialogue.context else None}
 
-            可能相关的对话：
-            {[f"- 索引：{d.dialogue_index}, 内容：{d.text}" for d in opera_dialogues[-10:]]}
+            同阶段的对话：
+            {[f"- 索引：{d.dialogue_index}, 内容：{d.text}" for d in stage_dialogues[-10:]]}
 
             分析要求：
             1. 识别相关的代码讨论
@@ -308,6 +309,7 @@ class DialogueAnalyzer:
             3. 关联代码生成的上下文
             4. 考虑时序关系
             5. 分析对话意图的关联
+            6. 优先关联同一阶段的对话
 
             返回格式：逗号分隔的相关对话索引列表。如果没有相关对话，返回空字符串。
             """,

@@ -194,8 +194,10 @@ class ProcessingDialogue(CamelBaseModel):
             # 上下文
             context=DialogueContext(
                 stage_index=message_args.stage_index,
-                related_dialogue_indices=[],  # 初始为空，后续可能需要更新
-                conversation_state={}  # 初始为空，后续可能需要更新
+                # 相关对话索引会在对话处理过程中动态添加，用于追踪对话关联
+                related_dialogue_indices=[],
+                # 对话状态用于存储处理过程中的中间状态，如任务依赖关系
+                conversation_state={},
             )
         )
 

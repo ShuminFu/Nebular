@@ -141,19 +141,21 @@ class DialoguePool(CamelBaseModel):
                 # 3. 更新对话上下文
                 # 获取当前对话和相关对话中的最大stage_index
                 current_stage_index = dialogue.context.stage_index if dialogue.context else None
-                related_stage_indices = [
-                    d.context.stage_index
-                    for d in temp_pool.dialogues
-                    if d.dialogue_index in related_indices
-                    and d.context
-                    and d.context.stage_index is not None
-                ]
 
-                # 如果有相关对话的stage_index，使用最大值；否则保持当前值
-                max_stage_index = max(
-                    [i for i in [current_stage_index] + related_stage_indices if i is not None],
-                    default=current_stage_index
-                )
+                # 只有当current_stage_index为None时，才从相关对话中获取最大值
+                if current_stage_index is None:
+                    stage_related_indices = [
+                        d.context.stage_index
+                        for d in temp_pool.dialogues
+                        if d.dialogue_index in related_indices
+                        and d.context
+                        and d.context.stage_index is not None
+                    ]
+
+                    # 从相关对话中获取最大的stage_index
+                    max_stage_index = max(stage_related_indices, default=None)
+                else:
+                    max_stage_index = current_stage_index
 
                 dialogue.context = DialogueContext(
                     stage_index=max_stage_index,
