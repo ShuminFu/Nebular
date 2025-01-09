@@ -129,63 +129,63 @@ class ApiResponseParser:
         return parameters.get("ProcessingDialogues", [])
 
     @staticmethod
-    def parse_crew_output(result: Any) -> Union[Set[int], str]:
+    def parse_crew_output(result: Any) -> Union[Set[int], str, Dict]:
         """解析CrewOutput的通用方法
         
         Args:
             result: CrewOutput对象或其他返回值
             
         Returns:
-            如果是数字集合则返回Set[int]，否则返回字符串
+            如果是数字集合则返回Set[int]，如果是JSON则返回Dict，否则返回字符串
         """
-        related_indices = set()
-
         try:
             # 从CrewOutput中提取实际的字符串内容
             if result and hasattr(result, 'raw'):
-                # 如果raw是整数，直接添加到集合中
-                if isinstance(result.raw, int):
-                    related_indices.add(result.raw)
-                else:
-                    # 尝试解析为JSON或字符串
+                content = result.raw
+            else:
+                content = str(result)
+
+            # 如果内容是JSON格式的字符串（通常以```json开头）
+            if content.strip().startswith('```json'):
+                # 移除Markdown的JSON代码块标记
+                json_str = content.strip()
+                if json_str.startswith('```json\n'):
+                    json_str = json_str[8:]
+                if json_str.endswith('\n```'):
+                    json_str = json_str[:-4]
+                try:
+                    return json.loads(json_str)
+                except json.JSONDecodeError:
+                    pass
+
+            # 尝试直接解析为JSON
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError:
+                pass
+
+            # 如果不是JSON，按原来的逻辑处理数字集合
+            related_indices = set()
+            if isinstance(content, int):
+                related_indices.add(content)
+                return related_indices
+            elif isinstance(content, str):
+                if ',' in content:
                     try:
-                        indices_str = json.loads(result.raw)
-                        if isinstance(indices_str, int):
-                            related_indices.add(indices_str)
-                        elif isinstance(indices_str, str):
-                            indices = [int(idx.strip()) for idx in indices_str.split(',')]
-                            related_indices.update(indices)
-                        return related_indices
-                    except (json.JSONDecodeError, AttributeError):
-                        # 如果不是JSON，直接使用raw值
-                        indices_str = result.raw.strip('"')
-                        if indices_str:
-                            try:
-                                if ',' in indices_str:
-                                    indices = [int(idx.strip()) for idx in indices_str.split(',')]
-                                    related_indices.update(indices)
-                                else:
-                                    related_indices.add(int(indices_str))
-                                return related_indices
-                            except ValueError:
-                                return result.raw
-                        return result.raw
-            elif isinstance(result, str):
-                if ',' in result:
-                    try:
-                        indices = [int(idx.strip()) for idx in result.split(',')]
+                        indices = [int(idx.strip()) for idx in content.split(',')]
                         related_indices.update(indices)
                         return related_indices
                     except ValueError:
-                        return result
+                        return content
                 else:
                     try:
-                        related_indices.add(int(result))
+                        related_indices.add(int(content))
                         return related_indices
                     except ValueError:
-                        return result
+                        return content
 
-            return str(result)
+            return content
 
-        except Exception:
+        except Exception as e:
+            print(f"解析CrewOutput失败: {str(e)}")
             return str(result)

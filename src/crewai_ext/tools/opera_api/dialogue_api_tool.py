@@ -40,7 +40,7 @@ class DialogueToolSchema(BaseModel):
 class DialogueTool(BaseApiTool):
     name: str = "Dialogue Manager"
     description: str = """管理对话的通用工具，支持创建、查询操作。
-    
+    注意必选字段不可遗漏。
     示例输入:
     1. 创建对话: {
         'action': 'create',

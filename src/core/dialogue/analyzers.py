@@ -1,5 +1,6 @@
 import json
 from typing import Set
+from datetime import datetime, timezone, timedelta
 
 from crewai import Agent, Task, Crew
 
@@ -31,9 +32,9 @@ class DialogueAnalyzer:
             1. 从对话内容中识别出说话者的真实意图
             2. 用简洁的语言描述意图
             3. 理解对话的上下文关系
-            4. 确保信息安全，不会泄露跨Opera的信息
-            5. 识别代码生成请求
-            6. 分析代码相关任务
+            4. 识别代码生成请求
+            5. 分析代码相关任务
+            6. 无论如何，所有true, false都请你使用字符串表示或者使用双引号包括起来，比如"True","False"
 
             在描述意图时，你应该：
             1. 使用简洁的语言
@@ -60,10 +61,10 @@ class DialogueAnalyzer:
             1. 识别对话之间的关联关系
             2. 构建对话的上下文依赖图
             3. 确保Opera之间的信息隔离
-            4. 维护对话的时序关系
-            5. 跟踪代码生成的上下文
+            4. 跟踪代码生成的上下文
+            5. 在使用工具的过程中，无论如何记住重点，所有true, false都请你使用字符串表示或者使用双引号包括起来，比如"True","False"
             """,
-            # tools=[_SHARED_DIALOGUE_TOOL],
+            tools=[_SHARED_DIALOGUE_TOOL],
             verbose=True,
             llm=llm
         )
@@ -283,16 +284,16 @@ class DialogueAnalyzer:
         Returns:
             Set[int]: 相关对话的索引集合
         """
-
         # 获取当前stage和前一个stage的对话
         current_stage = dialogue.context.stage_index if dialogue.context else None
         stage_dialogues = []
 
         if current_stage is not None:
-            # 获取当前stage的对话
+            # 获取当前stage的对话（排除当前对话）
             stage_dialogues.extend([
                 d for d in dialogue_pool.dialogues
                 if d.context and d.context.stage_index == current_stage
+                and d.dialogue_index != dialogue.dialogue_index
             ])
 
             # 如果当前stage > 1，则获取前一个stage的对话
@@ -303,10 +304,11 @@ class DialogueAnalyzer:
                 ])
 
         # 创建上下文分析任务
-        task = Task(
-            description=f"""分析以下对话的上下文关联，关注代码生成相关的上下文：
+        index_task = Task(
+            description=f"""不使用工具，分析以下对话的上下文关联，关注代码生成相关的上下文：
 
             当前对话：
+            - Opera ID: {dialogue.opera_id}
             - 索引：{dialogue.dialogue_index}
             - 内容：{dialogue.text}
             - 类型：{dialogue.type.name}
@@ -329,15 +331,154 @@ class DialogueAnalyzer:
             expected_output="逗号分隔的相关对话DialogueIndex列表，例如：1,2,3",
             agent=self.context_analyzer
         )
+        context_structure_task = Task(
+            description=f"""使用对话工具的get action来分析相关对话并生成结构化的上下文数据：
 
+            当前对话：
+            - Opera ID: {dialogue.opera_id}
+            - 索引：{dialogue.dialogue_index}
+            - 内容：{dialogue.text}
+            - 类型：{dialogue.type.name}
+            - 标签：{dialogue.tags}
+            - 意图：{dialogue.intent_analysis.intent if dialogue.intent_analysis else None}
+
+            相关对话：基于前一个任务得到的索引列表
+
+            分析要求：
+            1. 提取对话主题和关键信息
+            2. 识别对话流程和状态变化
+            3. 跟踪重要的上下文变量
+            4. 记录关键的决策点
+            5. 特别关注代码生成相关的上下文：
+               - 代码需求的演变
+               - API和框架的选择
+               - 文件结构的变化
+               - 重要的配置决定
+            6. 主题标识和共享：
+               - 为每个主题生成唯一的标识符（UUID格式）
+               - 分析当前对话是否属于已有主题
+               - 如果属于已有主题，复用该主题的标识符
+               - 如果是新主题，生成新的标识符
+               - 主题标识规则：
+                1. 主题类型应该准确反映对话的核心内容
+                2. 需要记录主题的开始和最近更新时间
+                3. 主题历史应该按时间顺序排列
+            返回格式（JSON）：
+            {{
+                "conversation_flow": {{
+                    "current_topic": "当前讨论的主题",
+                    "topic_id": "主题的唯一标识符（UUID格式）",
+                    "topic_type": "主题类型，如'code_generation', 'requirement_discussion', 'api_selection'等",
+                    "previous_topics": ["之前讨论的主题1", "之前讨论的主题2"],
+                    "status": "对话当前状态"
+                }},
+                "code_context": {{
+                    "requirements": ["需求1", "需求2"],
+                    "frameworks": ["框架1", "框架2"],
+                    "file_structure": ["文件1", "文件2"],
+                    "api_choices": ["API1", "API2"]
+                }},
+                "decision_points": [
+                    {{
+                        "decision": "决策内容",
+                        "reason": "决策原因",
+                        "dialogue_index": "相关对话索引",
+                        "topic_id": "相关主题的标识符"
+                    }}
+                ],
+                "context_variables": {{
+                    "var1": "值1",
+                    "var2": "值2",
+                    "topic_history": [
+                        {{
+                            "topic_id": "主题标识符",
+                            "topic_type": "主题类型",
+                            "start_index": "主题开始的对话索引",
+                            "last_index": "最近的相关对话索引"
+                        }}
+                    ]
+                }}
+            }}
+
+
+            """,
+            expected_output="按照返回格式的严格JSON格式的上下文数据结构，其中包含主题标识和共享机制。如果分析失败则返回空字符串",
+            agent=self.context_analyzer
+        )
         # 执行分析
         crew = Crew(
             agents=[self.context_analyzer],
-            tasks=[task],
+            tasks=[index_task, context_structure_task],
             verbose=True
         )
         result = crew.kickoff()
 
-        # 使用通用解析方法解析结果
-        parsed_result = ApiResponseParser.parse_crew_output(result)
-        return parsed_result if isinstance(parsed_result, set) else set()
+        try:
+            # 使用ApiResponseParser解析结果
+            context_data = ApiResponseParser.parse_crew_output(result)
+
+            # 如果返回的是字符串，尝试解析为字典
+            if isinstance(context_data, str):
+                try:
+                    # 移除可能的Markdown代码块标记
+                    json_str = context_data.strip()
+                    if json_str.startswith('```json\n'):
+                        json_str = json_str[8:]
+                    if json_str.endswith('\n```'):
+                        json_str = json_str[:-4]
+                    context_data = json.loads(json_str)
+                except json.JSONDecodeError:
+                    print("无法解析上下文数据结构")
+                    return set()
+
+            if not isinstance(context_data, dict):
+                print("解析结果不是有效的字典结构")
+                return set()
+
+            # 验证必要的字段
+            required_fields = ['conversation_flow', 'code_context', 'decision_points', 'context_variables']
+            if not all(field in context_data for field in required_fields):
+                raise ValueError("上下文数据结构缺少必要字段")
+
+            # 验证主题相关字段
+            flow = context_data["conversation_flow"]
+            if not all(field in flow for field in ['topic_id', 'topic_type', 'current_topic']):
+                raise ValueError("conversation_flow缺少主题相关字段")
+
+            # 更新conversation_state
+            dialogue.context.conversation_state.update({
+                "flow": context_data["conversation_flow"],
+                "code_context": context_data["code_context"],
+                "decision_points": context_data["decision_points"],
+                "context_variables": context_data["context_variables"],
+                "analyzed_at": datetime.now(timezone(timedelta(hours=8))).isoformat(),
+                "topic": {
+                    "id": flow["topic_id"],
+                    "type": flow["topic_type"],
+                    "name": flow["current_topic"],
+                    "last_updated": datetime.now(timezone(timedelta(hours=8))).isoformat()
+                }
+            })
+
+            # 从decision_points中提取相关的对话索引，同时考虑主题关联
+            related_indices = {
+                int(point["dialogue_index"])
+                for point in context_data["decision_points"]
+                if "dialogue_index" in point and str(point["dialogue_index"]).isdigit()
+                and point.get("topic_id") == flow["topic_id"]  # 确保只关联同一主题的对话
+            }
+
+            # 从topic_history中添加同主题的对话索引
+            topic_history = context_data["context_variables"].get("topic_history", [])
+            for topic in topic_history:
+                if topic.get("topic_id") == flow["topic_id"]:
+                    start_idx = int(topic["start_index"])
+                    last_idx = int(topic["last_index"])
+                    # 添加该主题范围内的所有对话索引
+                    related_indices.update(range(start_idx, last_idx + 1))
+
+        except (ValueError, KeyError, AttributeError) as e:
+            print(f"解析上下文数据结构失败: {str(e)}")
+            return set()
+
+        return related_indices
