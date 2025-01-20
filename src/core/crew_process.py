@@ -243,8 +243,7 @@ class CrewManager(BaseCrewProcess):
             )
 
             # 创建代码生成任务
-            gen_task = Task(
-                description=f"""根据以下信息生成代码：
+            task_desc = f"""根据以下信息生成代码：
                 1. 文件路径：{task.parameters['file_path']}
                 2. 文件类型：{task.parameters['file_type']}
                 3. 需求描述：{task.parameters['dialogue_context']['text']}
@@ -256,7 +255,13 @@ class CrewManager(BaseCrewProcess):
                 6. 引用关系：{task.parameters.get('references', [])}
 
                 请生成符合要求的代码内容。
-                """,
+                """
+
+            # 记录LLM输入
+            self.log.info(f"[LLM Input] Code Generation Task for file {task.parameters['file_path']}:\n{task_desc}")
+
+            gen_task = Task(
+                description=task_desc,
                 agent=code_gen_agent
             )
 
@@ -267,6 +272,10 @@ class CrewManager(BaseCrewProcess):
             )
 
             code_content = crew.kickoff()
+
+            # 记录LLM输出
+            self.log.info(f"[LLM Output] Generated code for file {task.parameters['file_path']}:\n{
+                          code_content.raw if hasattr(code_content, 'raw') else code_content}")
 
             # 创建资源
             resource_task = BotTask(
@@ -434,8 +443,7 @@ class CrewRunner(BaseCrewProcess):
                 raise Exception("Crew或agents未正确配置")
 
             # 创建代码生成任务
-            gen_task = Task(
-                description=f"""根据以下信息生成代码：
+            task_desc = f"""根据以下信息生成代码：
                 1. 文件路径：{task.parameters['file_path']}
                 2. 文件类型：{task.parameters['file_type']}
                 3. 需求描述：{task.parameters['dialogue_context']['text']}
@@ -445,7 +453,13 @@ class CrewRunner(BaseCrewProcess):
                    - 框架：{task.parameters['code_details']['frameworks']}
                 5. 相关文件：{task.parameters['code_details']['resources']}
                 6. 引用关系：{task.parameters.get('references', [])}
-                """,
+                """
+
+            # 记录LLM输入
+            self.log.info(f"[LLM Input] Generation Task for file {task.parameters['file_path']}:\n{task_desc}")
+
+            gen_task = Task(
+                description=task_desc,
                 agent=self.crew.agents[0],  # 使用已配置的agent
                 expected_output=f"""
                 @file: {task.parameters['file_path']}
@@ -466,6 +480,9 @@ class CrewRunner(BaseCrewProcess):
             self.crew.tasks = [gen_task]
             result = self.crew.kickoff()
             code_content = result.raw if hasattr(result, 'raw') else str(result)
+
+            # 记录LLM输出
+            self.log.info(f"[LLM Output] Generated code for file {task.parameters['file_path']}:\n{code_content}")
 
             # 通过dialogue发送代码生成结果
             dialogue_data = DialogueForCreation(

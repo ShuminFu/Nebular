@@ -10,6 +10,10 @@ from src.crewai_ext.configs.config import llm
 from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
 from src.core.dialogue.pools import DialoguePool
 from src.core.api_response_parser import ApiResponseParser
+from src.core.logger_config import get_logger
+
+# 初始化logger
+logger = get_logger("dialogue_analyzer", "logs/llm_analyzer.log")
 
 class DialogueAnalyzer:
     """对话分析器
@@ -169,6 +173,7 @@ class DialogueAnalyzer:
             expected_output="描述对话意图，包含动作和目标并且遵循返回示例的格式（JSON），如果是无意义的对话则intent字段返回空字符串, 文件名要考虑context中的项目结构信息, 包含完整的多文件代码生成信息",
             agent=self.intent_analyzer
         )
+        logger.info(f"[LLM Input] Intent Analysis Task for dialogue {dialogue.dialogue_index}:\n{task.description}")
 
         # 执行分析
         crew = Crew(
@@ -177,6 +182,9 @@ class DialogueAnalyzer:
             verbose=True
         )
         result = crew.kickoff()
+
+        # 记录LLM输出
+        logger.info(f"[LLM Output] Intent Analysis Result for dialogue {dialogue.dialogue_index}:\n{result.raw}")
 
         try:
             # 解析结果
@@ -399,12 +407,13 @@ class DialogueAnalyzer:
             }}
         ]
     }}
-
-
             """,
             expected_output="按照返回格式的严格JSON格式的上下文数据结构，其中包含主题标识和共享机制。如果分析失败则返回空字符串",
             agent=self.context_analyzer
         )
+        # 记录LLM输入 - 索引任务
+        logger.info(f"[LLM Input] Context Index Task for dialogue {dialogue.dialogue_index}:\n{index_task.description}")
+
         # 执行分析
         crew = Crew(
             agents=[self.context_analyzer],
@@ -412,6 +421,9 @@ class DialogueAnalyzer:
             verbose=True
         )
         result = crew.kickoff()
+
+        # 记录LLM输出
+        logger.info(f"[LLM Output] Context Analysis Result for dialogue {dialogue.dialogue_index}:\n{result.raw}")
 
         try:
             # 使用ApiResponseParser解析结果
