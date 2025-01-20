@@ -354,51 +354,51 @@ class DialogueAnalyzer:
                - API和框架的选择
                - 文件结构的变化
                - 重要的配置决定
-            6. 主题标识和共享：
-               - 为每个主题生成唯一的标识符（UUID格式）
-               - 分析当前对话是否属于已有主题
-               - 如果属于已有主题，复用该主题的标识符
-               - 如果是新主题，生成新的标识符
-               - 主题标识规则：
-                1. 主题类型应该准确反映对话的核心内容
-                2. 需要记录主题的开始和最近更新时间
-                3. 主题历史应该按时间顺序排列
+            6. 主题定义规则：
+                1. 主题独立性：
+                - 每个主题代表一个明确的目标或需求
+                - 当需求发生变更时，应创建新主题
+                - 新主题应该关联到源主题
+
+                2. 变更判断标准：
+                - 功能需求的重大改变
+                - 架构或设计的显著调整
+                - 技术栈或依赖的变更
+                - 与原主题目标的显著偏离
+
+                3. 主题状态：
+                - active: 当前正在处理的主题
+                - completed: 已完成的主题
+                - superseded: 被新主题取代的主题
+
             返回格式（JSON）：
+    {{
+        "conversation_flow": {{
+            "current_topic": "当前主题名称",
+            "topic_id": "主题UUID",
+            "topic_type": "主题类型（如 code_generation, requirement_discussion 等）",
+            "status": "主题状态（active/completed/superseded）",
+            "created_at": "主题创建时间",
+            "derived_from": "源主题ID",
+            "change_reason": "如果是衍生主题，记录变更原因",
+            "evolution_chain": ["topic-id-1", "topic-id-2"],
+            "previous_topics": ["历史主题"]
+        }},
+        "code_context": {{
+            "requirements": ["需求列表"],
+            "frameworks": ["使用的框架"],
+            "file_structure": ["文件结构"],
+            "api_choices": ["API选择"],
+        }},
+        "decision_points": [
             {{
-                "conversation_flow": {{
-                    "current_topic": "当前讨论的主题",
-                    "topic_id": "主题的唯一标识符（UUID格式）",
-                    "topic_type": "主题类型，如'code_generation', 'requirement_discussion', 'api_selection'等",
-                    "previous_topics": ["之前讨论的主题1", "之前讨论的主题2"],
-                    "status": "对话当前状态"
-                }},
-                "code_context": {{
-                    "requirements": ["需求1", "需求2"],
-                    "frameworks": ["框架1", "框架2"],
-                    "file_structure": ["文件1", "文件2"],
-                    "api_choices": ["API1", "API2"]
-                }},
-                "decision_points": [
-                    {{
-                        "decision": "决策内容",
-                        "reason": "决策原因",
-                        "dialogue_index": "相关对话索引",
-                        "topic_id": "相关主题的标识符"
-                    }}
-                ],
-                "context_variables": {{
-                    "var1": "值1",
-                    "var2": "值2",
-                    "topic_history": [
-                        {{
-                            "topic_id": "主题标识符",
-                            "topic_type": "主题类型",
-                            "start_index": "主题开始的对话索引",
-                            "last_index": "最近的相关对话索引"
-                        }}
-                    ]
-                }}
+                "decision": "决策内容",
+                "reason": "决策原因",
+                "dialogue_index": "相关对话索引",
+                "topic_id": "主题ID"
             }}
+        ]
+    }}
 
 
             """,

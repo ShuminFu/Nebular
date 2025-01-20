@@ -1,3 +1,4 @@
+.cursorignore
 /docs/playground/.env
 /docs/playground/BING_API_KEY.txt
 /docs/playground/tmp/
@@ -49,3 +50,4 @@ docs/design/核心类图.md
 dailywork.sh
 git_changes_today.txt
 docs/playground/archive/groupchat/search_arxiv_gpt4.py
+.gitignore
