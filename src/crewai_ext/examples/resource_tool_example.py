@@ -2,7 +2,7 @@
 from uuid import UUID
 from crewai import Agent, Task, Crew
 from src.crewai_ext.tools.opera_api.resource_api_tool import ResourceTool
-from src.crewai_ext.configs.config import llm
+from src.crewai_ext.config.llm_setup import llm
 
 
 # 创建Resource管理工具

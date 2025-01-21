@@ -1,5 +1,5 @@
 # pylint: skip-file
-from src.crewai_ext.configs.config import llm
+from src.crewai_ext.config.llm_setup import llm
 from crewai import Agent, Crew, Task
 
 # Uncomment the following line to use an example of a custom tool

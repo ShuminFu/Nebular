@@ -2,7 +2,7 @@
 
 from crewai import Agent, Task, Crew
 from src.crewai_ext.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
-from src.crewai_ext.configs.config import llm
+from src.crewai_ext.config.llm_setup import llm
 
 
 # 创建Staff邀请管理工具

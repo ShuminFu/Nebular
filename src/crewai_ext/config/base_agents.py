@@ -13,7 +13,7 @@
    - 更新任务状态
 
 使用方法:
-    from crewai_ext.configs.config.base_agents import create_intent_mind_agent, create_persona_switch_agent
+    from crewai_ext.config.base_agents import create_intent_mind_agent, create_persona_switch_agent
     
     # 创建IntentMind Agent
     intent_mind = create_intent_mind_agent()
@@ -27,7 +27,7 @@
 
 测试:
     直接运行此脚本进行Agent功能测试:
-    python -m crewai_ext.configs.config.base_agents
+    python -m crewai_ext.config.base_agents
 """
 
 from crewai import Agent, Task, Crew
@@ -35,7 +35,8 @@ from typing import List
 from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
 from src.crewai_ext.tools.opera_api.dialogue_api_tool import DialogueTool
 from src.crewai_ext.tools.opera_api.staff_api_tool import StaffTool
-from src.crewai_ext.configs.config import llm
+from src.crewai_ext.config.llm_setup import llm
+
 
 def create_intent_agent(tools: List = None) -> Agent:
     """
@@ -44,7 +45,7 @@ def create_intent_agent(tools: List = None) -> Agent:
     """
     if tools is None:
         tools = [BotTool(), DialogueTool()]
-    
+
     return Agent(
         name="IntentMind",
         role="Dialogue Intent Analyzer",
@@ -58,8 +59,9 @@ def create_intent_agent(tools: List = None) -> Agent:
         """,
         tools=tools,
         verbose=True,
-        llm=llm  
+        llm=llm
     )
+
 
 def create_persona_agent(tools: List = None) -> Agent:
     """
@@ -69,7 +71,7 @@ def create_persona_agent(tools: List = None) -> Agent:
     """
     if tools is None:
         tools = [DialogueTool(), StaffTool(), BotTool()]
-    
+
     return Agent(
         name="PersonaSwitch",
         role="Persona Manager",
@@ -83,24 +85,25 @@ def create_persona_agent(tools: List = None) -> Agent:
         """,
         tools=tools,
         verbose=True,
-        llm=llm  
+        llm=llm
     )
+
 
 if __name__ == "__main__":
     import asyncio
     import sys
     from loguru import logger
-    
+
     # 配置logger
     logger.remove()
     logger.add(sys.stdout, level="INFO")
-    
+
     async def test_agents():
         """测试Agent的基本功能"""
         # 创建测试用的Agent实例
         intent_agent = create_intent_agent()
         persona_switch = create_persona_agent()
-        
+
         # 创建测试用的Crew
         test_crew = Crew(
             agents=[intent_agent, persona_switch],
@@ -128,7 +131,7 @@ if __name__ == "__main__":
             ],
             verbose=True
         )
-        
+
         try:
             # 运行测试任务
             result = test_crew.kickoff()
@@ -139,12 +142,12 @@ if __name__ == "__main__":
             print(f"\n=== 测试失败 ===")
             print(f"错误信息: {str(e)}")
             return False
-    
+
     # 运行测试
     logger.info("开始测试基础Agent...")
     success = asyncio.run(test_agents())
-    
+
     if success:
         logger.success("Agent测试完成！")
     else:
-        logger.error("Agent测试失败！") 
+        logger.error("Agent测试失败！")
