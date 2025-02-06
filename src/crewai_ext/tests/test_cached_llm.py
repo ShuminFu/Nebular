@@ -1,30 +1,39 @@
 import unittest
 import os
 import time
+import shutil
 
 from crewai import Agent, Task, Crew, Process
-from src.tools.llm_cache import LLMCache, logger
+import litellm
+from litellm.caching import Cache
 from src.crewai_ext.config.llm_setup import test_config
-from src.crewai_ext.tools.cached_llm import CachedLLM
-
-# 创建专门用于CrewAI的LLM缓存实例
-crewai_llm_cache = LLMCache(cache_dir='.crewai_llm_cache')
+from src.crewai_ext.config.llm_factory import get_llm
 
 
 class TestCrewAIWithCache(unittest.TestCase):
-    """测试在CrewAI中使用LLM缓存"""
+    """测试在CrewAI中使用LiteLLM缓存"""
 
     def setUp(self):
         """测试开始前清理缓存"""
-        crewai_llm_cache.clear()
+        self.cache_dir = '.test_cache'
+        if os.path.exists(self.cache_dir):
+            shutil.rmtree(self.cache_dir)
+        os.makedirs(self.cache_dir, exist_ok=True)
 
         # 创建带缓存的LLM模型
-        self.llm = CachedLLM(
+        self.llm = get_llm(
+            use_cache=True,
+            cache_dir=self.cache_dir,
             model="azure/gpt-4o",
             api_key=os.environ.get("AZURE_API_KEY"),
-            base_url=os.environ.get("AZURE_API_BASE"),
-            cache=crewai_llm_cache
+            base_url=os.environ.get("AZURE_API_BASE")
         )
+
+    def tearDown(self):
+        """测试结束后清理缓存"""
+        if os.path.exists(self.cache_dir):
+            shutil.rmtree(self.cache_dir)
+        litellm.disable_cache()
 
     def test_crewai_with_cache(self):
         """测试CrewAI场景中的LLM缓存"""
@@ -77,14 +86,14 @@ class TestCrewAIWithCache(unittest.TestCase):
         )
 
         # 第一次运行（应该调用API）
-        logger.info("CrewAI测试 - 第一次运行")
+        print("CrewAI测试 - 第一次运行")
         result1 = crew.kickoff()
 
         # 验证缓存文件已创建
-        self.assertTrue(len(os.listdir(crewai_llm_cache.cache_dir)) > 0)
+        self.assertTrue(len(os.listdir(self.cache_dir)) > 0)
 
         # 第二次运行（应该使用缓存）
-        logger.info("CrewAI测试 - 第二次运行（应该使用缓存）")
+        print("CrewAI测试 - 第二次运行（应该使用缓存）")
         result2 = crew.kickoff()
 
         # 验证两次结果相同（只比较生成的内容）
@@ -146,21 +155,27 @@ class TestCrewAIWithCache(unittest.TestCase):
         result2 = crew2.kickoff()
 
         # 由于是不同的框架和专家，应该生成不同的缓存键
-        cache_files = os.listdir(crewai_llm_cache.cache_dir)
+        cache_files = os.listdir(self.cache_dir)
         self.assertGreater(len(cache_files), 1)
 
     def test_cache_expiration(self):
         """测试缓存过期功能"""
-        # 创建一个短期缓存实例
-        short_cache = LLMCache(ttl_seconds=1, cache_dir='.short_cache')
-
-        # 创建使用短期缓存的LLM
-        short_llm = CachedLLM(
+        # 创建一个短期缓存的LLM
+        short_llm = get_llm(
+            use_cache=True,
+            cache_dir=self.cache_dir,
             model="azure/gpt-4o",
             api_key=os.environ.get("AZURE_API_KEY"),
-            base_url=os.environ.get("AZURE_API_BASE"),
-            cache=short_cache
+            base_url=os.environ.get("AZURE_API_BASE")
         )
+
+        # 配置短期缓存
+        litellm.cache = Cache(
+            type="disk",
+            ttl=1,  # 1秒后过期
+            disk_cache_dir=self.cache_dir
+        )
+        litellm.enable_cache()
 
         # 创建agent
         agent = Agent(

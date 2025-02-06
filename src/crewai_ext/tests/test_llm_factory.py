@@ -1,48 +1,78 @@
 """LLM工厂模块的测试用例"""
 import os
+import shutil
 from src.crewai_ext.config.llm_factory import get_llm
-from src.crewai_ext.tools.cached_llm import CachedLLM
-from src.crewai_ext.tests.conftest import use_cached_llm
+import litellm
+from litellm.caching import Cache
 
 
-def test_get_llm_with_cache_fixture(cached_llm):
-    """使用pytest fixture方式获取缓存LLM"""
-    assert isinstance(cached_llm, CachedLLM)
+def setup_module():
+    """测试模块开始前的设置"""
+    cleanup_cache()
 
 
-def test_get_llm_with_context_manager():
-    """使用上下文管理器方式临时启用缓存"""
-    # 默认不使用缓存
+def teardown_module():
+    """测试模块结束后的清理"""
+    cleanup_cache()
+    litellm.disable_cache()
+
+
+def cleanup_cache():
+    """清理缓存目录"""
+    cache_dir = '.test_cache'
+    if os.path.exists(cache_dir):
+        shutil.rmtree(cache_dir)
+    os.makedirs(cache_dir, exist_ok=True)
+
+
+def test_get_llm_without_cache():
+    """测试获取无缓存的LLM"""
+    litellm.disable_cache()
     llm = get_llm()
-    assert not isinstance(llm, CachedLLM)
+    assert not hasattr(litellm, 'cache') or litellm.cache is None
 
-    # 在上下文中使用缓存
-    with use_cached_llm():
-        llm = get_llm()
-        assert isinstance(llm, CachedLLM)
 
-    # 上下文结束后恢复默认行为
-    llm = get_llm()
-    assert not isinstance(llm, CachedLLM)
+def test_get_llm_with_cache():
+    """测试获取带缓存的LLM"""
+    cache_dir = '.test_cache'
+    llm = get_llm(
+        use_cache=True,
+        cache_dir=cache_dir
+    )
+    assert hasattr(litellm, 'cache')
+    assert isinstance(litellm.cache, Cache)
+    assert litellm.cache.type == "disk"
+    assert os.path.exists(cache_dir)
 
+
+def test_get_llm_with_custom_cache_dir():
+    """测试自定义缓存目录"""
+    custom_cache_dir = '.custom_test_cache'
+    if os.path.exists(custom_cache_dir):
+        shutil.rmtree(custom_cache_dir)
+
+    llm = get_llm(
+        use_cache=True,
+        cache_dir=custom_cache_dir
+    )
+
+    assert hasattr(litellm, 'cache')
+    assert isinstance(litellm.cache, Cache)
+    assert os.path.exists(custom_cache_dir)
+
+    # 清理
+    shutil.rmtree(custom_cache_dir)
 
 def test_get_llm_with_env_var():
     """使用环境变量方式启用缓存"""
     # 设置环境变量
     os.environ["USE_CACHED_LLM"] = "true"
     llm = get_llm()
-    assert isinstance(llm, CachedLLM)
+    assert hasattr(litellm, 'cache')
+    assert isinstance(litellm.cache, Cache)
 
     # 清理环境变量
     del os.environ["USE_CACHED_LLM"]
+    litellm.disable_cache()
     llm = get_llm()
-    assert not isinstance(llm, CachedLLM)
-
-
-def test_get_llm_with_custom_cache_dir():
-    """测试自定义缓存目录"""
-    test_cache_dir = ".test_cache"
-    with use_cached_llm(cache_dir=test_cache_dir):
-        llm = get_llm()
-        assert isinstance(llm, CachedLLM)
-        # 这里可以添加检查缓存目录是否正确的断言
+    assert not hasattr(litellm, 'cache') or litellm.cache is None

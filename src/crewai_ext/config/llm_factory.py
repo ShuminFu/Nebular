@@ -8,8 +8,9 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 from dotenv import load_dotenv
 
+import litellm
+from litellm.caching import Cache
 from crewai import LLM
-from src.crewai_ext.tools.cached_llm import CachedLLM, crewai_llm_cache
 
 
 def load_llm_config(env_path: Optional[Path] = None) -> Dict[str, str]:
@@ -35,9 +36,34 @@ def load_llm_config(env_path: Optional[Path] = None) -> Dict[str, str]:
         "azure_deployment": os.getenv("AZURE_DEPLOYMENT", "gpt-4o"),
         # 测试相关配置
         "testing": os.getenv("TESTING", "false").lower() == "true",
-        "use_cache": os.getenv("USE_CACHED_LLM", "false").lower() == "true"
+        "use_cache": os.getenv("USE_CACHED_LLM", "false").lower() == "true",
+        # 缓存配置
+        "cache_type": os.getenv("CACHE_TYPE", "disk"),
+        "cache_dir": os.getenv("CACHE_DIR", ".crewai_llm_cache"),
+        "cache_ttl": float(os.getenv("CACHE_TTL", "3600"))
     }
     return config
+
+
+def setup_litellm_cache(config: Dict[str, Any]):
+    """配置LiteLLM的缓存
+    
+    Args:
+        config: 配置字典
+    """
+    if config.get("use_cache"):
+        cache_config = {
+            "type": config["cache_type"],
+            "ttl": config["cache_ttl"]
+        }
+
+        # 根据缓存类型添加特定配置
+        if config["cache_type"] == "disk":
+            cache_config["disk_cache_dir"] = config["cache_dir"]
+
+        # 启用LiteLLM缓存
+        litellm.cache = Cache(**cache_config)
+        litellm.enable_cache()
 
 
 def get_llm(
@@ -77,12 +103,10 @@ def get_llm(
             "base_url": config.get("base_url")  # 可能为None
         })
 
-    # 在测试模式或显式要求时使用缓存
-    if config.get("testing") or use_cache or config.get("use_cache"):
-        return CachedLLM(
-            cache=crewai_llm_cache,
-            cache_dir=cache_dir,
-            **llm_config
-        )
+    # 设置缓存
+    if use_cache or config.get("use_cache"):
+        config["use_cache"] = True
+        config["cache_dir"] = cache_dir
+        setup_litellm_cache(config)
 
     return LLM(**llm_config)
