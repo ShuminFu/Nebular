@@ -1,6 +1,5 @@
 """LLM工厂模块的测试用例"""
 import os
-import pytest
 from src.crewai_ext.config.llm_factory import get_llm
 from src.crewai_ext.tools.cached_llm import CachedLLM
 from src.crewai_ext.tests.conftest import use_cached_llm

@@ -10,11 +10,6 @@ env_path = Path(__file__).parent / '.env'
 config = load_llm_config(env_path)
 llm = get_llm(config)
 
-# llm = LLM(
-#     model="gpt-4o",
-#     api_key=os.environ.get("OPENAI_API_KEY"),
-#     base_url=os.environ.get("http://10.1.11.55:3000/v1")
-# )
 
 DEFAULT_CREW_MANAGER_PROMPT = {
     "role": "Bot管理员, Staff邀请发送者",
@@ -38,15 +33,7 @@ CREW_MANAGER_INIT = {
     查询所有Bot列表中名为BotManager的Bot
     """,
     "expected_output": "返回不在活跃状态的Bot ID列表以及详情",
-} # 怎么感觉这个也可以coding实现
-
-# GET_SUB_BOTS_BY_TAG = {
-#     "description":"""
-#     根据这个Bot的TAG 分析出所有的子Bot的ID
-#     """,
-#     "expected_output":"返回所有子Bot的ID列表"
-# } # 这个可以直接通过coding调用API工具实现，而不用通过AI来调用API工具
-
+}
 
 
 DEFAULT_CREW_MANAGER = Agent(
@@ -101,8 +88,14 @@ test_config = {
 }
 
 if __name__ == "__main__":
+    # 创建Task时显式指定agent
+    task = Task(
+        agent=DEFAULT_CREW_MANAGER,  # 明确指定执行任务的Agent
+        **CREW_MANAGER_INIT
+    )
+
     crew = Crew(
         agents=[DEFAULT_CREW_MANAGER],
-        tasks=[Task(**CREW_MANAGER_INIT)]
+        tasks=[task]
     )
     crew.kickoff()

@@ -26,13 +26,13 @@ def load_llm_config(env_path: Optional[Path] = None) -> Dict[str, str]:
 
     # 获取所有相关的环境变量
     config = {
-        "model": os.getenv("LLM_MODEL", "gpt-4"),
+        "model": os.getenv("MODEL", "gpt-4o"),
         "api_key": os.getenv("OPENAI_API_KEY"),
         "base_url": os.getenv("OPENAI_BASE_URL"),
         # Azure特定配置
         "azure_api_key": os.getenv("AZURE_API_KEY"),
         "azure_api_base": os.getenv("AZURE_API_BASE"),
-        "azure_deployment": os.getenv("AZURE_DEPLOYMENT", "gpt-4"),
+        "azure_deployment": os.getenv("AZURE_DEPLOYMENT", "gpt-4o"),
         # 测试相关配置
         "testing": os.getenv("TESTING", "false").lower() == "true",
         "use_cache": os.getenv("USE_CACHED_LLM", "false").lower() == "true"
