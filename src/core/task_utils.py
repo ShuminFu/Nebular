@@ -142,6 +142,8 @@ class PersistentTaskState(BotTask):
             source_dialogue_index=task.source_dialogue_index,
             response_staff_id=task.response_staff_id,
             source_staff_id=task.source_staff_id,
+            topic_id=task.topic_id,
+            topic_type=task.topic_type,
             progress=task.progress,
             result=task.result,
             error_message=task.error_message
@@ -286,6 +288,8 @@ class BotTaskQueue(CamelBaseModel):
                         source_dialogue_index=task_state.get("sourceDialogueIndex"),
                         response_staff_id=task_state.get("responseStaffId"),
                         source_staff_id=task_state.get("sourceStaffId"),
+                        topic_id=task_state.get("topicId"),
+                        topic_type=task_state.get("topicType"),
                         progress=task_state["progress"],
                         result=task_state.get("result"),
                         error_message=task_state.get("errorMessage")

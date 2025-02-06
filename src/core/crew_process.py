@@ -152,7 +152,7 @@ class CrewManager(BaseCrewProcess):
         self.crew_processes: Dict[UUID, CrewProcessInfo] = {}
         self._staff_id_cache: Dict[str, UUID] = {}  # opera_id -> staff_id 的缓存
         # 主题任务跟踪
-        self.topic_tasks: Dict[str, Dict[str, Any]] = {}  # topic_id -> {tasks: Set[UUID], status: str, type: str}
+        self.topic_tasks: Dict[str, Dict[str, Any]] = {}  # topic_id -> {tasks: Set[UUID], status: str, type: str, opera_id: str}
 
     async def setup(self):
         """初始化设置"""
@@ -315,7 +315,8 @@ class CrewManager(BaseCrewProcess):
                 self.topic_tasks[task.topic_id] = {
                     'tasks': set(),
                     'type': task.topic_type,
-                    'status': 'active'
+                    'status': 'active',
+                    'opera_id': task.parameters.get('opera_id')  # 保存opera_id
                 }
             self.topic_tasks[task.topic_id]['tasks'].add(task.id)
 
@@ -440,6 +441,18 @@ class CrewManager(BaseCrewProcess):
 
     async def _create_topic_summary_task(self, topic_id: str, topic_info: Dict[str, Any]):
         """创建主题总结任务"""
+        # 获取opera_id
+        opera_id = topic_info.get('opera_id')
+        if not opera_id:
+            self.log.error(f"无法为主题 {topic_id} 创建总结任务：缺少opera_id")
+            return
+
+        # 获取CM的staff_id
+        cm_staff_id = await self._get_cm_staff_id(opera_id)
+        if not cm_staff_id:
+            self.log.error(f"无法为主题 {topic_id} 创建总结任务：无法获取CM的staff_id")
+            return
+
         # 收集主题相关的所有任务信息
         topic_tasks = []
         for task_id in topic_info['tasks']:
@@ -457,12 +470,18 @@ class CrewManager(BaseCrewProcess):
                 "topic_id": topic_id,
                 "topic_type": topic_info['type'],
                 "tasks": [t.model_dump() for t in topic_tasks],
-                "summary_type": "code_topic"
-            }
+                "summary_type": "code_topic",
+                "opera_id": opera_id  # 确保包含opera_id
+            },
+            source_staff_id=cm_staff_id,  # 设置源Staff为CM
+            response_staff_id=cm_staff_id,  # 设置响应Staff为CM
+            topic_id=topic_id,  # 保持主题关联
+            topic_type=topic_info['type']
         )
 
         # 将任务添加到队列
         await self.task_queue.add_task(summary_task)
+        self.log.info(f"已创建主题 {topic_id} 的总结任务，opera_id: {opera_id}, staff_id: {cm_staff_id}")
 
 
 class CrewRunner(BaseCrewProcess):
