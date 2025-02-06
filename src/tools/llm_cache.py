@@ -2,8 +2,7 @@
 基于URL缓存改造，支持对LLM请求响应的缓存，避免重复调用API。
 """
 
-import unittest
-from unittest.mock import patch
+
 import logging
 import json
 import os
@@ -29,7 +28,7 @@ class LLMCache:
 
     def _generate_cache_key(self, model: str, messages: list, **kwargs) -> str:
         """生成缓存键
-        
+
         考虑所有可能影响LLM输出的参数，包括：
         - 模型名称
         - 消息内容
@@ -52,12 +51,12 @@ class LLMCache:
 
     def get(self, model: str, messages: list, **kwargs) -> dict:
         """获取缓存的LLM响应
-        
+
         Args:
             model: 模型名称
             messages: 消息列表
             **kwargs: 其他参数(temperature, top_p等)
-            
+
         Returns:
             dict: 缓存的响应数据，如果没有缓存则返回None
         """
@@ -83,7 +82,7 @@ class LLMCache:
 
     def set(self, model: str, messages: list, response_data: dict, **kwargs):
         """设置LLM响应缓存
-        
+
         Args:
             model: 模型名称
             messages: 消息列表
@@ -111,90 +110,3 @@ class LLMCache:
             if file.endswith('.json'):
                 os.remove(os.path.join(self.cache_dir, file))
         logger.info("🧹 已清除所有LLM缓存")
-
-
-# 创建全局LLM缓存实例
-llm_cache = LLMCache()
-
-
-def call_llm_with_cache(model: str, messages: list, use_cache=True, **kwargs) -> dict:
-    """调用LLM接口，支持缓存
-    
-    Args:
-        model: 模型名称
-        messages: 消息列表
-        use_cache: 是否使用缓存，默认True
-        **kwargs: 其他参数(temperature, top_p等)
-        
-    Returns:
-        dict: LLM响应数据
-    """
-    if use_cache:
-        cached_response = llm_cache.get(model, messages, **kwargs)
-        if cached_response:
-            return cached_response
-
-    # 这里替换为实际的LLM调用
-    # 示例：response = openai.ChatCompletion.create(model=model, messages=messages, **kwargs)
-    response = {
-        'model': model,
-        'choices': [
-            {
-                'message': {
-                    'role': 'assistant',
-                    'content': 'This is a mock response'
-                }
-            }
-        ]
-    }
-
-    if use_cache:
-        llm_cache.set(model, messages, response, **kwargs)
-
-    return response
-
-
-class TestLLMWithCache(unittest.TestCase):
-    """测试带缓存的LLM调用"""
-
-    def setUp(self):
-        """测试开始前清理缓存"""
-        llm_cache.clear()
-
-    def test_llm_cache(self):
-        """测试LLM缓存功能"""
-        model = "gpt-3.5-turbo"
-        messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Hello!"}
-        ]
-
-        # 第一次调用（应该实际调用API）
-        logger.info("测试LLM缓存 - 第一次调用")
-        result1 = call_llm_with_cache(model, messages, temperature=0.7)
-        self.assertIn('choices', result1)
-
-        # 验证缓存文件已创建
-        cache_key = llm_cache._generate_cache_key(model, messages, temperature=0.7)
-        cache_file = llm_cache._get_cache_path(cache_key)
-        self.assertTrue(os.path.exists(cache_file))
-
-        # 第二次调用（应该使用缓存）
-        logger.info("测试LLM缓存 - 第二次调用（应该使用缓存）")
-        result2 = call_llm_with_cache(model, messages, temperature=0.7)
-        self.assertEqual(result1, result2)
-
-        # 测试不同参数生成不同的缓存键
-        logger.info("测试不同参数的缓存键")
-        result3 = call_llm_with_cache(model, messages, temperature=0.8)
-        cache_key2 = llm_cache._generate_cache_key(model, messages, temperature=0.8)
-        self.assertNotEqual(cache_key, cache_key2)
-
-        # 测试禁用缓存
-        logger.info("测试禁用缓存")
-        result4 = call_llm_with_cache(model, messages, use_cache=False)
-        self.assertIn('choices', result4)
-
-
-if __name__ == '__main__':
-    unittest.main(verbosity=2)
