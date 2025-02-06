@@ -218,7 +218,7 @@ class TestMultiResourceGeneration(AsyncTestCase):
         1. CM接收用户请求 -> 创建resource generation tasks
         2. CR处理这些generation tasks -> 通过dialogue发送生成的代码
         3. CM接收到CODE_RESOURCE消息 -> 创建code creation tasks
-        4. CM处理code creation tasks -> 创建最终的资源
+        4. CM处理code creation tasks -> 在Opera系统中创建最终的资源
         """
         # 复用_test_multiple_file_generation_request生成的generation tasks
         generation_tasks = await self._test_multiple_file_generation_request()

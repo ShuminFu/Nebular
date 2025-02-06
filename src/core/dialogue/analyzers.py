@@ -15,6 +15,7 @@ from src.core.logger_config import get_logger
 # 初始化logger
 logger = get_logger("dialogue_analyzer", "logs/llm_analyzer.log")
 
+
 class DialogueAnalyzer:
     """对话分析器
 
@@ -448,7 +449,7 @@ class DialogueAnalyzer:
                 return set()
 
             # 验证必要的字段
-            required_fields = ['conversation_flow', 'code_context', 'decision_points', 'context_variables']
+            required_fields = ['conversation_flow', 'code_context', 'decision_points']
             if not all(field in context_data for field in required_fields):
                 raise ValueError("上下文数据结构缺少必要字段")
 
@@ -459,16 +460,14 @@ class DialogueAnalyzer:
 
             # 更新conversation_state
             dialogue.context.conversation_state.update({
-                "flow": context_data["conversation_flow"],
+                "flow": flow,
                 "code_context": context_data["code_context"],
                 "decision_points": context_data["decision_points"],
-                "context_variables": context_data["context_variables"],
                 "analyzed_at": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                 "topic": {
                     "id": flow["topic_id"],
                     "type": flow["topic_type"],
                     "name": flow["current_topic"],
-                    "last_updated": datetime.now(timezone(timedelta(hours=8))).isoformat()
                 }
             })
 
@@ -479,15 +478,6 @@ class DialogueAnalyzer:
                 if "dialogue_index" in point and str(point["dialogue_index"]).isdigit()
                 and point.get("topic_id") == flow["topic_id"]  # 确保只关联同一主题的对话
             }
-
-            # 从topic_history中添加同主题的对话索引
-            topic_history = context_data["context_variables"].get("topic_history", [])
-            for topic in topic_history:
-                if topic.get("topic_id") == flow["topic_id"]:
-                    start_idx = int(topic["start_index"])
-                    last_idx = int(topic["last_index"])
-                    # 添加该主题范围内的所有对话索引
-                    related_indices.update(range(start_idx, last_idx + 1))
 
         except (ValueError, KeyError, AttributeError) as e:
             print(f"解析上下文数据结构失败: {str(e)}")
