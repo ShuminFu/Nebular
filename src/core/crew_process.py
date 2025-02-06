@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from uuid import UUID
 from dataclasses import dataclass
 import asyncio
@@ -151,6 +151,8 @@ class CrewManager(BaseCrewProcess):
         super().__init__()
         self.crew_processes: Dict[UUID, CrewProcessInfo] = {}
         self._staff_id_cache: Dict[str, UUID] = {}  # opera_id -> staff_id 的缓存
+        # 主题任务跟踪
+        self.topic_tasks: Dict[str, Dict[str, Any]] = {}  # topic_id -> {tasks: Set[UUID], status: str, type: str}
 
     async def setup(self):
         """初始化设置"""
@@ -306,6 +308,17 @@ class CrewManager(BaseCrewProcess):
             task.error_message = str(e)
 
     async def _process_task(self, task: BotTask):
+        """处理任务，包括主题任务跟踪"""
+        # 如果任务有主题ID，更新主题任务跟踪
+        if task.topic_id:
+            if task.topic_id not in self.topic_tasks:
+                self.topic_tasks[task.topic_id] = {
+                    'tasks': set(),
+                    'type': task.topic_type,
+                    'status': 'active'
+                }
+            self.topic_tasks[task.topic_id]['tasks'].add(task.id)
+
         # 检查任务是否需要由CR执行
         if task.response_staff_id in self.crew_processes:
             # 获取对应的CR进程
@@ -390,12 +403,66 @@ class CrewManager(BaseCrewProcess):
                 new_status=TaskStatus.COMPLETED
             )
 
+            # 检查主题任务状态
+            await self._check_topic_completion(task)
+
             # 记录日志
             self.log.info(f"任务 {task_id} 已完成，结果: {result}")
 
         except Exception as e:
             self.log.error(f"处理任务回调时发生错误: {str(e)}")
             raise
+
+    async def _check_topic_completion(self, task: BotTask):
+        """检查主题任务是否全部完成，如果是则触发总结"""
+        if not task.topic_id:
+            return
+
+        topic_info = self.topic_tasks.get(task.topic_id)
+        if not topic_info:
+            return
+
+        # 检查该主题下的所有任务状态
+        all_completed = True
+        for task_id in topic_info['tasks']:
+            task_status = None
+            for t in self.task_queue.tasks:
+                if t.id == task_id:
+                    task_status = t.status
+                    break
+            if task_status != TaskStatus.COMPLETED:
+                all_completed = False
+                break
+
+        if all_completed:
+            # 创建总结任务
+            await self._create_topic_summary_task(task.topic_id, topic_info)
+
+    async def _create_topic_summary_task(self, topic_id: str, topic_info: Dict[str, Any]):
+        """创建主题总结任务"""
+        # 收集主题相关的所有任务信息
+        topic_tasks = []
+        for task_id in topic_info['tasks']:
+            for task in self.task_queue.tasks:
+                if task.id == task_id:
+                    topic_tasks.append(task)
+                    break
+
+        # 创建总结任务
+        summary_task = BotTask(
+            type=TaskType.RESOURCE_CREATION,  # 使用资源创建类型，因为总结可能需要创建新的资源
+            priority=TaskPriority.NORMAL,
+            description=f"为主题 {topic_id} 生成代码资源总结",
+            parameters={
+                "topic_id": topic_id,
+                "topic_type": topic_info['type'],
+                "tasks": [t.model_dump() for t in topic_tasks],
+                "summary_type": "code_topic"
+            }
+        )
+
+        # 将任务添加到队列
+        await self.task_queue.add_task(summary_task)
 
 
 class CrewRunner(BaseCrewProcess):

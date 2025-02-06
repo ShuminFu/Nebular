@@ -226,6 +226,12 @@ class IntentMind:
         # 基于对话类型进行初步的任务类型判断
         task_type = TaskType.CONVERSATION  # 默认为基础对话处理
         task_priority = dialogue.priority
+
+        # 获取主题信息
+        topic_info = dialogue.context.conversation_state.get("topic", {})
+        topic_id = topic_info.get("id")
+        topic_type = topic_info.get("type")
+
         task_parameters = {
             "text": dialogue.text,
             "tags": dialogue.tags,
@@ -239,12 +245,7 @@ class IntentMind:
                 "flow": dialogue.context.conversation_state.get("flow", {}),
                 "code_context": dialogue.context.conversation_state.get("code_context", {}),
                 "decision_points": dialogue.context.conversation_state.get("decision_points", []),
-                "topic": dialogue.context.conversation_state.get("topic", {
-                    "id": None,
-                    "type": None,
-                    "name": None,
-                    "last_updated": None
-                })
+                "topic": topic_info
             },
             "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None
         }
@@ -413,7 +414,9 @@ class IntentMind:
             parameters=task_parameters,
             source_dialogue_index=dialogue.dialogue_index,
             response_staff_id=response_staff_id,
-            source_staff_id=dialogue.sender_staff_id  # 设置源Staff ID为对话的发送者
+            source_staff_id=dialogue.sender_staff_id,  # 设置源Staff ID为对话的发送者
+            topic_id=topic_id,
+            topic_type=topic_type
         )
 
         return task

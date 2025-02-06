@@ -84,6 +84,10 @@ class BotTask(CamelBaseModel):
     response_staff_id: Optional[UUID] = Field(default=None, description="响应Staff ID")
     source_staff_id: Optional[UUID] = Field(default=None, description="源Staff ID，用于追踪任务的发起者")
 
+    # 主题信息
+    topic_id: Optional[str] = Field(default=None, description="任务所属主题ID")
+    topic_type: Optional[str] = Field(default=None, description="任务所属主题类型")
+
     # 执行信息
     progress: int = Field(default=0, description="任务进度(0-100)，暂时无用")
     result: Optional[Any] = Field(default=None, description="任务结果")
