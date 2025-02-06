@@ -1,19 +1,15 @@
 import os
-from crewai import LLM, Agent, Crew, Task
-
-from dotenv import load_dotenv
+from crewai import Agent, Crew, Task
 from pathlib import Path
 
 from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
+from src.crewai_ext.config.llm_factory import get_llm, load_llm_config
 
+# 加载环境变量并获取LLM实例
 env_path = Path(__file__).parent / '.env'
-load_dotenv(env_path)
+config = load_llm_config(env_path)
+llm = get_llm(config)
 
-llm = LLM(
-    model="azure/gpt-4o",
-    api_key=os.environ.get("AZURE_API_KEY"),
-    base_url=os.environ.get("AZURE_API_BASE")
-)
 # llm = LLM(
 #     model="gpt-4o",
 #     api_key=os.environ.get("OPENAI_API_KEY"),
