@@ -31,7 +31,7 @@ class DialogueToolSchema(BaseModel):
             if action == 'create':
                 return DialogueForCreation(**v)
             elif action == 'get_filtered':
-                return DialogueForFilter(**v)
+                return DialogueForFilter.model_validate(v)
             return v
         except ValidationError as e:
             raise ValueError(f"数据验证失败: {str(e)}") from e
@@ -116,6 +116,8 @@ class DialogueTool(BaseApiTool):
             elif action == "get_filtered":
                 if not data:
                     raise ValueError("过滤查询对话需要提供filter数据")
+                if not isinstance(data, DialogueForFilter):
+                    data = DialogueForFilter.model_validate(data)
                 result = self._make_request("POST", f"{base_url}/Get", json=data.model_dump(by_alias=True))
                 return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 
