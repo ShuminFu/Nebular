@@ -463,7 +463,6 @@ class DialogueAnalyzer:
                 "flow": flow,
                 "code_context": context_data["code_context"],
                 "decision_points": context_data["decision_points"],
-                "analyzed_at": datetime.now(timezone(timedelta(hours=8))).isoformat(),
                 "topic": {
                     "id": flow["topic_id"],
                     "type": flow["topic_type"],
@@ -478,6 +477,9 @@ class DialogueAnalyzer:
                 if "dialogue_index" in point and str(point["dialogue_index"]).isdigit()
                 and point.get("topic_id") == flow["topic_id"]  # 确保只关联同一主题的对话
             }
+
+            # 直接更新对话的相关索引
+            dialogue.context.related_dialogue_indices = list(related_indices)
 
         except (ValueError, KeyError, AttributeError) as e:
             print(f"解析上下文数据结构失败: {str(e)}")

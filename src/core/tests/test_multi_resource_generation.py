@@ -9,6 +9,14 @@ from src.core.api_response_parser import ApiResponseParser
 from src.crewai_ext.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL, Resource
 from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
 import asyncio
+from unittest.mock import patch, Mock
+from src.crewai_ext.config.llm_factory import get_llm
+
+
+def get_llm_with_cache(*args, **kwargs):
+    if 'config' in kwargs:
+        kwargs['use_cache'] = True
+    return get_llm(*args, **kwargs)
 
 
 class TestMultiResourceGeneration(AsyncTestCase):
@@ -29,6 +37,11 @@ class TestMultiResourceGeneration(AsyncTestCase):
 
     def setUp(self):
         """设置测试环境"""
+        # 设置mock
+        self.get_llm_patcher = patch('src.crewai_ext.config.llm_factory.get_llm')
+        self.mock_get_llm = self.get_llm_patcher.start()
+        self.mock_get_llm.side_effect = get_llm_with_cache
+
         # 创建测试用的Bot IDs
         self.cm_bot_id = UUID('4a4857d6-4664-452e-a37c-80a628ca28a0')  # CM的Bot ID
         self.test_opera_id = UUID('96028f82-9f76-4372-976c-f0c5a054db79')  # 测试用Opera ID
@@ -411,6 +424,8 @@ class TestMultiResourceGeneration(AsyncTestCase):
 
     def tearDown(self):
         """清理测试环境"""
+        # 停止mock
+        self.get_llm_patcher.stop()
         self.run_async(self._tearDown())
 
     async def _tearDown(self):
@@ -435,14 +450,14 @@ class TestMultiResourceGeneration(AsyncTestCase):
             )
 
             # 删除资源
-            if resources:
-                for resource in resources:
-                    await asyncio.to_thread(
-                        _SHARED_RESOURCE_TOOL.run,
-                        action="delete",
-                        opera_id=str(self.test_opera_id),
-                        resource_id=resource.id
-                    )
+            # if resources:
+            #     for resource in resources:
+            #         await asyncio.to_thread(
+            #             _SHARED_RESOURCE_TOOL.run,
+            #             action="delete",
+            #             opera_id=str(self.test_opera_id),
+            #             resource_id=resource.id
+            #         )
         except Exception as e:
             print(f"清理资源时出错: {e}")
 

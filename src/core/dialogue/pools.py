@@ -93,8 +93,7 @@ class DialoguePool(CamelBaseModel):
         self.dialogues.append(dialogue)
         self.status_counter[dialogue.status.name.lower()] += 1
         await self.maintain_pool()
-        # 添加对话后持久化
-        await self._persist_to_api()
+
 
     async def update_dialogue_status(self, dialogue_index: int, new_status: ProcessingStatus) -> None:
         """更新对话状态并维护计数器"""
@@ -153,18 +152,16 @@ class DialoguePool(CamelBaseModel):
 
                     # 从对话池中获取最大的stage_index
                     max_stage_index = max(stage_indices, default=None)
+                    dialogue.context.stage_index = max_stage_index
                 else:
                     max_stage_index = current_stage_index
 
-                dialogue.context = DialogueContext(
-                    stage_index=max_stage_index,
-                    related_dialogue_indices=list(related_indices),
-                    conversation_state={
-                        "intent": dialogue.intent_analysis.intent,
-                        "confidence": dialogue.intent_analysis.confidence,
-                        "analyzed_at": datetime.now(timezone(timedelta(hours=8))).isoformat()
-                    }
-                )
+                # 更新intent相关信息
+                dialogue.context.conversation_state.update({
+                    "intent": dialogue.intent_analysis.intent,
+                    "confidence": dialogue.intent_analysis.confidence,
+                    "analyzed_at": datetime.now(timezone(timedelta(hours=8))).isoformat()
+                })
 
                 # 4. 更新相关对话的热度
                 for related_index in related_indices:

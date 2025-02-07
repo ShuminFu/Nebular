@@ -219,9 +219,9 @@ class IntentMind:
 
         return []
 
-    def _create_task_from_dialogue(self, dialogue: ProcessingDialogue) -> Union[BotTask, List[BotTask]]:
+    async def _create_task_from_dialogue(self, dialogue: ProcessingDialogue) -> Union[BotTask, List[BotTask]]:
         """从对话创建任务，支持返回多个任务"""
-        self.dialogue_pool.update_dialogue_status(dialogue.dialogue_index, ProcessingStatus.PROCESSING)
+        await self.dialogue_pool.update_dialogue_status(dialogue.dialogue_index, ProcessingStatus.PROCESSING)
 
         # 基于对话类型进行初步的任务类型判断
         task_type = TaskType.CONVERSATION  # 默认为基础对话处理
@@ -460,10 +460,10 @@ class IntentMind:
         # 从对话池中获取已分析的对话来创建任务
         analyzed_dialogue = self.dialogue_pool.get_dialogue(dialogue_index)
         if analyzed_dialogue and analyzed_dialogue.status == ProcessingStatus.PENDING:
-            task = self._create_task_from_dialogue(analyzed_dialogue)
+            task = await self._create_task_from_dialogue(analyzed_dialogue)
             await self.task_queue.add_task(task)
             # 更新对话状态为已完成
-            self.dialogue_pool.update_dialogue_status(dialogue_index, ProcessingStatus.COMPLETED)
+            await self.dialogue_pool.update_dialogue_status(dialogue_index, ProcessingStatus.COMPLETED)
 
     def get_staff_dialogues(self, staff_id: UUID) -> Set[int]:
         """获取对话发送人为指定Staff的所有对话索引"""
