@@ -15,6 +15,7 @@ from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TO
 from src.core.intent_mind import IntentMind
 from src.core.task_utils import BotTaskQueue, TaskType, TaskStatus, BotTask, PersistentTaskState, TaskPriority
 from src.core.code_monkey import CodeMonkey
+from src.core.topic.topic_tracker import TopicTracker
 
 import json
 
@@ -151,8 +152,11 @@ class CrewManager(BaseCrewProcess):
         super().__init__()
         self.crew_processes: Dict[UUID, CrewProcessInfo] = {}
         self._staff_id_cache: Dict[str, UUID] = {}  # opera_id -> staff_id 的缓存
-        # 主题任务跟踪
-        self.topic_tasks: Dict[str, Dict[str, Any]] = {}  # topic_id -> {tasks: Set[UUID], status: str, type: str, opera_id: str}
+
+        # 初始化主题追踪器
+        self.topic_tracker = TopicTracker()
+        # 注册主题完成回调
+        self.topic_tracker.on_completion(self._handle_topic_completed)
 
     async def setup(self):
         """初始化设置"""
@@ -309,16 +313,9 @@ class CrewManager(BaseCrewProcess):
 
     async def _process_task(self, task: BotTask):
         """处理任务，包括主题任务跟踪"""
-        # 如果任务有主题ID，更新主题任务跟踪
-        if task.topic_id:
-            if task.topic_id not in self.topic_tasks:
-                self.topic_tasks[task.topic_id] = {
-                    'tasks': set(),
-                    'type': task.topic_type,
-                    'status': 'active',
-                    'opera_id': task.parameters.get('opera_id')  # 保存opera_id
-                }
-            self.topic_tasks[task.topic_id]['tasks'].add(task.id)
+        # 如果任务有主题ID，更新主题追踪
+        if task.topic_id and task.type == TaskType.RESOURCE_CREATION:
+            self.topic_tracker.add_task(task)
 
         # 检查任务是否需要由CR执行
         if task.response_staff_id in self.crew_processes:
@@ -404,8 +401,8 @@ class CrewManager(BaseCrewProcess):
                 new_status=TaskStatus.COMPLETED
             )
 
-            # 检查主题任务状态
-            await self._check_topic_completion(task)
+            # 更新主题追踪器中的任务状态
+            self.topic_tracker.update_task_status(UUID(task_id), TaskStatus.COMPLETED)
 
             # 记录日志
             self.log.info(f"任务 {task_id} 已完成，结果: {result}")
@@ -414,74 +411,38 @@ class CrewManager(BaseCrewProcess):
             self.log.error(f"处理任务回调时发生错误: {str(e)}")
             raise
 
-    async def _check_topic_completion(self, task: BotTask):
-        """检查主题任务是否全部完成，如果是则触发总结"""
-        if not task.topic_id:
-            return
+    async def _handle_topic_completed(self, topic_id: str, topic_type: str, opera_id: str):
+        """处理主题完成回调"""
+        try:
+            # 获取CM的staff_id
+            cm_staff_id = await self._get_cm_staff_id(opera_id)
+            if not cm_staff_id:
+                self.log.error(f"无法为主题 {topic_id} 创建总结任务：无法获取CM的staff_id")
+                return
 
-        topic_info = self.topic_tasks.get(task.topic_id)
-        if not topic_info:
-            return
-
-        # 检查该主题下的所有任务状态
-        all_completed = True
-        for task_id in topic_info['tasks']:
-            task_status = None
-            for t in self.task_queue.tasks:
-                if t.id == task_id:
-                    task_status = t.status
-                    break
-            if task_status != TaskStatus.COMPLETED:
-                all_completed = False
-                break
-
-        if all_completed:
             # 创建总结任务
-            await self._create_topic_summary_task(task.topic_id, topic_info)
+            summary_task = BotTask(
+                type=TaskType.RESOURCE_CREATION,
+                priority=TaskPriority.NORMAL,
+                description=f"为主题 {topic_id} 生成代码资源总结",
+                parameters={
+                    "topic_id": topic_id,
+                    "topic_type": topic_type,
+                    "summary_type": "code_topic",
+                    "opera_id": opera_id
+                },
+                source_staff_id=cm_staff_id,
+                response_staff_id=cm_staff_id,
+                topic_id=topic_id,
+                topic_type=topic_type
+            )
 
-    async def _create_topic_summary_task(self, topic_id: str, topic_info: Dict[str, Any]):
-        """创建主题总结任务"""
-        # 获取opera_id
-        opera_id = topic_info.get('opera_id')
-        if not opera_id:
-            self.log.error(f"无法为主题 {topic_id} 创建总结任务：缺少opera_id")
-            return
+            # 将任务添加到队列
+            await self.task_queue.add_task(summary_task)
+            self.log.info(f"已创建主题 {topic_id} 的总结任务，opera_id: {opera_id}, staff_id: {cm_staff_id}")
 
-        # 获取CM的staff_id
-        cm_staff_id = await self._get_cm_staff_id(opera_id)
-        if not cm_staff_id:
-            self.log.error(f"无法为主题 {topic_id} 创建总结任务：无法获取CM的staff_id")
-            return
-
-        # 收集主题相关的所有任务信息
-        topic_tasks = []
-        for task_id in topic_info['tasks']:
-            for task in self.task_queue.tasks:
-                if task.id == task_id:
-                    topic_tasks.append(task)
-                    break
-
-        # 创建总结任务
-        summary_task = BotTask(
-            type=TaskType.RESOURCE_CREATION,  # 使用资源创建类型，因为总结可能需要创建新的资源
-            priority=TaskPriority.NORMAL,
-            description=f"为主题 {topic_id} 生成代码资源总结",
-            parameters={
-                "topic_id": topic_id,
-                "topic_type": topic_info['type'],
-                "tasks": [t.model_dump() for t in topic_tasks],
-                "summary_type": "code_topic",
-                "opera_id": opera_id  # 确保包含opera_id
-            },
-            source_staff_id=cm_staff_id,  # 设置源Staff为CM
-            response_staff_id=cm_staff_id,  # 设置响应Staff为CM
-            topic_id=topic_id,  # 保持主题关联
-            topic_type=topic_info['type']
-        )
-
-        # 将任务添加到队列
-        await self.task_queue.add_task(summary_task)
-        self.log.info(f"已创建主题 {topic_id} 的总结任务，opera_id: {opera_id}, staff_id: {cm_staff_id}")
+        except Exception as e:
+            self.log.error(f"处理主题完成回调时发生错误: {str(e)}")
 
 
 class CrewRunner(BaseCrewProcess):
