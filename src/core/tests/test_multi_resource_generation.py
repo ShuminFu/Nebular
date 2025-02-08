@@ -333,10 +333,11 @@ class TestMultiResourceGeneration(AsyncTestCase):
                 opera_id=self.test_opera_id,
                 is_whisper=False,
                 is_narratage=False,
-                mentioned_staff_ids=None,
+                mentioned_staff_ids=[UUID(id) for id in dialogue_data.get("mentionedStaffIds", [])],
                 receiver_staff_ids=[self.cm_staff_id],
                 time=self.test_time,
-                stage_index=1
+                stage_index=dialogue_data["stageIndex"]
+
             )
 
             # CM处理CODE_RESOURCE消息，创建code creation task
@@ -358,9 +359,12 @@ class TestMultiResourceGeneration(AsyncTestCase):
 
         # CM并行处理所有creation tasks
         await asyncio.gather(
-            *[self.crew_manager.resource_handler.handle_resource_creation(task) for task in creation_tasks]
+            *[self.crew_manager._process_task(task) for task in creation_tasks]
         )
-
+        # 更简单的处理方法
+        # await asyncio.gather(
+        #     *[self.crew_manager.resource_handler.handle_resource_creation(task) for task in creation_tasks]
+        # )
         end_time = asyncio.get_event_loop().time()
 
         # 验证所有creation tasks的结果
