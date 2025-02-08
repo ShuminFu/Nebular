@@ -1,6 +1,5 @@
 import json
 from typing import Set
-from datetime import datetime, timezone, timedelta
 
 from crewai import Agent, Task, Crew
 
@@ -11,6 +10,10 @@ from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TO
 from src.core.dialogue.pools import DialoguePool
 from src.core.api_response_parser import ApiResponseParser
 from src.core.logger_config import get_logger
+from src.core.dialogue.output_models import (
+    IntentAnalysisResult,
+    ContextStructure,
+)
 
 # 初始化logger
 logger = get_logger("dialogue_analyzer", "logs/llm_analyzer.log")
@@ -171,8 +174,9 @@ class DialogueAnalyzer:
             3. 文件路径要符合项目最佳实践
             4. MIME类型必须准确
             """,
-            expected_output="描述对话意图，包含动作和目标并且遵循返回示例的格式（JSON），如果是无意义的对话则intent字段返回空字符串, 文件名要考虑context中的项目结构信息, 包含完整的多文件代码生成信息",
-            agent=self.intent_analyzer
+            expected_output="按照IntentAnalysisResult模型的格式返回JSON结果，如果是无意义的对话则intent字段返回空字符串, 文件名要考虑context中的项目结构信息, 包含意图描述、原因说明、是否为代码请求等信息",
+            agent=self.intent_analyzer,
+            output_json=IntentAnalysisResult
         )
         logger.info(f"[LLM Input] Intent Analysis Task for dialogue {dialogue.dialogue_index}:\n{task.description}")
 
@@ -340,6 +344,7 @@ class DialogueAnalyzer:
             expected_output="逗号分隔的相关对话DialogueIndex列表，例如：1,2,3",
             agent=self.context_analyzer
         )
+
         context_structure_task = Task(
             description=f"""使用对话工具的get action来分析相关对话并生成结构化的上下文数据：
 
@@ -409,9 +414,11 @@ class DialogueAnalyzer:
         ]
     }}
             """,
-            expected_output="按照返回格式的严格JSON格式的上下文数据结构，其中包含主题标识和共享机制。如果分析失败则返回空字符串",
-            agent=self.context_analyzer
+            expected_output="返回符合ContextStructure模型的JSON结构，包含对话流程、代码上下文和决策点信息",
+            agent=self.context_analyzer,
+            output_json=ContextStructure
         )
+
         # 记录LLM输入 - 索引任务
         logger.info(f"[LLM Input] Context Index Task for dialogue {dialogue.dialogue_index}:\n{index_task.description}")
 

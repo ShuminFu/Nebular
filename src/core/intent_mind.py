@@ -248,8 +248,7 @@ class IntentMind:
                 "conversation_state": dialogue.context.conversation_state,
                 "flow": dialogue.context.conversation_state.get("flow", {}),
                 "code_context": dialogue.context.conversation_state.get("code_context", {}),
-                "decision_points": dialogue.context.conversation_state.get("decision_points", []),
-                "topic": topic_info
+                "decision_points": dialogue.context.conversation_state.get("decision_points", [])
             },
             "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None
         }
@@ -370,12 +369,6 @@ class IntentMind:
                                 "flow": dialogue.context.conversation_state.get("flow", {}),
                                 "code_context": dialogue.context.conversation_state.get("code_context", {}),
                                 "decision_points": dialogue.context.conversation_state.get("decision_points", []),
-                                "topic": dialogue.context.conversation_state.get("topic", {
-                                    "id": None,
-                                    "type": None,
-                                    "name": None,
-                                    "last_updated": None
-                                }),
                                 "related_dialogues": related_dialogues
                             },
                             "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None
@@ -384,7 +377,9 @@ class IntentMind:
                         source_staff_id=dialogue.sender_staff_id,
                         response_staff_id=selected_cr if selected_cr else (
                             dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None
-                        )
+                        ),
+                        topic_id=topic_id,
+                        topic_type=topic_type
                     )
                     tasks.append(task)
                 return tasks
