@@ -10,7 +10,7 @@ from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TO
 from src.core.dialogue.pools import DialoguePool
 from src.core.api_response_parser import ApiResponseParser
 from src.core.logger_config import get_logger
-from src.core.dialogue.output_models import (
+from src.core.dialogue.output_json_models import (
     IntentAnalysisResult,
     ContextStructure,
 )

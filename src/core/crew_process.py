@@ -528,6 +528,7 @@ class CrewRunner(BaseCrewProcess):
             result = self.crew.kickoff()
             code_content = result.raw if hasattr(result, 'raw') else str(result)
 
+
             # 记录LLM输出
             self.log.info(f"[LLM Output] Generated code for file {task.parameters['file_path']}:\n{code_content}")
 
@@ -538,7 +539,7 @@ class CrewRunner(BaseCrewProcess):
                 is_narratage=False,
                 is_whisper=False,
                 text=code_content,
-                tags="CODE_RESOURCE;SKIP_ANALYSIS",
+                tags=f"CODE_RESOURCE;SKIP_ANALYSIS;TOPIC_ID:{task.topic_id}" if task.topic_id else "CODE_RESOURCE;SKIP_ANALYSIS",
                 # mentioned_staff_ids=[str(task.source_staff_id)]
             )
 

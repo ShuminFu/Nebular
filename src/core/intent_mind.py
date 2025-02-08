@@ -104,17 +104,17 @@ class IntentMind:
 
     def _is_code_content(self, text: str) -> bool:
         """判断文本是否包含代码内容
-        
+
         通过以下特征判断：
         1. 包含常见的编程语言关键字
         2. 包含函数/类定义
         3. 包含代码注释
         4. 具有代码缩进结构
         5. 包含特定的代码标记（如@file, @description等）
-        
+
         Args:
             text: 要分析的文本
-            
+
         Returns:
             bool: 是否是代码内容
         """
@@ -158,7 +158,7 @@ class IntentMind:
 
     def _select_code_resource_handler(self, dialogue: ProcessingDialogue, code_details: dict) -> Optional[UUID]:
         """选择合适的CR来处理代码生成任务
-        
+
         选择策略：
         1. 如果只有一个CR，直接选择
         2. 如果有多个CR，根据以下因素选择：
@@ -166,7 +166,7 @@ class IntentMind:
            - 框架经验（比如pandas专家）
            - 当前任务负载
            - 历史成功率
-        
+
         Args:
             dialogue: 当前对话
             code_details: 代码相关信息
@@ -284,6 +284,14 @@ class IntentMind:
             if not file_path:
                 # 如果metadata中没有file_path，使用默认值
                 file_path = "src/code/main.py"
+
+            # 从tags中解析topic信息
+            if dialogue.tags:
+                tags = dialogue.tags.lower().split(";")
+                for tag in tags:
+                    if tag.startswith("topic_id:"):
+                        topic_id = tag.replace("topic_id:", "").strip()
+                        break
 
             # 根据文件扩展名确定mime_type
             ext = "." + file_path.split(".")[-1].lower()
