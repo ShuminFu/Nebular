@@ -538,7 +538,7 @@ class CrewRunner(BaseCrewProcess):
                 is_narratage=False,
                 is_whisper=False,
                 text=code_content,
-                tags="CODE_RESOURCE",
+                tags="CODE_RESOURCE;SKIP_ANALYSIS",
                 # mentioned_staff_ids=[str(task.source_staff_id)]
             )
 

@@ -73,6 +73,8 @@ class IntentMind:
         """
         # 首先检查是否是系统消息或任务回调
         if message.tags:
+            if "skip_analysis" and "code_resource" in message.tags.lower():
+                return DialogueType.DIRECT_CREATION
             if "system" in message.tags.lower():
                 return DialogueType.SYSTEM
             if "task_callback" in message.tags.lower():
@@ -221,7 +223,9 @@ class IntentMind:
 
     async def _create_task_from_dialogue(self, dialogue: ProcessingDialogue) -> Union[BotTask, List[BotTask]]:
         """从对话创建任务，支持返回多个任务"""
-        await self.dialogue_pool.update_dialogue_status(dialogue.dialogue_index, ProcessingStatus.PROCESSING)
+        # 只有非DIRECT_CREATION类型的对话才需要更新状态
+        if dialogue.type != DialogueType.DIRECT_CREATION and dialogue.dialogue_index is not None:
+            await self.dialogue_pool.update_dialogue_status(dialogue.dialogue_index, ProcessingStatus.PROCESSING)
 
         # 基于对话类型进行初步的任务类型判断
         task_type = TaskType.CONVERSATION  # 默认为基础对话处理
@@ -267,6 +271,39 @@ class IntentMind:
                         pass  # 如果无法解析任务类型，保持默认的CALLBACK类型
             except json.JSONDecodeError:
                 pass
+
+        # 对于DIRECT_CREATION类型，直接解析代码资源并创建任务
+        elif dialogue.type == DialogueType.DIRECT_CREATION:
+            task_type = TaskType.RESOURCE_CREATION
+            task_priority = TaskPriority.HIGH
+
+            # 解析代码资源内容
+            metadata, code_content = self._parse_code_resource(dialogue.text)
+
+            # 从metadata中获取file_path
+            file_path = metadata.get("file")
+            if not file_path:
+                # 如果metadata中没有file_path，使用默认值
+                file_path = "src/code/main.py"
+
+            # 根据文件扩展名确定mime_type
+            ext = "." + file_path.split(".")[-1].lower()
+            # 在MIME_TYPE_MAPPING中查找对应的mime_type
+            for mime_type, extensions in MIME_TYPE_MAPPING.items():
+                if ext in extensions:
+                    break
+            else:
+                mime_type = "text/plain"  # 如果没找到对应的mime_type，使用默认值
+
+            # 更新任务参数
+            task_parameters.update({
+                "resource_type": "code",
+                "file_path": file_path,
+                "mime_type": mime_type,
+                "description": metadata.get("description", ""),
+                "tags": self._parse_tags(metadata.get("tags")),
+                "code_content": code_content.strip(),  # 确保去除首尾空白字符
+            })
 
         elif dialogue.type == DialogueType.CODE_RESOURCE:
             # 从intent_analysis中获取代码生成相关信息
@@ -421,14 +458,14 @@ class IntentMind:
 
         return task
 
-    async def _process_single_message(self, message: MessageReceivedArgs) -> int:
+    async def _process_single_message(self, message: MessageReceivedArgs) -> Optional[int]:
         """处理单个对话
 
         Args:
             message: MessageReceivedArgs对象
 
         Returns:
-            int: 对话索引
+            Optional[int]: 对话索引，如果是DIRECT_CREATION类型则返回None
         """
         # 确定优先级和类型
         priority = self._determine_dialogue_priority(message)
@@ -438,6 +475,10 @@ class IntentMind:
         processing_dialogue = ProcessingDialogue.from_message_args(
             message, priority=priority, dialogue_type=dialogue_type
         )
+
+        # 如果是DIRECT_CREATION类型，直接返回None，不添加到对话池
+        if dialogue_type == DialogueType.DIRECT_CREATION:
+            return None
 
         # 添加到对话池
         await self.dialogue_pool.add_dialogue(processing_dialogue)
@@ -453,6 +494,18 @@ class IntentMind:
     async def process_message(self, message: MessageReceivedArgs) -> None:
         """处理单个MessageReceivedArgs消息"""
         dialogue_index = await self._process_single_message(message)
+
+        # 如果是DIRECT_CREATION类型，直接创建任务并添加到队列
+        if dialogue_index is None:
+            # 创建临时ProcessingDialogue用于任务创建
+            priority = self._determine_dialogue_priority(message)
+            dialogue_type = self._determine_dialogue_type(message)
+            temp_dialogue = ProcessingDialogue.from_message_args(
+                message, priority=priority, dialogue_type=dialogue_type
+            )
+            task = await self._create_task_from_dialogue(temp_dialogue)
+            await self.task_queue.add_task(task)
+            return
 
         # 分析对话 - 使用DialoguePool的分析器
         self.dialogue_pool.analyze_dialogues()
