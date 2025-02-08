@@ -563,25 +563,18 @@ class CrewRunner(BaseCrewProcess):
             }
 
             # 发送任务完成回调
-            callback_result = {
-                "callback_task_id": str(task.id),
-                "result": task.result
-            }
-            await self._handle_task_completion(task, json.dumps(callback_result))
+            await self._handle_task_completion(task, json.dumps(task.result))
 
         except Exception as e:
             self.log.error(f"代码生成任务处理失败: {str(e)}")
             task.error_message = str(e)
             task.status = TaskStatus.FAILED
             # 发送错误回调
-            callback_result = {
-                "callback_task_id": str(task.id),
-                "result": {
-                    "status": "failed",
-                    "error": str(e)
-                }
+            error_result = {
+                "status": "failed",
+                "error": str(e)
             }
-            await self._handle_task_completion(task, json.dumps(callback_result))
+            await self._handle_task_completion(task, json.dumps(error_result))
 
     async def _handle_analysis_task(self, task: BotTask):
         """处理分析类型的任务"""
@@ -611,7 +604,7 @@ class CrewRunner(BaseCrewProcess):
                         "description": f"Callback for task {task.id}",
                         "parameters": {
                             "callback_task_id": str(task.id),
-                            "result": result,
+                            "result": json.loads(result),
                             "opera_id": task.parameters.get("opera_id")
                         }
                     }),
