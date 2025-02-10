@@ -306,22 +306,21 @@ class CrewManager(BaseCrewProcess):
 
     async def _process_task(self, task: BotTask):
         """处理任务，包括主题任务跟踪"""
-        # 如果任务有主题ID，更新主题追踪
-        if task.topic_id and task.type == TaskType.RESOURCE_CREATION:
-            self.topic_tracker.add_task(task)
-
-        # 检查任务是否需要由CR执行
+        # 1. 处理需要转发的任务
         if task.response_staff_id in self.crew_processes:
-            # 获取对应的CR进程
             cr_process = self.crew_processes[task.response_staff_id]
-            # 更新CR的任务队列
             await self._update_cr_task_queue(cr_process.bot_id, task)
-        else:
-            # CM自己处理的任务
-            if task.type == TaskType.RESOURCE_CREATION:
-                await self.resource_handler.handle_resource_creation(task)
-            else:
-                await super()._process_task(task)
+            return
+
+        # 2. 处理资源创建任务
+        if task.type == TaskType.RESOURCE_CREATION:
+            if task.topic_id:
+                self.topic_tracker.add_task(task)
+            await self.resource_handler.handle_resource_creation(task)
+            return
+
+        # 3. 其他任务交给父类处理
+        await super()._process_task(task)
 
     async def _update_cr_task_queue(self, cr_bot_id: UUID, task: BotTask):
         """更新CrewRunner的任务队列"""
@@ -392,7 +391,15 @@ class CrewManager(BaseCrewProcess):
             raise
 
     async def _handle_topic_completed(self, topic_id: str, topic_type: str, opera_id: str):
-        """处理主题完成回调"""
+        """处理主题完成回调
+
+        当一个主题的所有任务都完成时，发送一个包含所有资源信息的对话。
+
+        Args:
+            topic_id: 主题ID
+            topic_type: 主题类型
+            opera_id: Opera ID
+        """
         try:
             # 获取CM的staff_id
             cm_staff_id = await self._get_cm_staff_id(opera_id)
@@ -400,26 +407,59 @@ class CrewManager(BaseCrewProcess):
                 self.log.error(f"无法为主题 {topic_id} 创建总结任务：无法获取CM的staff_id")
                 return
 
-            # 创建总结任务
-            summary_task = BotTask(
-                type=TaskType.RESOURCE_CREATION,
-                priority=TaskPriority.NORMAL,
-                description=f"为主题 {topic_id} 生成代码资源总结",
-                parameters={
-                    "topic_id": topic_id,
-                    "topic_type": topic_type,
-                    "summary_type": "code_topic",
-                    "opera_id": opera_id
-                },
-                source_staff_id=cm_staff_id,
-                response_staff_id=cm_staff_id,
-                topic_id=topic_id,
-                topic_type=topic_type
+            # 获取该主题的所有已完成任务
+            completed_tasks = [
+                task
+                for task in self.task_queue.tasks
+                if task.topic_id == topic_id and task.status == TaskStatus.COMPLETED and task.type == TaskType.RESOURCE_CREATION
+            ]
+
+            # 使用字典保留每个文件路径的最新任务
+            latest_tasks = {}
+            for task in completed_tasks:
+                file_path = task.parameters.get("file_path")
+                if not file_path:
+                    continue
+
+                # 比较创建时间，保留最新版本
+                existing_task = latest_tasks.get(file_path)
+                if not existing_task or task.creation_time > existing_task.creation_time:
+                    latest_tasks[file_path] = task
+
+            # 构建资源列表
+            resources = []
+            for task in latest_tasks.values():
+                if task.result and isinstance(task.result, dict):
+                    resource_info = {
+                        "Url": task.parameters.get("file_path", ""),
+                        "ResourceId": task.result.get("resource_id", ""),
+                        "ResourceCacheable": True,
+                    }
+                    resources.append(resource_info)
+
+            # 构建ResourcesForViewing标签
+            resources_tag = {"ResourcesForViewing": {"VersionId": topic_id, "Resources": resources, "NavigateIndex": 0}, "RemovingAllResources": True}
+
+            # 创建对话消息
+            dialogue_data = DialogueForCreation(
+                is_stage_index_null=False,
+                staff_id=str(cm_staff_id),
+                is_narratage=False,
+                is_whisper=False,
+                text=f"主题 {topic_id} 的所有资源已生成完成。",
+                tags=json.dumps(resources_tag),
             )
 
-            # 将任务添加到队列
-            await self.task_queue.add_task(summary_task)
-            self.log.info(f"已创建主题 {topic_id} 的总结任务，opera_id: {opera_id}, staff_id: {cm_staff_id}")
+            # 发送对话
+            result = _SHARED_DIALOGUE_TOOL.run(action="create", opera_id=opera_id, data=dialogue_data)
+
+            # 检查结果
+            status_code, _ = ApiResponseParser.parse_response(result)
+            if status_code not in [200, 201, 204]:
+                self.log.error(f"发送主题 {topic_id} 完成对话失败")
+                return
+
+            self.log.info(f"已发送主题 {topic_id} 完成对话，包含 {len(resources)} 个资源")
 
         except Exception as e:
             self.log.error(f"处理主题完成回调时发生错误: {str(e)}")
@@ -438,29 +478,21 @@ class CrewRunner(BaseCrewProcess):
         agents = []
         tasks = []
 
-        for agent_config in self.config.get('agents', []):
+        for agent_config in self.config.get("agents", []):
             agent = Agent(
-                name=agent_config['name'],
-                role=agent_config['role'],
-                goal=agent_config['goal'],
-                backstory=agent_config['backstory'],
-                tools=agent_config.get('tools', [])
+                name=agent_config["name"],
+                role=agent_config["role"],
+                goal=agent_config["goal"],
+                backstory=agent_config["backstory"],
+                tools=agent_config.get("tools", []),
             )
             agents.append(agent)
 
-            if 'task' in agent_config:
-                task = Task(
-                    description=agent_config['task'],
-                    agent=agent
-                )
+            if "task" in agent_config:
+                task = Task(description=agent_config["task"], agent=agent)
                 tasks.append(task)
 
-        return Crew(
-            agents=agents,
-            tasks=tasks,
-            process=self.config.get('process', 'sequential'),
-            verbose=True
-        )
+        return Crew(agents=agents, tasks=tasks, process=self.config.get("process", "sequential"), verbose=True)
 
     async def _handle_generation_task(self, task: BotTask):
         """处理代码生成类型的任务"""
@@ -471,15 +503,15 @@ class CrewRunner(BaseCrewProcess):
 
             # 创建代码生成任务
             task_desc = f"""根据以下信息生成代码：
-                1. 文件路径：{task.parameters['file_path']}
-                2. 文件类型：{task.parameters['file_type']}
-                3. 需求描述：{task.parameters['dialogue_context']['text']}
+                1. 文件路径：{task.parameters["file_path"]}
+                2. 文件类型：{task.parameters["file_type"]}
+                3. 需求描述：{task.parameters["dialogue_context"]["text"]}
                 4. 项目信息：
-                   - 类型：{task.parameters['code_details']['project_type']}
-                   - 描述：{task.parameters['code_details']['project_description']}
-                   - 框架：{task.parameters['code_details']['frameworks']}
-                5. 相关文件：{task.parameters['code_details']['resources']}
-                6. 引用关系：{task.parameters.get('references', [])}
+                   - 类型：{task.parameters["code_details"]["project_type"]}
+                   - 描述：{task.parameters["code_details"]["project_description"]}
+                   - 框架：{task.parameters["code_details"]["frameworks"]}
+                5. 相关文件：{task.parameters["code_details"]["resources"]}
+                6. 引用关系：{task.parameters.get("references", [])}
                 """
 
             # 记录LLM输入
@@ -489,7 +521,7 @@ class CrewRunner(BaseCrewProcess):
                 description=task_desc,
                 agent=self.crew.agents[0],  # 使用已配置的agent
                 expected_output=f"""
-                @file: {task.parameters['file_path']}
+                @file: {task.parameters["file_path"]}
                 @description: [简要描述文件的主要功能和用途]
                 @tags: [相关标签，如framework_xxx,feature_xxx等，用逗号分隔]
                 @version: 1.0.0
@@ -500,14 +532,13 @@ class CrewRunner(BaseCrewProcess):
                 2. 类型定义（如果需要）
                 3. 主要功能实现
                 4. 错误处理
-                5. 导出语句（如果需要）]"""
+                5. 导出语句（如果需要）]""",
             )
 
             # 执行生成
             self.crew.tasks = [gen_task]
             result = self.crew.kickoff()
-            code_content = result.raw if hasattr(result, 'raw') else str(result)
-
+            code_content = result.raw if hasattr(result, "raw") else str(result)
 
             # 记录LLM输出
             self.log.info(f"[LLM Output] Generated code for file {task.parameters['file_path']}:\n{code_content}")
@@ -524,11 +555,7 @@ class CrewRunner(BaseCrewProcess):
             )
 
             # 使用dialogue_api_tool发送对话
-            result = _SHARED_DIALOGUE_TOOL.run(
-                action="create",
-                opera_id=task.parameters['opera_id'],
-                data=dialogue_data
-            )
+            result = _SHARED_DIALOGUE_TOOL.run(action="create", opera_id=task.parameters["opera_id"], data=dialogue_data)
 
             # 检查结果
             status_code, response_data = ApiResponseParser.parse_response(result)
@@ -551,10 +578,7 @@ class CrewRunner(BaseCrewProcess):
             task.error_message = str(e)
             task.status = TaskStatus.FAILED
             # 发送错误回调
-            error_result = {
-                "status": "failed",
-                "error": str(e)
-            }
+            error_result = {"status": "failed", "error": str(e)}
             await self._handle_task_completion(task, json.dumps(error_result))
 
     async def _handle_analysis_task(self, task: BotTask):
@@ -583,15 +607,11 @@ class CrewRunner(BaseCrewProcess):
                         "type": TaskType.CALLBACK.value,
                         "priority": TaskPriority.URGENT.value,
                         "description": f"Callback for task {task.id}",
-                        "parameters": {
-                            "callback_task_id": str(task.id),
-                            "result": json.loads(result),
-                            "opera_id": task.parameters.get("opera_id")
-                        }
+                        "parameters": {"callback_task_id": str(task.id), "result": json.loads(result), "opera_id": task.parameters.get("opera_id")},
                     }),
                     tags="task_callback",
-                    mentioned_staff_ids=[str(task.source_staff_id)]
-                )
+                    mentioned_staff_ids=[str(task.source_staff_id)],
+                ),
             )
 
             # 检查回调消息是否创建成功
