@@ -1,7 +1,7 @@
 """ Opera SignalR 任务队列的数据模型定义。"""
 
 from pydantic import Field
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any, Union, Callable, Awaitable
 from datetime import datetime, timezone, timedelta
 from uuid import UUID, uuid4
 from enum import IntEnum
@@ -158,6 +158,15 @@ class BotTaskQueue(CamelBaseModel):
         description="状态计数器"
     )
     bot_id: UUID = Field(..., description="Bot ID")
+    _status_callbacks: List[Callable[[UUID, TaskStatus], Awaitable[None]]] = []
+
+    def add_status_callback(self, callback: Callable[[UUID, TaskStatus], Awaitable[None]]):
+        """添加任务状态变更回调
+
+        Args:
+            callback: 回调函数，接收任务ID和新状态作为参数
+        """
+        self._status_callbacks.append(callback)
 
     async def _persist_to_api(self) -> None:
         """将任务队列状态持久化到API
@@ -345,6 +354,14 @@ class BotTaskQueue(CamelBaseModel):
                 # 更新计数器
                 self.status_counter[old_status.name.lower()] -= 1
                 self.status_counter[new_status.name.lower()] += 1
+
+                # 通知所有回调
+                for callback in self._status_callbacks:
+                    try:
+                        await callback(task_id, new_status)
+                    except Exception as e:
+                        print(f"Status callback error: {str(e)}")
+
                 # 状态更新后持久化
                 await self._persist_to_api()
                 break

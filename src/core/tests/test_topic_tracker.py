@@ -1,6 +1,6 @@
 import pytest
-from uuid import UUID, uuid4
-from src.core.topic.topic_tracker import TopicTracker, TopicInfo
+from uuid import UUID
+from src.core.topic.topic_tracker import TopicTracker
 from src.core.task_utils import BotTask, TaskStatus, TaskType
 
 

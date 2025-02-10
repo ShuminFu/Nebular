@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Set, Any, Optional, List, Callable, Awaitable
+from typing import Dict, Set, Optional, List, Callable, Awaitable
 from uuid import UUID
 
 from src.core.task_utils import BotTask, TaskStatus

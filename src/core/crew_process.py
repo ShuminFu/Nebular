@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 from uuid import UUID
 from dataclasses import dataclass
 import asyncio
@@ -23,6 +23,7 @@ import json
 @dataclass
 class CrewProcessInfo:
     """工作型Crew进程信息"""
+
     process: multiprocessing.Process
     bot_id: UUID
     opera_ids: List[UUID]  # 一个Bot可以在多个Opera中
@@ -69,8 +70,7 @@ class BaseCrewProcess(ABC):
                 self.log.error(f"等待{self.__class__.__name__} SignalR连接超时")
                 raise asyncio.TimeoutError()
 
-            self.client.set_callback(
-                "on_message_received", self._handle_message)
+            self.client.set_callback("on_message_received", self._handle_message)
 
     async def stop(self):
         """停止Crew运行"""
@@ -164,6 +164,14 @@ class CrewManager(BaseCrewProcess):
         # 创建资源处理器
         self.resource_handler = CodeMonkey(self.task_queue, self.log)
 
+        # 设置任务状态变更回调
+        self.task_queue.add_status_callback(self._handle_task_status_changed)
+
+    async def _handle_task_status_changed(self, task_id: UUID, new_status: TaskStatus):
+        """处理任务状态变更"""
+        # 更新主题追踪器
+        await self.topic_tracker.update_task_status(task_id, new_status)
+
     async def _get_cm_staff_id(self, opera_id: str) -> Optional[UUID]:
         """获取CrewManager在指定Opera中的staff_id
 
@@ -181,13 +189,7 @@ class CrewManager(BaseCrewProcess):
         try:
             # 使用bot_api_tool获取Bot的所有Staff信息
             result = _SHARED_BOT_TOOL.run(
-                action="get_all_staffs",
-                bot_id=self.bot_id,
-                data={
-                    "need_opera_info": True,
-                    "need_staffs": 1,
-                    "need_staff_invitations": 0
-                }
+                action="get_all_staffs", bot_id=self.bot_id, data={"need_opera_info": True, "need_staffs": 1, "need_staff_invitations": 0}
             )
 
             # 解析API响应
@@ -215,10 +217,7 @@ class CrewManager(BaseCrewProcess):
             return None
 
     def _setup_crew(self) -> Crew:
-        return Crew(
-            agents=[DEFAULT_CREW_MANAGER],
-            tasks=[Task(**CREW_MANAGER_INIT, agent=DEFAULT_CREW_MANAGER)]
-        )
+        return Crew(agents=[DEFAULT_CREW_MANAGER], tasks=[Task(**CREW_MANAGER_INIT, agent=DEFAULT_CREW_MANAGER)])
 
     async def _handle_conversation_task(self, task: BotTask):
         """处理对话类型的任务"""
@@ -243,22 +242,22 @@ class CrewManager(BaseCrewProcess):
                 name="代码生成专家",
                 role="专业程序员",
                 goal=f"生成{task.parameters['file_type']}代码文件",
-                backstory=f"""你是一个专业的程序员，专注于生成高质量的{task.parameters['file_type']}代码。
-                你需要理解整个项目的上下文，但只负责生成{task.parameters['file_path']}文件。
-                要考虑文件之间的引用关系：{task.parameters.get('references', [])}"""
+                backstory=f"""你是一个专业的程序员，专注于生成高质量的{task.parameters["file_type"]}代码。
+                你需要理解整个项目的上下文，但只负责生成{task.parameters["file_path"]}文件。
+                要考虑文件之间的引用关系：{task.parameters.get("references", [])}""",
             )
 
             # 创建代码生成任务
             task_desc = f"""根据以下信息生成代码：
-                1. 文件路径：{task.parameters['file_path']}
-                2. 文件类型：{task.parameters['file_type']}
-                3. 需求描述：{task.parameters['dialogue_context']['text']}
+                1. 文件路径：{task.parameters["file_path"]}
+                2. 文件类型：{task.parameters["file_type"]}
+                3. 需求描述：{task.parameters["dialogue_context"]["text"]}
                 4. 项目信息：
-                   - 类型：{task.parameters['code_details']['project_type']}
-                   - 描述：{task.parameters['code_details']['project_description']}
-                   - 框架：{task.parameters['code_details']['frameworks']}
-                5. 相关文件：{task.parameters['code_details']['resources']}
-                6. 引用关系：{task.parameters.get('references', [])}
+                   - 类型：{task.parameters["code_details"]["project_type"]}
+                   - 描述：{task.parameters["code_details"]["project_description"]}
+                   - 框架：{task.parameters["code_details"]["frameworks"]}
+                5. 相关文件：{task.parameters["code_details"]["resources"]}
+                6. 引用关系：{task.parameters.get("references", [])}
 
                 请生成符合要求的代码内容。
                 """
@@ -266,22 +265,19 @@ class CrewManager(BaseCrewProcess):
             # 记录LLM输入
             self.log.info(f"[LLM Input] Code Generation Task for file {task.parameters['file_path']}:\n{task_desc}")
 
-            gen_task = Task(
-                description=task_desc,
-                agent=code_gen_agent
-            )
+            gen_task = Task(description=task_desc, agent=code_gen_agent)
 
             # 执行生成
-            crew = Crew(
-                agents=[code_gen_agent],
-                tasks=[gen_task]
-            )
+            crew = Crew(agents=[code_gen_agent], tasks=[gen_task])
 
             code_content = crew.kickoff()
 
             # 记录LLM输出
-            self.log.info(f"[LLM Output] Generated code for file {task.parameters['file_path']}:\n{
-                          code_content.raw if hasattr(code_content, 'raw') else code_content}")
+            self.log.info(
+                f"[LLM Output] Generated code for file {task.parameters['file_path']}:\n{
+                    code_content.raw if hasattr(code_content, 'raw') else code_content
+                }"
+            )
 
             # 创建资源
             resource_task = BotTask(
@@ -289,21 +285,18 @@ class CrewManager(BaseCrewProcess):
                 priority=task.priority,
                 description=f"保存生成的代码: {task.parameters['file_path']}",
                 parameters={
-                    "file_path": task.parameters['file_path'],
-                    "mime_type": task.parameters['mime_type'],
+                    "file_path": task.parameters["file_path"],
+                    "mime_type": task.parameters["mime_type"],
                     "code_content": code_content,
-                    "opera_id": task.parameters['opera_id']
-                }
+                    "opera_id": task.parameters["opera_id"],
+                },
             )
 
             # 使用资源处理器保存代码
             await self.resource_handler.handle_resource_creation(resource_task)
 
             # 更新任务状态
-            task.result = {
-                "file_path": task.parameters['file_path'],
-                "resource_task_result": resource_task.result
-            }
+            task.result = {"file_path": task.parameters["file_path"], "resource_task_result": resource_task.result}
             await self.task_queue.update_task_status(task.id, TaskStatus.COMPLETED)
 
         except Exception as e:
@@ -360,16 +353,12 @@ class CrewManager(BaseCrewProcess):
                     is_call_shell_on_opera_started_updated=False,
                     call_shell_on_opera_started=None,
                     is_default_tags_updated=True,
-                    default_tags=json.dumps({
-                        "TaskStates": [
-                            PersistentTaskState.from_bot_task(task).model_dump(by_alias=True)
-                        ]
-                    }),
+                    default_tags=json.dumps({"TaskStates": [PersistentTaskState.from_bot_task(task).model_dump(by_alias=True)]}),
                     is_default_roles_updated=False,
                     default_roles=None,
                     is_default_permissions_updated=False,
-                    default_permissions=None
-                )
+                    default_permissions=None,
+                ),
             )
 
             # 检查更新结果
@@ -390,19 +379,10 @@ class CrewManager(BaseCrewProcess):
                 raise ValueError("回调任务缺少task_id参数")
 
             # 更新原始任务的状态
-            await self.task_queue.update_task_status(
-                task_id=UUID(task_id),
-                new_status=TaskStatus.COMPLETED
-            )
+            await self.task_queue.update_task_status(task_id=UUID(task_id), new_status=TaskStatus.COMPLETED)
 
             # 更新当前回调任务的状态
-            await self.task_queue.update_task_status(
-                task_id=task.id,
-                new_status=TaskStatus.COMPLETED
-            )
-
-            # 更新主题追踪器中的任务状态
-            self.topic_tracker.update_task_status(UUID(task_id), TaskStatus.COMPLETED)
+            await self.task_queue.update_task_status(task_id=task.id, new_status=TaskStatus.COMPLETED)
 
             # 记录日志
             self.log.info(f"任务 {task_id} 已完成，结果: {result}")
