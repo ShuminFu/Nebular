@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from typing import List, Optional
 from uuid import UUID
 from models import Dialogue, DialogueForCreation, DialogueForFilter

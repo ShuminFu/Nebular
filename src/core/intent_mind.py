@@ -9,6 +9,7 @@ from uuid import UUID
 import json
 import re
 import random
+import os
 
 from src.core.dialogue.pools import DialoguePool
 from src.core.dialogue.models import ProcessingDialogue
@@ -292,6 +293,10 @@ class IntentMind:
                     if tag.startswith("topic_id:"):
                         topic_id = tag.replace("topic_id:", "").strip()
                         break
+
+            # 如果存在topic_id，直接将其添加到file_path前面
+            if topic_id:
+                file_path = os.path.join(topic_id, file_path)
 
             # 根据文件扩展名确定mime_type
             ext = "." + file_path.split(".")[-1].lower()

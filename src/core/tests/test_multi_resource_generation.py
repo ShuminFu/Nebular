@@ -9,7 +9,7 @@ from src.core.api_response_parser import ApiResponseParser
 from src.crewai_ext.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL, Resource
 from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
 import asyncio
-from unittest.mock import patch, Mock
+from unittest.mock import patch
 from src.crewai_ext.config.llm_factory import get_llm
 
 
@@ -159,7 +159,7 @@ class TestMultiResourceGeneration(AsyncTestCase):
 
         # 统计实际的文件类型
         for task in tasks:
-            file_path = task.parameters["file_path"]
+            # file_path = task.parameters["file_path"]
             mime_type = task.parameters["mime_type"]
 
             if mime_type == "text/html":
@@ -453,7 +453,7 @@ class TestMultiResourceGeneration(AsyncTestCase):
                 opera_id=str(self.test_opera_id),
                 data={
                     "name_like": "src/"  # 匹配测试中创建的资源
-                }
+                },
             )
 
             # 删除资源
