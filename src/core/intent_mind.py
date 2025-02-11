@@ -309,6 +309,7 @@ class IntentMind:
 
             # 更新任务参数
             task_parameters.update({
+                "text": "",  # 不需要冗余传输
                 "resource_type": "code",
                 "file_path": file_path,
                 "mime_type": mime_type,
