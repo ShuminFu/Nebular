@@ -131,12 +131,11 @@ class TestMultiResourceGeneration(AsyncTestCase):
         # 获取创建的任务
         tasks = []
         while True:
-            task = self.crew_manager.task_queue.get_next_task()
+            task = await self.crew_manager.task_queue.get_next_task()
             if not task:
                 break
             tasks.append(task)
-            # 更新任务状态为RUNNING，这样get_next_task就不会重复获取同一个任务
-            await self.crew_manager.task_queue.update_task_status(task.id, TaskStatus.RUNNING)
+
 
         # 验证任务数量至少有3个（至少包含HTML、CSS、JS各一个）
         self.assertGreaterEqual(len(tasks), 3, "至少应该有HTML、CSS、JS各一个文件")

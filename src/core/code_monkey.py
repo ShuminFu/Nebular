@@ -152,17 +152,14 @@ class CodeMonkey:
 
             # 直接使用Resource对象
             if isinstance(resource_result, Resource):
-                # 更新任务状态为完成
-                await self.task_queue.update_task_status(
-                    task_id=task.id,
-                    new_status=TaskStatus.COMPLETED
-                )
                 # 设置任务结果
                 task.result = {
                     "resource_id": str(resource_result.id),
                     "path": file_path,
                     "status": "success"
                 }
+                # 更新任务状态为完成
+                await self.task_queue.update_task_status(task_id=task.id, new_status=TaskStatus.COMPLETED)
                 self.log.info(f"资源创建成功: {file_path}")
             else:
                 raise Exception(f"资源创建失败: {resource_result}")

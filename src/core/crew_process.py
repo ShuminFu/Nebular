@@ -423,7 +423,7 @@ class CrewManager(BaseCrewProcess):
 
                 # 比较创建时间，保留最新版本
                 existing_task = latest_tasks.get(file_path)
-                if not existing_task or task.creation_time > existing_task.creation_time:
+                if not existing_task or task.completed_at > existing_task.completed_at:
                     latest_tasks[file_path] = task
 
             # 构建资源列表
