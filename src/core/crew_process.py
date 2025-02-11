@@ -90,7 +90,7 @@ class BaseCrewProcess(ABC):
                     continue
 
                 # 处理任务队列中的任务
-                task = self.task_queue.get_next_task()
+                task = await self.task_queue.get_next_task()
                 if task:
                     await self._process_task(task)
                 await asyncio.sleep(1)

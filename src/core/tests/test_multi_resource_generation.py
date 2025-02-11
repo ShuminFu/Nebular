@@ -346,16 +346,14 @@ class TestMultiResourceGeneration(AsyncTestCase):
         # 获取所有creation tasks
         creation_tasks = []
         while True:
-            task = self.crew_manager.task_queue.get_next_task()
+            task = await self.crew_manager.task_queue.get_next_task()
             if not task:
                 break
             if task.type == TaskType.RESOURCE_CREATION:
                 creation_tasks.append(task)
-                # 更新任务状态为RUNNING
-                await self.crew_manager.task_queue.update_task_status(task.id, TaskStatus.RUNNING)
             else:
-                await self.crew_manager.task_queue.update_task_status(task.id, TaskStatus.FAILED)
                 print(f"获取到的任务类型为{task.type}，不是RESOURCE_CREATION")
+                await self.crew_manager.task_queue.update_task_status(task.id, TaskStatus.FAILED)
 
         # CM并行处理所有creation tasks
         await asyncio.gather(

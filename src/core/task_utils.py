@@ -366,13 +366,30 @@ class BotTaskQueue(CamelBaseModel):
                 await self._persist_to_api()
                 break
 
-    def get_next_task(self) -> Optional[BotTask]:
-        """获取下一个待处理的任务（按优先级排序，同优先级按创建时间FIFO）"""
+    async def get_next_task(self) -> Optional[BotTask]:
+        """获取下一个待处理的任务（按优先级排序，同优先级按创建时间FIFO）
+
+        Returns:
+            Optional[BotTask]: 返回优先级最高且创建时间最早的PENDING状态任务，如果没有待处理任务则返回None
+
+        Note:
+            获取任务时会自动将任务状态更新为RUNNING，避免重复获取
+        """
+        # 获取所有PENDING状态的任务
         pending_tasks = [
             task for task in self.tasks
             if task.status == TaskStatus.PENDING
         ]
+
+        # 如果没有待处理的任务，返回None
         if not pending_tasks:
             return None
 
-        return max(pending_tasks, key=lambda x: (x.priority, x.created_at.timestamp()))
+        # 按优先级（主要）和创建时间（次要）排序，获取最优先的任务
+        # 优先级越高，数值越大；创建时间越早，时间戳越小
+        next_task = max(pending_tasks, key=lambda x: (x.priority.value, -x.created_at.timestamp()))
+
+        # 立即更新任务状态为RUNNING
+        await self.update_task_status(next_task.id, TaskStatus.RUNNING)
+
+        return next_task

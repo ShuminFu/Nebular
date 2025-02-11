@@ -7,6 +7,7 @@ from src.core.dialogue.enums import DialogueType, EXT_TO_MIME_TYPE
 from src.core.dialogue.models import ProcessingDialogue, IntentAnalysis
 from src.crewai_ext.config.llm_setup import llm
 from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
+from src.crewai_ext.tools.utils.utility_tools import UUIDGeneratorTool
 from src.core.dialogue.pools import DialoguePool
 from src.core.api_response_parser import ApiResponseParser
 from src.core.logger_config import get_logger
@@ -72,9 +73,9 @@ class DialogueAnalyzer:
             4. 跟踪代码生成的上下文
             5. 在使用工具的过程中，无论如何记住重点，所有true, false都请你使用字符串表示或者使用双引号包括起来，比如"True","False"
             """,
-            tools=[_SHARED_DIALOGUE_TOOL],
+            tools=[_SHARED_DIALOGUE_TOOL, UUIDGeneratorTool()],
             verbose=True,
-            llm=llm
+            llm=llm,
         )
 
     def analyze_intent(self, dialogue: ProcessingDialogue) -> IntentAnalysis:
@@ -371,7 +372,7 @@ class DialogueAnalyzer:
             6. 主题定义规则：
                 1. 主题独立性：
                 - 每个主题代表一个明确的目标或需求
-                - 当需求发生变更时，应创建新主题
+                - 当需求发生变更时，应创建新主题，必要的时候使用工具创建UUID
                 - 新主题应该关联到源主题
 
                 2. 变更判断标准：
@@ -416,7 +417,7 @@ class DialogueAnalyzer:
             """,
             expected_output="返回符合ContextStructure模型的JSON结构，包含对话流程、代码上下文和决策点信息",
             agent=self.context_analyzer,
-            output_json=ContextStructure
+            output_json=ContextStructure,
         )
 
         # 记录LLM输入 - 索引任务
