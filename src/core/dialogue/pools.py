@@ -10,7 +10,7 @@ from pydantic import Field
 from src.opera_service.api.models import CamelBaseModel, StaffForUpdate
 from src.core.api_response_parser import ApiResponseParser
 from src.core.dialogue.enums import ProcessingStatus
-from src.core.dialogue.models import ProcessingDialogue, DialogueContext, PersistentDialogueState
+from src.core.dialogue.models import ProcessingDialogue, PersistentDialogueState
 from src.crewai_ext.tools.opera_api.staff_api_tool import _SHARED_STAFF_TOOL
 
 
@@ -119,7 +119,7 @@ class DialoguePool(CamelBaseModel):
         # 按Opera分组处理对话
         opera_groups: Dict[UUID, List[ProcessingDialogue]] = {}
         for dialogue in self.dialogues:
-            if not dialogue.opera_id in opera_groups:
+            if dialogue.opera_id not in opera_groups:
                 opera_groups[dialogue.opera_id] = []
             opera_groups[dialogue.opera_id].append(dialogue)
 
