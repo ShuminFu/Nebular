@@ -11,7 +11,7 @@ Nebular is a Python-based AI assistant experimental platform that integrates var
 
 ## Roadmap
 
-- [ ] CrewManager Spawning
-- [ ] CrewRunner Initializing
-- [ ] CrewManager run as a ChatManager - Detailed Prompting
-- [ ] CrewRunner more Tools 
+- [ ] Init Prompt Template by CrewManager Spawning
+- [ ] Recurring summon opera
+- [ ] Leverage CrewAI [Hierachical Process](https://docs.crewai.com/how-to/hierarchical-process), [Flows](https://docs.crewai.com/concepts/flows)
+- [ ] CrewRunner more Tools
