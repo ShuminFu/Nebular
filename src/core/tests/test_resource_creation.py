@@ -15,6 +15,7 @@ from src.core.tests.test_task_utils import AsyncTestCase, TaskPriority
 from src.crewai_ext.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL, Resource
 from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
 import asyncio
+import json
 
 
 class TestResourceCreation(AsyncTestCase):
@@ -82,6 +83,10 @@ def add_numbers(a: int, b: int) -> int:
     def test_code_generation_request(self):
         """测试代码生成请求的处理流程"""
         self.run_async(self._test_code_generation_request())
+
+    def test_navigate_index_calculation(self):
+        """测试导航索引的计算逻辑"""
+        self.run_async(self._test_navigate_index_calculation())
 
     async def _test_code_resource_parsing(self):
         # 创建一个模拟的消息
@@ -375,6 +380,152 @@ def some_function():
         # 验证源和目标Staff ID
         self.assertEqual(task.source_staff_id, self.user_staff_id)
         self.assertEqual(task.response_staff_id, self.cm_staff_id)
+
+    async def _test_navigate_index_calculation(self):
+        """测试导航索引计算的具体实现"""
+        # 创建一个主题ID
+        topic_id = "test-topic-123"
+
+        # 测试场景1：只有一个index.html文件
+        tasks_with_index = [
+            BotTask(
+                type=TaskType.RESOURCE_CREATION,
+                status=TaskStatus.COMPLETED,
+                topic_id=topic_id,
+                parameters={"file_path": "src/index.html"},
+                result={"resource_id": "1"},
+            ),
+            BotTask(
+                type=TaskType.RESOURCE_CREATION,
+                status=TaskStatus.COMPLETED,
+                topic_id=topic_id,
+                parameters={"file_path": "src/styles.css"},
+                result={"resource_id": "2"},
+            ),
+        ]
+
+        # 添加任务到任务队列
+        for task in tasks_with_index:
+            await self.crew_manager.task_queue.add_task(task)
+            await self.crew_manager.task_queue.update_task_status(task.id, TaskStatus.COMPLETED)
+
+        # 添加任务到主题追踪器
+        for task in tasks_with_index:
+            self.crew_manager.topic_tracker.add_task(task)
+
+        # 触发主题完成回调
+        await self.crew_manager._handle_topic_completed(topic_id, "test", str(self.test_opera_id))
+
+        # 验证导航索引是否正确指向index.html
+        dialogue_result = _SHARED_DIALOGUE_TOOL.run(
+            action="get_filtered", opera_id=str(self.test_opera_id), data={"tags_like": "ResourcesForViewing"}
+        )
+        status_code, dialogues = ApiResponseParser.parse_response(dialogue_result)
+        self.assertEqual(status_code, 200)
+        self.assertTrue(dialogues)
+
+        latest_dialogue = dialogues[-1]
+        resources_tag = json.loads(latest_dialogue["tags"])["ResourcesForViewing"]
+        self.assertEqual(resources_tag["NavigateIndex"], 0)  # index.html应该是第一个
+
+        # 清理任务队列和主题追踪器
+        self.crew_manager.task_queue.tasks.clear()
+        self.crew_manager.topic_tracker.clear()
+
+        # 测试场景2：多个HTML文件但没有index.html
+        tasks_without_index = [
+            BotTask(
+                type=TaskType.RESOURCE_CREATION,
+                status=TaskStatus.COMPLETED,
+                topic_id=topic_id,
+                parameters={"file_path": "src/about.html"},
+                result={"resource_id": "3"},
+            ),
+            BotTask(
+                type=TaskType.RESOURCE_CREATION,
+                status=TaskStatus.COMPLETED,
+                topic_id=topic_id,
+                parameters={"file_path": "src/contact.html"},
+                result={"resource_id": "4"},
+            ),
+            BotTask(
+                type=TaskType.RESOURCE_CREATION,
+                status=TaskStatus.COMPLETED,
+                topic_id=topic_id,
+                parameters={"file_path": "src/styles.css"},
+                result={"resource_id": "5"},
+            ),
+        ]
+
+        # 添加任务到任务队列
+        for task in tasks_without_index:
+            await self.crew_manager.task_queue.add_task(task)
+            await self.crew_manager.task_queue.update_task_status(task.id, TaskStatus.COMPLETED)
+
+        # 添加任务到主题追踪器
+        for task in tasks_without_index:
+            self.crew_manager.topic_tracker.add_task(task)
+
+        # 触发主题完成回调
+        await self.crew_manager._handle_topic_completed(topic_id, "test", str(self.test_opera_id))
+
+        # 验证没有NavigateIndex字段
+        dialogue_result = _SHARED_DIALOGUE_TOOL.run(
+            action="get_filtered", opera_id=str(self.test_opera_id), data={"tags_like": "ResourcesForViewing"}
+        )
+        status_code, dialogues = ApiResponseParser.parse_response(dialogue_result)
+        self.assertEqual(status_code, 200)
+        self.assertTrue(dialogues)
+
+        latest_dialogue = dialogues[-1]
+        resources_tag = json.loads(latest_dialogue["tags"])["ResourcesForViewing"]
+        self.assertNotIn("NavigateIndex", resources_tag)  # 没有index.html时不应该有NavigateIndex字段
+
+        # 清理任务队列和主题追踪器
+        self.crew_manager.task_queue.tasks.clear()
+        self.crew_manager.topic_tracker.clear()
+
+        # 测试场景3：没有HTML文件
+        tasks_no_html = [
+            BotTask(
+                type=TaskType.RESOURCE_CREATION,
+                status=TaskStatus.COMPLETED,
+                topic_id=topic_id,
+                parameters={"file_path": "src/styles.css"},
+                result={"resource_id": "6"},
+            ),
+            BotTask(
+                type=TaskType.RESOURCE_CREATION,
+                status=TaskStatus.COMPLETED,
+                topic_id=topic_id,
+                parameters={"file_path": "src/script.js"},
+                result={"resource_id": "7"},
+            ),
+        ]
+
+        # 添加任务到任务队列
+        for task in tasks_no_html:
+            await self.crew_manager.task_queue.add_task(task)
+            await self.crew_manager.task_queue.update_task_status(task.id, TaskStatus.COMPLETED)
+
+        # 添加任务到主题追踪器
+        for task in tasks_no_html:
+            self.crew_manager.topic_tracker.add_task(task)
+
+        # 触发主题完成回调
+        await self.crew_manager._handle_topic_completed(topic_id, "test", str(self.test_opera_id))
+
+        # 验证没有NavigateIndex字段
+        dialogue_result = _SHARED_DIALOGUE_TOOL.run(
+            action="get_filtered", opera_id=str(self.test_opera_id), data={"tags_like": "ResourcesForViewing"}
+        )
+        status_code, dialogues = ApiResponseParser.parse_response(dialogue_result)
+        self.assertEqual(status_code, 200)
+        self.assertTrue(dialogues)
+
+        latest_dialogue = dialogues[-1]
+        resources_tag = json.loads(latest_dialogue["tags"])["ResourcesForViewing"]
+        self.assertNotIn("NavigateIndex", resources_tag)  # 没有HTML文件时不应该有NavigateIndex字段
 
     def tearDown(self):
         """清理测试环境"""

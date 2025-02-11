@@ -428,17 +428,37 @@ class CrewManager(BaseCrewProcess):
 
             # 构建资源列表
             resources = []
+            html_files = []  # 存储所有HTML文件路径
             for task in latest_tasks.values():
                 if task.result and isinstance(task.result, dict):
+                    file_path = task.parameters.get("file_path", "")
                     resource_info = {
-                        "Url": task.parameters.get("file_path", ""),
+                        "Url": file_path,
                         "ResourceId": task.result.get("resource_id", ""),
                         "ResourceCacheable": True,
                     }
                     resources.append(resource_info)
 
-            # 构建ResourcesForViewing标签
-            resources_tag = {"ResourcesForViewing": {"VersionId": topic_id, "Resources": resources, "NavigateIndex": 0}, "RemovingAllResources": True}
+                    # 收集HTML文件路径用于导航判断
+                    if file_path.lower().endswith(".html"):
+                        html_files.append(file_path)
+
+            # 构建ResourcesForViewing标签的基本结构
+            resources_tag = {
+                "ResourcesForViewing": {
+                    "VersionId": topic_id,
+                    "Resources": resources,
+                },
+                "RemovingAllResources": True,
+            }
+
+            # 只有在找到index.html时才添加NavigateIndex字段
+            if html_files:
+                # 查找index.html（精确匹配）
+                index_html = next((i for i, p in enumerate(html_files) if p.lower().endswith("/index.html") or p == "index.html"), None)
+                if index_html is not None:
+                    # 找到index.html，添加NavigateIndex字段
+                    resources_tag["ResourcesForViewing"]["NavigateIndex"] = html_files.index(html_files[index_html])
 
             # 创建对话消息
             dialogue_data = DialogueForCreation(
