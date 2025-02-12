@@ -1,14 +1,14 @@
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 from typing import Optional, Dict, Any
-
+from src.crewai_ext.config.llm_setup import llm
 # If you want to run a snippet of code before or after the crew starts,
 # you can use the @before_kickoff and @after_kickoff decorators
 # https://docs.crewai.com/concepts/crews#example-crew-class-with-decorators
 
 
 @CrewBase
-class PoemCrew:
+class TemplateCrew:
     """Poem Crew"""
 
     # Learn more about YAML configuration files here:
@@ -62,12 +62,12 @@ class DynamicCrew:
     @agent
     def researcher(self) -> Agent:
         """Create a researcher agent with dynamic topic"""
-        return Agent(config=self.agents_config["researcher"], config_vars={"topic": self.topic})
+        return Agent(config=self.agents_config["researcher"], llm=llm)
 
     @agent
     def reporting_analyst(self) -> Agent:
         """Create a reporting analyst with dynamic topic"""
-        return Agent(config=self.agents_config["reporting_analyst"], config_vars={"topic": self.topic})
+        return Agent(config=self.agents_config["reporting_analyst"], llm=llm)
 
     @task
     def research_task(self, additional_context: str = "", custom_output_format: str = "") -> Task:
@@ -166,6 +166,8 @@ def test_dynamic_crew():
     # 验证参数是否正确传递
     assert "recent breakthroughs" in research_task.description
     assert "code examples" in research_task.expected_output
+    result = dynamic_crew.crew().kickoff(inputs={"topic": "AI Agents"})
+    print(result)
 
 
 if __name__ == "__main__":
