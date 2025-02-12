@@ -2,7 +2,7 @@ import heapq
 import json
 from collections import Counter
 from datetime import datetime, timezone, timedelta
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from uuid import UUID
 
 from pydantic import Field
@@ -33,6 +33,9 @@ class DialoguePool(CamelBaseModel):
     min_heat_threshold: float = Field(default=0.5, description="最小热度阈值")
     heat_decay_rate: float = Field(default=0.1, description="每次维护时的热度衰减率")
     max_age_hours: int = Field(default=24, description="对话最大保留时间（小时）")
+
+    # Opera分析状态
+    opera_analysis_state: Dict[UUID, Dict[str, Any]] = Field(default_factory=dict, description="记录每个Opera的分析状态", exclude=True)
 
     def __init__(self, **data):
         """初始化对话池，创建对话分析器实例"""
@@ -92,8 +95,14 @@ class DialoguePool(CamelBaseModel):
         """添加对话并更新计数器"""
         self.dialogues.append(dialogue)
         self.status_counter[dialogue.status.name.lower()] += 1
-        await self.maintain_pool()
 
+        # 标记Opera需要重新分析
+        if dialogue.opera_id not in self.opera_analysis_state:
+            self.opera_analysis_state[dialogue.opera_id] = {"last_analyzed_at": None, "needs_analysis": True}
+        else:
+            self.opera_analysis_state[dialogue.opera_id]["needs_analysis"] = True
+
+        await self.maintain_pool()
 
     async def update_dialogue_status(self, dialogue_index: int, new_status: ProcessingStatus) -> None:
         """更新对话状态并维护计数器"""
@@ -102,20 +111,36 @@ class DialoguePool(CamelBaseModel):
                 old_status = dialogue.status
                 dialogue.status = new_status
                 # 状态更新不增加热度，热度只与对话关联有关
-                self.status_counter[old_status.name.lower()] -= 1
-                self.status_counter[new_status.name.lower()] += 1
+                old_status_name = old_status.name.lower()
+                new_status_name = new_status.name.lower()
+
+                # 确保状态计数器中有这些状态
+                if old_status_name not in self.status_counter:
+                    self.status_counter[old_status_name] = 0
+                if new_status_name not in self.status_counter:
+                    self.status_counter[new_status_name] = 0
+
+                # 更新计数
+                self.status_counter[old_status_name] = max(0, self.status_counter[old_status_name] - 1)
+                self.status_counter[new_status_name] += 1
+
                 # 状态更新后持久化
                 await self._persist_to_api()
                 break
 
-    def analyze_dialogues(self) -> None:
+    def analyze_dialogues(self, target_opera_id: Optional[UUID] = None) -> None:
         """分析对话关联性并附加上下文
 
         使用CrewAI实现的对话分析器来：
         1. 识别对话意图 summary:str
         2. 分析上下文关联 related_indices:List[int]
         3. 确保Opera隔离
+
+        Args:
+            target_opera_id: 可选的目标Opera ID。如果指定，只分析该Opera的对话。
         """
+        now = datetime.now(timezone(timedelta(hours=8)))
+
         # 按Opera分组处理对话
         opera_groups: Dict[UUID, List[ProcessingDialogue]] = {}
         for dialogue in self.dialogues:
@@ -123,8 +148,23 @@ class DialoguePool(CamelBaseModel):
                 opera_groups[dialogue.opera_id] = []
             opera_groups[dialogue.opera_id].append(dialogue)
 
-        # 对每个Opera的对话进行分析
-        for opera_id, dialogues in opera_groups.items():
+        # 确定需要分析的Opera
+        operas_to_analyze = set()
+        for opera_id in opera_groups:
+            # 如果指定了目标Opera，只分析该Opera
+            if target_opera_id and opera_id != target_opera_id:
+                continue
+
+            # 检查是否需要重新分析
+            state = self.opera_analysis_state.get(opera_id, {"last_analyzed_at": None, "needs_analysis": True})
+
+            if state["needs_analysis"]:
+                operas_to_analyze.add(opera_id)
+
+        # 对需要分析的Opera进行处理
+        for opera_id in operas_to_analyze:
+            dialogues = opera_groups[opera_id]
+
             # 创建临时对话池用于上下文分析
             temp_pool = DialoguePool()
             temp_pool.dialogues = dialogues
@@ -160,7 +200,7 @@ class DialoguePool(CamelBaseModel):
                 dialogue.context.conversation_state.update({
                     "intent": dialogue.intent_analysis.intent,
                     "confidence": dialogue.intent_analysis.confidence,
-                    "analyzed_at": datetime.now(timezone(timedelta(hours=8))).isoformat()
+                    "analyzed_at": now.isoformat(),
                 })
 
                 # 4. 更新相关对话的热度
@@ -169,7 +209,8 @@ class DialoguePool(CamelBaseModel):
                     if related_dialogue and related_dialogue.opera_id == opera_id:
                         related_dialogue.update_heat(0.3)
 
-                # TODO:可以根据上下文更新对话的类型(枚举值)，能够用于后续直接决定任务类型
+            # 更新分析状态
+            self.opera_analysis_state[opera_id] = {"last_analyzed_at": now, "needs_analysis": False}
 
     def get_dialogue(self, dialogue_index: int) -> Optional[ProcessingDialogue]:
         """根据对话索引获取ProcessingDialogue"""
@@ -195,25 +236,39 @@ class DialoguePool(CamelBaseModel):
         now = datetime.now(timezone(timedelta(hours=8)))
         max_age = timedelta(hours=self.max_age_hours)
 
-        # 保留未过期的对话
-        old_count = len(self.dialogues)
+        # 保留未过期的对话，并标记被清理的Opera需要重新分析
+        old_dialogues = {d.opera_id: d for d in self.dialogues}
         self.dialogues = [
             d for d in self.dialogues
             if (now - d.created_at) <= max_age
         ]
 
+        # 如果有对话被清理，标记相应Opera需要重新分析
+        current_dialogues = {d.opera_id: d for d in self.dialogues}
+        for opera_id in old_dialogues:
+            if opera_id not in current_dialogues:
+                if opera_id in self.opera_analysis_state:
+                    self.opera_analysis_state[opera_id]["needs_analysis"] = True
+
         # 更新状态计数器
-        if old_count != len(self.dialogues):
-            # 重新计算状态计数
+        if len(old_dialogues) != len(self.dialogues):
             self.status_counter = Counter(
                 d.status.name.lower() for d in self.dialogues)
 
     def _clean_cold_dialogues(self) -> None:
         """清理冷对话（热度低于阈值）"""
+        old_dialogues = {d.opera_id: d for d in self.dialogues}
         self.dialogues = [
             d for d in self.dialogues
             if d.heat >= self.min_heat_threshold
         ]
+
+        # 如果有对话被清理，标记相应Opera需要重新分析
+        current_dialogues = {d.opera_id: d for d in self.dialogues}
+        for opera_id in old_dialogues:
+            if opera_id not in current_dialogues:
+                if opera_id in self.opera_analysis_state:
+                    self.opera_analysis_state[opera_id]["needs_analysis"] = True
 
     def _enforce_size_limit(self) -> None:
         """强制执行大小限制
