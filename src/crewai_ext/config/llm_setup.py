@@ -1,4 +1,3 @@
-import os
 from crewai import Agent, Crew, Task
 from pathlib import Path
 
