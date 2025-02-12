@@ -16,7 +16,7 @@ from src.core.dialogue.models import ProcessingDialogue
 from src.core.dialogue.enums import DialoguePriority, DialogueType, ProcessingStatus, MIME_TYPE_MAPPING
 from src.core.task_utils import BotTask, BotTaskQueue, TaskType, TaskPriority
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
-from src.core.code_resource_parser import CodeResourceParser
+from src.core.parser.code_resource_parser import CodeResourceParser
 
 
 class IntentMind:

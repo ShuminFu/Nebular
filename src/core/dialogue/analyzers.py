@@ -9,7 +9,7 @@ from src.crewai_ext.config.llm_setup import llm
 from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
 from src.crewai_ext.tools.utils.utility_tools import UUIDGeneratorTool
 from src.core.dialogue.pools import DialoguePool
-from src.core.api_response_parser import ApiResponseParser
+from src.core.parser.api_response_parser import ApiResponseParser
 from src.core.logger_config import get_logger
 from src.core.dialogue.output_json_models import (
     IntentAnalysisResult,

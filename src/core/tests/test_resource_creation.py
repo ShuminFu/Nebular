@@ -9,7 +9,7 @@ from uuid import UUID
 from datetime import datetime, timezone
 from src.core.crew_process import CrewManager, CrewRunner
 from src.core.task_utils import TaskType, TaskStatus, BotTask
-from src.core.api_response_parser import ApiResponseParser
+from src.core.parser.api_response_parser import ApiResponseParser
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
 from src.core.tests.test_task_utils import AsyncTestCase, TaskPriority
 from src.crewai_ext.tools.opera_api.resource_api_tool import _SHARED_RESOURCE_TOOL, Resource

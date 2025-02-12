@@ -9,7 +9,7 @@ from src.core.task_utils import (
     BotTaskQueue
 )
 from src.crewai_ext.tools.opera_api.bot_api_tool import _SHARED_BOT_TOOL
-from src.core.api_response_parser import ApiResponseParser
+from src.core.parser.api_response_parser import ApiResponseParser
 
 
 class AsyncTestCase(unittest.TestCase):

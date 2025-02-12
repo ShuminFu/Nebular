@@ -125,7 +125,8 @@ class ApiResponseParser:
         Returns:
             list: 正在处理的对话列表
         """
-        from src.core.dialogue.models import ProcessingDialogue
+        from src.core.dialogue.models import ProcessingDialogue  # noqa: F401
+
         return parameters.get("ProcessingDialogues", [])
 
     @staticmethod

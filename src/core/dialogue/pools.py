@@ -8,7 +8,7 @@ from uuid import UUID
 from pydantic import Field
 
 from src.opera_service.api.models import CamelBaseModel, StaffForUpdate
-from src.core.api_response_parser import ApiResponseParser
+from src.core.parser.api_response_parser import ApiResponseParser
 from src.core.dialogue.enums import ProcessingStatus
 from src.core.dialogue.models import ProcessingDialogue, PersistentDialogueState
 from src.crewai_ext.tools.opera_api.staff_api_tool import _SHARED_STAFF_TOOL

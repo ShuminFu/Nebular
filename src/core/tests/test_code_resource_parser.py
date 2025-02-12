@@ -1,5 +1,5 @@
 import unittest
-from src.core.code_resource_parser import CodeResourceParser
+from src.core.parser.code_resource_parser import CodeResourceParser
 
 
 class TestCodeResourceParser(unittest.TestCase):

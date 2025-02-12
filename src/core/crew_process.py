@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from crewai import Agent, Task, Crew
 from src.opera_service.api.models import BotForUpdate, DialogueForCreation
 from src.core.logger_config import get_logger_with_trace_id
-from src.core.api_response_parser import ApiResponseParser
+from src.core.parser.api_response_parser import ApiResponseParser
 from src.opera_service.signalr_client.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
 from src.crewai_ext.config.llm_setup import CREW_MANAGER_INIT, DEFAULT_CREW_MANAGER
 from src.crewai_ext.tools.opera_api.bot_api_tool import _SHARED_BOT_TOOL

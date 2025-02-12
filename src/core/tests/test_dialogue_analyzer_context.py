@@ -7,7 +7,7 @@ from src.core.dialogue.analyzers import DialogueAnalyzer
 from src.core.dialogue.models import ProcessingDialogue, DialogueContext
 from src.core.dialogue.pools import DialoguePool
 from src.core.dialogue.enums import DialogueType, ProcessingStatus
-from src.core.api_response_parser import ApiResponseParser
+from src.core.parser.api_response_parser import ApiResponseParser
 from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
 
 

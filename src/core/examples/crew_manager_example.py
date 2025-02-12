@@ -4,7 +4,7 @@ from uuid import UUID
 from src.core.logger_config import get_logger, get_logger_with_trace_id
 from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
 from src.core.crew_process import CrewManager, CrewRunner
-from src.core.api_response_parser import ApiResponseParser
+from src.core.parser.api_response_parser import ApiResponseParser
 import backoff
 
 # 获取logger实例

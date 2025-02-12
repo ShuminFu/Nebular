@@ -6,8 +6,7 @@
 3. 直接代码格式
 """
 
-import re
-from typing import Dict, List, Optional, Union, Set, Tuple
+from typing import Dict, Tuple
 
 
 class CodeResourceParser:

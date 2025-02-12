@@ -5,7 +5,7 @@ from uuid import UUID
 from pydantic import Field
 
 from src.opera_service.api.models import CamelBaseModel
-from src.core.api_response_parser import ApiResponseParser
+from src.core.parser.api_response_parser import ApiResponseParser
 from src.core.dialogue.enums import DialoguePriority, DialogueType, ProcessingStatus
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
 from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
