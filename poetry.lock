@@ -983,13 +983,13 @@ reference = "tencent"
 
 [[package]]
 name = "crewai"
-version = "0.98.0"
+version = "0.100.1"
 description = "Cutting-edge framework for orchestrating role-playing, autonomous AI agents. By fostering collaborative intelligence, CrewAI empowers agents to work together seamlessly, tackling complex tasks."
 optional = false
 python-versions = "<3.13,>=3.10"
 files = [
-    {file = "crewai-0.98.0-py3-none-any.whl", hash = "sha256:048c5373ca7d85bc254c777a90c8f165d3183520bee0113180d46ce836fdf700"},
-    {file = "crewai-0.98.0.tar.gz", hash = "sha256:3aaf2c30781d4841d0a521b28d9f53d0ea483660885e9999211636fd774bef33"},
+    {file = "crewai-0.100.1-py3-none-any.whl", hash = "sha256:50663f122ce6b4efa3dcd16b409ae93276ec67bd81c804e9d6794c6948d2b2ca"},
+    {file = "crewai-0.100.1.tar.gz", hash = "sha256:e0a884d4462f85133fb92922cf29eec30d81256768b51505c9b4cd37e70715f0"},
 ]
 
 [package.dependencies]
@@ -1000,8 +1000,9 @@ chromadb = ">=0.5.23"
 click = ">=8.1.7"
 instructor = ">=1.3.3"
 json-repair = ">=0.25.2"
+json5 = ">=0.10.0"
 jsonref = ">=1.1.0"
-litellm = "1.57.4"
+litellm = "1.59.8"
 openai = ">=1.13.3"
 openpyxl = ">=3.1.5"
 opentelemetry-api = ">=1.22.0"
@@ -3286,6 +3287,25 @@ url = "https://mirrors.cloud.tencent.com/pypi/simple"
 reference = "tencent"
 
 [[package]]
+name = "json5"
+version = "0.10.0"
+description = "A Python implementation of the JSON5 data format."
+optional = false
+python-versions = ">=3.8.0"
+files = [
+    {file = "json5-0.10.0-py3-none-any.whl", hash = "sha256:19b23410220a7271e8377f81ba8aacba2fdd56947fbb137ee5977cbe1f5e8dfa"},
+    {file = "json5-0.10.0.tar.gz", hash = "sha256:e66941c8f0a02026943c52c2eb34ebeb2a6f819a0be05920a6f5243cd30fd559"},
+]
+
+[package.extras]
+dev = ["build (==1.2.2.post1)", "coverage (==7.5.3)", "mypy (==1.13.0)", "pip (==24.3.1)", "pylint (==3.2.3)", "ruff (==0.7.3)", "twine (==5.1.1)", "uv (==0.5.1)"]
+
+[package.source]
+type = "legacy"
+url = "https://mirrors.cloud.tencent.com/pypi/simple"
+reference = "tencent"
+
+[[package]]
 name = "jsonpatch"
 version = "1.33"
 description = "Apply JSON-Patches (RFC 6902) "
@@ -3792,13 +3812,13 @@ reference = "tencent"
 
 [[package]]
 name = "litellm"
-version = "1.57.4"
+version = "1.59.8"
 description = "Library to easily interface with LLM API providers"
 optional = false
 python-versions = ">=3.8, !=2.7.*, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*, !=3.5.*, !=3.6.*, !=3.7.*"
 files = [
-    {file = "litellm-1.57.4-py3-none-any.whl", hash = "sha256:afe48924d8a36db801018970a101622fce33d117fe9c54441c0095c491511abb"},
-    {file = "litellm-1.57.4.tar.gz", hash = "sha256:747a870ddee9c71f9560fc68ad02485bc1008fcad7d7a43e87867a59b8ed0669"},
+    {file = "litellm-1.59.8-py3-none-any.whl", hash = "sha256:2473914bd2343485a185dfe7eedb12ee5fda32da3c9d9a8b73f6966b9b20cf39"},
+    {file = "litellm-1.59.8.tar.gz", hash = "sha256:9d645cc4460f6a9813061f07086648c4c3d22febc8e1f21c663f2b7750d90512"},
 ]
 
 [package.dependencies]
@@ -3816,7 +3836,7 @@ tokenizers = "*"
 
 [package.extras]
 extra-proxy = ["azure-identity (>=1.15.0,<2.0.0)", "azure-keyvault-secrets (>=4.8.0,<5.0.0)", "google-cloud-kms (>=2.21.3,<3.0.0)", "prisma (==0.11.0)", "resend (>=0.8.0,<0.9.0)"]
-proxy = ["PyJWT (>=2.8.0,<3.0.0)", "apscheduler (>=3.10.4,<4.0.0)", "backoff", "cryptography (>=43.0.1,<44.0.0)", "fastapi (>=0.115.5,<0.116.0)", "fastapi-sso (>=0.16.0,<0.17.0)", "gunicorn (>=22.0.0,<23.0.0)", "orjson (>=3.9.7,<4.0.0)", "pynacl (>=1.5.0,<2.0.0)", "python-multipart (>=0.0.18,<0.0.19)", "pyyaml (>=6.0.1,<7.0.0)", "rq", "uvicorn (>=0.22.0,<0.23.0)"]
+proxy = ["PyJWT (>=2.8.0,<3.0.0)", "apscheduler (>=3.10.4,<4.0.0)", "backoff", "cryptography (>=43.0.1,<44.0.0)", "fastapi (>=0.115.5,<0.116.0)", "fastapi-sso (>=0.16.0,<0.17.0)", "gunicorn (>=22.0.0,<23.0.0)", "orjson (>=3.9.7,<4.0.0)", "pynacl (>=1.5.0,<2.0.0)", "python-multipart (>=0.0.18,<0.0.19)", "pyyaml (>=6.0.1,<7.0.0)", "rq", "uvicorn (>=0.29.0,<0.30.0)", "uvloop (>=0.21.0,<0.22.0)"]
 
 [package.source]
 type = "legacy"
@@ -8944,4 +8964,4 @@ reference = "tencent"
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.12, <3.13"
-content-hash = "6b09f55a26e5a26ab507a2974d464391a8d6b7b1faba00fdebb5bd9fbee058f6"
+content-hash = "35af950032320d8ba78987a973ee5b1428dd24919b7ccedc55153ec5e9603acb"

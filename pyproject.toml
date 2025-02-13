@@ -31,7 +31,7 @@ ipykernel = "^6.29.5"
 
 
 [tool.poetry.group.crewai.dependencies]
-crewai = "^0.98.0"
+crewai = "^0.100.0"
 crewai-tools = "^0.25.0"
 
 [build-system]
