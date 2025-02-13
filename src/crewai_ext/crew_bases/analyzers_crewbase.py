@@ -10,7 +10,7 @@ from src.core.dialogue.output_json_models import (
 from pydantic import BaseModel, Field, StrictBool, StrictStr
 from typing import List, Optional, Dict
 from datetime import datetime
-
+from uuid import UUID
 
 class IntentAnalysisInputs(BaseModel):
     """IntentAnalysisInputs验证模型"""
@@ -19,8 +19,8 @@ class IntentAnalysisInputs(BaseModel):
     type: StrictStr = Field(..., description="对话类型")
     is_narratage: StrictBool = Field(..., description="是否为旁白标记")
     is_whisper: StrictBool = Field(..., description="是否为悄悄话标记")
-    tags: List[str] = Field(default_factory=list, description="对话标签列表")
-    mentioned_staff_bools: List[bool] = Field(default_factory=list, description="提及其他Staff的标记")
+    tags: str = Field(default_factory=list, description="对话标签列表")
+    mentioned_staff_bools: bool = Field(default_factory=list, description="提及其他Staff的标记")
     opera_id: Optional[StrictStr] = Field(None, description="当前Opera的ID")
     dialogue_index: Optional[int] = Field(None, description="对话索引号")
     stage_index: Optional[int] = Field(None, description="对话阶段索引")
@@ -33,13 +33,13 @@ class IntentAnalysisInputs(BaseModel):
 class ContextAnalysisInputs(BaseModel):
     """ContextAnalysisInputs验证模型"""
 
-    opera_id: StrictStr = Field(..., description="当前Opera的ID")
+    opera_id: UUID = Field(..., description="当前Opera的ID")
     dialogue_index: int = Field(..., description="对话索引号")
     text: StrictStr = Field(..., description="对话内容文本")
     type: StrictStr = Field(..., description="对话类型名称")
-    tags: List[str] = Field(..., description="对话标签列表")
-    stage_index: Optional[int, None] = Field(..., description="对话阶段索引")
-    intent_analysis: Optional[str, None] = Field(..., description="意图分析结果")
+    tags: str = Field(..., description="对话标签列表")
+    stage_index: Optional[int] = Field(..., description="对话阶段索引")
+    intent_analysis: Optional[str] = Field(..., description="意图分析结果")
     dialogue_same_stage: List[Dict] = Field(..., description="同阶段对话内容列表")
 
 
@@ -57,8 +57,8 @@ class IntentAnalyzerCrew:
     - timestamp: 当前时间戳
     """
 
-    agents_config = "../config/analyzer/agents.yaml"
-    tasks_config = "../config/analyzer/tasks.yaml"
+    agents_config = "../config/analyzer/intent_agents.yaml"
+    tasks_config = "../config/analyzer/intent_tasks.yaml"
 
     @agent
     def intent_analyzer(self) -> Agent:
@@ -93,8 +93,8 @@ class ContextAnalyzerCrew:
     同阶段的对话：dialogue_same_stage
     """
 
-    agents_config = "../config/analyzer/agents.yaml"
-    tasks_config = "../config/analyzer/tasks.yaml"
+    agents_config = "../config/analyzer/context_agents.yaml"
+    tasks_config = "../config/analyzer/context_tasks.yaml"
 
     @agent
     def context_analyzer(self) -> Agent:

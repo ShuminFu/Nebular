@@ -58,7 +58,7 @@ class DialogueAnalyzer:
 
         # 执行分析
         intent_crew = IntentAnalyzerCrew()
-        result = intent_crew.crew().kickoff(inputs=intent_inputs)
+        result = intent_crew.crew().kickoff(inputs=intent_inputs.model_dump())
 
         # 记录LLM输出
         logger.info(f"[LLM Output] Intent Analysis Result for dialogue {dialogue.dialogue_index}:\n{result.raw}")
@@ -188,7 +188,7 @@ class DialogueAnalyzer:
             dialogue_index=dialogue.dialogue_index,
             text=dialogue.text,
             type=dialogue.type.name,
-            tags=dialogue.tags if dialogue.tags else [],
+            tags=dialogue.tags,
             stage_index=dialogue.context.stage_index if dialogue.context else None,
             intent_analysis=dialogue.intent_analysis.intent if dialogue.intent_analysis else None,
             dialogue_same_stage=[
@@ -203,7 +203,7 @@ class DialogueAnalyzer:
 
         # 执行分析
         context_crew = ContextAnalyzerCrew()
-        result = context_crew.crew().kickoff(inputs=context_inputs)
+        result = context_crew.crew().kickoff(inputs=context_inputs.model_dump())
 
         # 记录LLM输出
         logger.info(f"[LLM Output] Context Analysis Result for dialogue {dialogue.dialogue_index}:\n{result.raw}")
