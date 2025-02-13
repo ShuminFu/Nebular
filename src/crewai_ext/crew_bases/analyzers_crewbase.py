@@ -57,8 +57,8 @@ class IntentAnalyzerCrew:
     - timestamp: 当前时间戳
     """
 
-    agents_config = "../config/agents.yaml"
-    tasks_config = "../config/tasks.yaml"
+    agents_config = "../config/analyzer/agents.yaml"
+    tasks_config = "../config/analyzer/tasks.yaml"
 
     @agent
     def intent_analyzer(self) -> Agent:
@@ -71,7 +71,7 @@ class IntentAnalyzerCrew:
         return Task(config=self.tasks_config["intent_analysis_task"], output_json=IntentAnalysisResult)
 
     @crew
-    def intent_crew(self) -> Crew:
+    def crew(self) -> Crew:
         """Creates the Dialogue Analysis Crew"""
         return Crew(agents=self.agents, tasks=self.tasks, process=Process.sequential, verbose=True)
 
@@ -93,8 +93,8 @@ class ContextAnalyzerCrew:
     同阶段的对话：dialogue_same_stage
     """
 
-    agents_config = "../config/agents.yaml"
-    tasks_config = "../config/tasks.yaml"
+    agents_config = "../config/analyzer/agents.yaml"
+    tasks_config = "../config/analyzer/tasks.yaml"
 
     @agent
     def context_analyzer(self) -> Agent:
@@ -119,6 +119,6 @@ class ContextAnalyzerCrew:
         return Task(config=self.tasks_config["context_structure_task"], output_json=ContextStructure)
 
     @crew
-    def context_crew(self) -> Crew:
+    def crew(self) -> Crew:
         """Creates the Context Analysis Crew"""
         return Crew(agents=self.agents, tasks=self.tasks, process=Process.sequential, verbose=True)

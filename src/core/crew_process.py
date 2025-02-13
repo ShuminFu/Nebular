@@ -16,7 +16,7 @@ from src.core.intent_mind import IntentMind
 from src.core.task_utils import BotTaskQueue, TaskType, TaskStatus, BotTask, PersistentTaskState, TaskPriority
 from src.core.code_monkey import CodeMonkey
 from src.core.topic.topic_tracker import TopicTracker
-
+from src.crewai_ext.crew_bases.runner_crewbase import RunnerCrew, GenerationInputs
 import json
 
 
@@ -425,70 +425,29 @@ class CrewRunner(BaseCrewProcess):
         self.bot_id = bot_id
 
     def _setup_crew(self) -> Crew:
-        """根据配置设置Crew"""
-        agents = []
-        tasks = []
-
-        for agent_config in self.config.get("agents", []):
-            agent = Agent(
-                name=agent_config["name"],
-                role=agent_config["role"],
-                goal=agent_config["goal"],
-                backstory=agent_config["backstory"],
-                tools=agent_config.get("tools", []),
-            )
-            agents.append(agent)
-
-            if "task" in agent_config:
-                task = Task(description=agent_config["task"], agent=agent)
-                tasks.append(task)
-
-        return Crew(agents=agents, tasks=tasks, process=self.config.get("process", "sequential"), verbose=True)
+        self.runner_crew = RunnerCrew().crew()
 
     async def _handle_generation_task(self, task: BotTask):
         """处理代码生成类型的任务"""
         try:
-            # 使用已配置的agents
-            if not self.crew or not self.crew.agents:
-                raise Exception("Crew或agents未正确配置")
-
-            # 创建代码生成任务
-            task_desc = f"""根据以下信息生成代码：
-                1. 文件路径：{task.parameters["file_path"]}
-                2. 文件类型：{task.parameters["file_type"]}
-                3. 需求描述：{task.parameters["dialogue_context"]["text"]}
-                4. 项目信息：
-                   - 类型：{task.parameters["code_details"]["project_type"]}
-                   - 描述：{task.parameters["code_details"]["project_description"]}
-                   - 框架：{task.parameters["code_details"]["frameworks"]}
-                5. 相关文件：{task.parameters["code_details"]["resources"]}
-                6. 引用关系：{task.parameters.get("references", [])}
-                """
-
-            # 记录LLM输入
-            self.log.info(f"[LLM Input] Generation Task for file {task.parameters['file_path']}:\n{task_desc}")
-
-            gen_task = Task(
-                description=task_desc,
-                agent=self.crew.agents[0],  # 使用已配置的agent
-                expected_output=f"""
-                @file: {task.parameters["file_path"]}
-                @description: [简要描述文件的主要功能和用途]
-                @tags: [相关标签，如framework_xxx,feature_xxx等，用逗号分隔]
-                @version: 1.0.0
-                @version_id: [UUID格式的版本ID]
-                ---
-                [完整的代码实现，包含：
-                1. 必要的导入语句
-                2. 类型定义（如果需要）
-                3. 主要功能实现
-                4. 错误处理
-                5. 导出语句（如果需要）]""",
+            # 准备代码生成输入参数
+            generation_inputs = GenerationInputs(
+                file_path=task.parameters["file_path"],
+                file_type=task.parameters["file_type"],
+                requirement=task.parameters["dialogue_context"]["text"],
+                project_type=task.parameters["code_details"]["project_type"],
+                project_description=task.parameters["code_details"]["project_description"],
+                frameworks=task.parameters["code_details"]["frameworks"],
+                resources=task.parameters["code_details"]["resources"],
+                references=task.parameters.get("references", []),
             )
 
-            # 执行生成
-            self.crew.tasks = [gen_task]
-            result = self.crew.kickoff()
+            # 记录LLM输入
+            self.log.info(
+                f"[LLM Input] Generation Task for file {task.parameters['file_path']}:\n{generation_inputs.model_dump_json()}"
+            )
+
+            result = self.runner_crew.kickoff(inputs=generation_inputs)
             code_content = result.raw if hasattr(result, "raw") else str(result)
 
             # 记录LLM输出

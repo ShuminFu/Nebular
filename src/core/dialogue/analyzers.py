@@ -6,7 +6,7 @@ from src.core.dialogue.models import ProcessingDialogue, IntentAnalysis
 from src.core.dialogue.pools import DialoguePool
 from src.core.parser.api_response_parser import ApiResponseParser
 from src.core.logger_config import get_logger
-from src.crewai_ext.crew_bases.analyzers_crew_base import (
+from src.crewai_ext.crew_bases.analyzers_crewbase import (
     IntentAnalysisInputs,
     ContextAnalysisInputs,
     IntentAnalyzerCrew,
@@ -57,8 +57,8 @@ class DialogueAnalyzer:
         )
 
         # 执行分析
-        crew = IntentAnalyzerCrew()
-        result = crew.kickoff(inputs=intent_inputs)
+        intent_crew = IntentAnalyzerCrew()
+        result = intent_crew.crew().kickoff(inputs=intent_inputs)
 
         # 记录LLM输出
         logger.info(f"[LLM Output] Intent Analysis Result for dialogue {dialogue.dialogue_index}:\n{result.raw}")
@@ -202,8 +202,8 @@ class DialogueAnalyzer:
         )
 
         # 执行分析
-        crew = ContextAnalyzerCrew()
-        result = crew.kickoff(inputs=context_inputs)
+        context_crew = ContextAnalyzerCrew()
+        result = context_crew.crew().kickoff(inputs=context_inputs)
 
         # 记录LLM输出
         logger.info(f"[LLM Output] Context Analysis Result for dialogue {dialogue.dialogue_index}:\n{result.raw}")

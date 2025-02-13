@@ -1,0 +1,27 @@
+code_generation:
+  description: >
+    根据以下信息生成代码：
+    1. 文件路径：{file_path}
+    2. 文件类型：{file_type}
+    3. 需求描述：{requirement}
+    4. 项目信息：
+        - 类型：{project_type}
+        - 描述：{project_description}
+        - 框架：{frameworks}
+    5. 相关文件：{resources}
+    6. 引用关系：{references}
+  expected_output: >
+    @file: {file_path}
+    @description: [简要描述文件的主要功能和用途]
+    @tags: [相关标签，如framework_xxx,feature_xxx等，用逗号分隔]
+    @version: 1.0.0
+    @version_id: [UUID格式的版本ID]
+    ---
+    [完整的代码实现，包含：
+    1. 必要的导入语句
+    2. 类型定义（如果需要）
+    3. 主要功能实现
+    4. 错误处理
+    5. 导出语句（如果需要）]
+  agent: code_generator
+
