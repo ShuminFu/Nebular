@@ -184,7 +184,7 @@ class DialogueAnalyzer:
 
         # 准备上下文分析的输入数据
         context_inputs = ContextAnalysisInputs(
-            opera_id=dialogue.opera_id,
+            opera_id=str(dialogue.opera_id),
             dialogue_index=dialogue.dialogue_index,
             text=dialogue.text,
             type=dialogue.type.name,

@@ -10,7 +10,6 @@ from src.core.dialogue.output_json_models import (
 from pydantic import BaseModel, Field, StrictBool, StrictStr
 from typing import List, Optional, Dict
 from datetime import datetime
-from uuid import UUID
 
 class IntentAnalysisInputs(BaseModel):
     """IntentAnalysisInputs验证模型"""
@@ -33,7 +32,7 @@ class IntentAnalysisInputs(BaseModel):
 class ContextAnalysisInputs(BaseModel):
     """ContextAnalysisInputs验证模型"""
 
-    opera_id: UUID = Field(..., description="当前Opera的ID")
+    opera_id: str = Field(..., description="当前Opera的ID")
     dialogue_index: int = Field(..., description="对话索引号")
     text: StrictStr = Field(..., description="对话内容文本")
     type: StrictStr = Field(..., description="对话类型名称")
