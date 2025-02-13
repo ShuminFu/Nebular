@@ -1,4 +1,6 @@
-地址：http://opera.nti56.com/signalRService
+# SignalR Docs
+
+地址：<http://opera.nti56.com/signalRService>
 
 连接成功后，应立即调用SetBotId(Guid botId)方法，将当前Bot的Id传入，以便服务器识别当前Bot。SetBotId调用成功后，服务器会立即回调Hello方法；如传入botId为空或与已设置的botId相同，则不会回调Hello方法。
 
