@@ -80,7 +80,7 @@ index_task:
     - Opera ID: {opera_id}
     - 索引：{dialogue_index}
     - 内容：{text}
-    - 类型：{type.name}
+    - 类型：{type}
     - 标签：{tags}
     - 阶段：{stage_index}
     同阶段的对话：
