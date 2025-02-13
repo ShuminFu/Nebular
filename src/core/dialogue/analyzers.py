@@ -97,7 +97,7 @@ class DialogueAnalyzer:
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         # 创建意图分析任务
-        task = Task(
+        intent_analysis_task = Task(
             description=f"""分析以下对话的意图，判断是否是有意义的对话：
 
             对话信息：
@@ -177,16 +177,14 @@ class DialogueAnalyzer:
             """,
             expected_output="按照IntentAnalysisResult模型的格式返回JSON结果，如果是无意义的对话则intent字段返回空字符串, 文件名要考虑context中的项目结构信息, 包含意图描述、原因说明、是否为代码请求等信息",
             agent=self.intent_analyzer,
-            output_json=IntentAnalysisResult
+            output_json=IntentAnalysisResult,
         )
-        logger.info(f"[LLM Input] Intent Analysis Task for dialogue {dialogue.dialogue_index}:\n{task.description}")
+        logger.info(
+            f"[LLM Input] Intent Analysis Task for dialogue {dialogue.dialogue_index}:\n{intent_analysis_task.description}"
+        )
 
         # 执行分析
-        crew = Crew(
-            agents=[self.intent_analyzer],
-            tasks=[task],
-            verbose=True
-        )
+        crew = Crew(agents=[self.intent_analyzer], tasks=[intent_analysis_task], verbose=True)
         result = crew.kickoff()
 
         # 记录LLM输出

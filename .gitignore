@@ -54,3 +54,4 @@ docs/playground/archive/groupchat/search_arxiv_gpt4.py
 .crewai_llm_cache/cache.db
 .crewai_llm_cache/
 .test_cache/
+playground

@@ -52,12 +52,8 @@ class TemplateCrew:
 class DynamicCrew:
     """Dynamic Crew for testing parameter passing"""
 
-    agents_config = "../config/agents.yaml"
-    tasks_config = "../config/tasks.yaml"
-
-    def __init__(self, topic="AI Technology", extra_context: Optional[Dict[str, Any]] = None):
-        self.topic = topic
-        self.extra_context = extra_context or {}
+    agents_config = "../config/template_agents.yaml"
+    tasks_config = "../config/template_tasks.yaml"
 
     @agent
     def researcher(self) -> Agent:
@@ -92,16 +88,10 @@ class DynamicCrew:
 
         # 构建上下文
         context = []  # context: Optional[List["Task"]]
-        # 创建任务配置
-        task_config = {
-            "description": description,
-            "expected_output": expected_output,
-            "agent": self.researcher(),
-        }
 
         # 创建任务
         task = Task(
-            config=task_config,
+            config=self.tasks_config["research_task"],
         )
 
         return task
@@ -121,21 +111,7 @@ class DynamicCrew:
             requirements_text = "\n".join(f"- {req}" for req in analysis_requirements)
             description += f"\n\nAdditional Analysis Requirements:\n{requirements_text}"
 
-        # 构建上下文
-        context = []
-        if analysis_requirements:
-            context.extend(analysis_requirements)
-        if self.extra_context:
-            context.extend(f"{k}: {v}" for k, v in self.extra_context.items())
-
-        task = Task(
-            config={
-                "description": description,
-                "expected_output": base_config["expected_output"],
-                "agent": "reporting_analyst",
-            },
-            agent=self.reporting_analyst(),
-        )
+        task = Task(config=self.tasks_config["reporting_task"])
         return task
 
     @crew
@@ -151,7 +127,7 @@ def test_dynamic_crew():
         "target_audience": "Technical experts in the field",
     }
 
-    dynamic_crew = DynamicCrew(topic="Quantum Computing", extra_context=extra_context)
+    dynamic_crew = DynamicCrew()
 
     # 使用额外参数创建任务
     dynamic_crew.research_task(
