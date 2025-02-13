@@ -8,8 +8,8 @@ Nebular is a Python-based AI assistant experimental platform that integrates var
 |-------------------|---------------------------------------|-------------------------|
 | Task Orchestration| Intelligent routing, Load balancing  | CrewAI, Custom Heuristics|
 | API Management    | Retry logic, Rate limiting           | FastAPI, Backoff        |
-| Service Discovery | UUID-based addressing                 | Consul, SignalR         |
-| Code Generation   | Multi-file context awareness          | LangChain, AST Parsing  |
+| Service Discovery | Dynamic resource binding, UUID-based addressing, Dependency resolution | Custom Heuristics, SignalR |
+| Code Generation   | Multi-file coordination, Dependency analysis, Structural pattern recognition | CrewAI, AST Parsing  |
 
 ## 🚀 Architectural Highlights
 
