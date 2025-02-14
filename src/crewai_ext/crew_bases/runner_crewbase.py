@@ -32,15 +32,15 @@ class RunnerCrew:
 
     @agent
     def code_generator(self) -> Agent:
-        """Create an xxx"""
+        """Create a code generation agent with validation capabilities"""
         return Agent(config=self.agents_config["code_generator"], llm=llm, verbose=True)
 
     @task
     def generation_task(self) -> Task:
-        """Create an xxx."""
+        """Create a multi-file code generation task with resource dependencies"""
         return Task(config=self.tasks_config["code_generation_task"])
 
     @crew
     def crew(self) -> Crew:
-        """Creates xxx Crew"""
+        """Creates code generation crew with validation workflow"""
         return Crew(agents=self.agents, tasks=self.tasks, process=Process.sequential, verbose=True)

@@ -17,6 +17,7 @@ from src.core.task_utils import BotTaskQueue, TaskType, TaskStatus, BotTask, Per
 from src.core.code_monkey import CodeMonkey
 from src.core.topic.topic_tracker import TopicTracker
 from src.crewai_ext.crew_bases.runner_crewbase import RunnerCrew, GenerationInputs
+from src.crewai_ext.crew_bases.manager_crewbase import ManagerCrew
 import json
 
 
@@ -49,11 +50,10 @@ class BaseCrewProcess(ABC):
         # self.intent_agent = create_intent_agent() # 无实际用途，占位
         # self.persona_agent = create_persona_agent()  # 无实际用途，占位
 
-        self.task_queue = BotTaskQueue(bot_id=self.bot_id)
-        self.intent_processor = IntentMind(self.task_queue)
-
         # 设置Crew
         self.crew = self._setup_crew()
+        self.task_queue = BotTaskQueue(bot_id=self.bot_id)
+        self.intent_processor = IntentMind(self.task_queue)
 
         if self.bot_id:
             self.client = OperaSignalRClient(bot_id=str(self.bot_id))
@@ -167,6 +167,9 @@ class CrewManager(BaseCrewProcess):
         # 设置任务状态变更回调
         self.task_queue.add_status_callback(self._handle_task_status_changed)
 
+    def _setup_crew(self) -> Crew:
+        return ManagerCrew().crew()
+
     async def _handle_task_status_changed(self, task_id: UUID, new_status: TaskStatus):
         """处理任务状态变更"""
         # 更新主题追踪器
@@ -189,7 +192,9 @@ class CrewManager(BaseCrewProcess):
         try:
             # 使用bot_api_tool获取Bot的所有Staff信息
             result = _SHARED_BOT_TOOL.run(
-                action="get_all_staffs", bot_id=self.bot_id, data={"need_opera_info": True, "need_staffs": 1, "need_staff_invitations": 0}
+                action="get_all_staffs",
+                bot_id=self.bot_id,
+                data={"need_opera_info": True, "need_staffs": 1, "need_staff_invitations": 0},
             )
 
             # 解析API响应
@@ -215,9 +220,6 @@ class CrewManager(BaseCrewProcess):
         except Exception as e:
             self.log.error(f"获取CM的staff_id时发生错误: {str(e)}")
             return None
-
-    def _setup_crew(self) -> Crew:
-        return Crew(agents=[DEFAULT_CREW_MANAGER], tasks=[Task(**CREW_MANAGER_INIT, agent=DEFAULT_CREW_MANAGER)])
 
     async def _handle_conversation_task(self, task: BotTask):
         """处理对话类型的任务"""
@@ -425,7 +427,7 @@ class CrewRunner(BaseCrewProcess):
         self.bot_id = bot_id
 
     def _setup_crew(self) -> Crew:
-        self.runner_crew = RunnerCrew().crew()
+        return RunnerCrew().crew()
 
     async def _handle_generation_task(self, task: BotTask):
         """处理代码生成类型的任务"""
@@ -447,7 +449,7 @@ class CrewRunner(BaseCrewProcess):
                 f"[LLM Input] Generation Task for file {task.parameters['file_path']}:\n{generation_inputs.model_dump_json()}"
             )
 
-            result = self.runner_crew.kickoff(inputs=generation_inputs.model_dump())
+            result = self.crew.kickoff(inputs=generation_inputs.model_dump())
             code_content = result.raw if hasattr(result, "raw") else str(result)
 
             # 记录LLM输出

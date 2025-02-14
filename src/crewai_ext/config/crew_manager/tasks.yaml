@@ -1,0 +1,5 @@
+check_bot_task:
+  description: "查询所有Bot列表中名为BotManager的Bot"
+  expected_output: "返回不在活跃状态的Bot ID列表以及详情"
+  agent: bot_manager
+
