@@ -1,4 +1,4 @@
-code_generation:
+code_generation_task:
   description: >
     根据以下信息生成代码：
     1. 文件路径：{file_path}

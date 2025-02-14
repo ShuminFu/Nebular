@@ -4,6 +4,13 @@ from pydantic import BaseModel, Field, StrictStr
 from src.crewai_ext.config.llm_setup import llm
 from typing import List, Optional
 
+class ResourceItem(BaseModel):
+    """资源项数据结构"""
+
+    file_path: StrictStr = Field(..., description="文件路径")
+    type: StrictStr = Field(..., description="资源类型")
+    mime_type: StrictStr = Field(..., description="MIME类型")
+    description: StrictStr = Field(..., description="资源描述")
 
 class GenerationInputs(BaseModel):
     """代码生成任务的输入参数验证模型"""
@@ -14,7 +21,7 @@ class GenerationInputs(BaseModel):
     project_type: StrictStr = Field(..., description="项目类型")
     project_description: Optional[StrictStr] = Field(None, description="项目描述信息，可为空")
     frameworks: List[StrictStr] = Field(default_factory=list, description="使用的框架列表")
-    resources: List[StrictStr] = Field(default_factory=list, description="相关资源文件路径列表")
+    resources: List[ResourceItem] = Field(default_factory=list, description="相关资源文件信息列表")  # 修改数据结构
     references: List[StrictStr] = Field(default_factory=list, description="引用关系列表")
 
 

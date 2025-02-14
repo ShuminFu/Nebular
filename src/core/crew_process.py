@@ -447,7 +447,7 @@ class CrewRunner(BaseCrewProcess):
                 f"[LLM Input] Generation Task for file {task.parameters['file_path']}:\n{generation_inputs.model_dump_json()}"
             )
 
-            result = self.runner_crew.kickoff(inputs=generation_inputs)
+            result = self.runner_crew.kickoff(inputs=generation_inputs.model_dump())
             code_content = result.raw if hasattr(result, "raw") else str(result)
 
             # 记录LLM输出
