@@ -28,7 +28,7 @@ class ManagerCrew:
     @agent
     def bot_manager(self) -> Agent:
         """Create an bot management agent"""
-        return Agent(config=self.agents_config["bot_manager"], llm=llm, tools=BotTool(), verbose=True)
+        return Agent(config=self.agents_config["bot_manager"], llm=llm, tools=[BotTool()], verbose=True)
 
     @task
     def check_bot_task(self) -> Task:
