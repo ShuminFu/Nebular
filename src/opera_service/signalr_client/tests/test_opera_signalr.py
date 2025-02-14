@@ -1,7 +1,8 @@
 import threading
 import time
 from uuid import UUID
-from ..opera_signalr_client import OperaSignalRClient
+
+from src.opera_service.signalr_client.opera_signalr_client import OperaSignalRClient
 
 TEST_BOT_ID = "4a4857d6-4664-452e-a37c-80a628ca28a0"
 
