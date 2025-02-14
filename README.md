@@ -2,53 +2,60 @@
 
 Nebular is a Python-based AI assistant experimental platform that integrates various modern AI tools and frameworks for exploring and developing intelligent assistant applications.
 
-## 🌟 Key Features
+## 🌟 Core Capabilities
 
-| Category         | Capabilities                          | Technology Stack        |
-|-------------------|---------------------------------------|-------------------------|
-| Task Orchestration| Intelligent routing, Load balancing  | CrewAI, Custom Heuristics|
-| API Management    | Retry logic, Rate limiting           | FastAPI, Backoff        |
-| Service Discovery | Dynamic resource binding, UUID-based addressing, Dependency resolution | Custom Heuristics, SignalR |
-| Code Generation   | Multi-file coordination, Dependency analysis, Structural pattern recognition | CrewAI, AST Parsing  |
+### Core Runtime System
+|| Module | Description | Key Technologies |
+|---|------|------------|-----------------|
+| 🧠 | CrewManager | Main management process responsible for:<br>- Sub-Bot lifecycle management<br>- Distributed task routing<br>- Resource dependency resolution | - Multi-process management<br>- UUID addressing<br>- Backoff retry strategy |
+| ⚙️ | CrewRunner | Worker process responsible for:<br>- Specific task execution<br>- Code generation<br>- Dialogue processing | - CrewAI integration<br>- AST parsing<br>- Semaphore control |
+| 🛠️ | BotToolkit | Unified API toolset | - FastAPI wrapper<br>- Unified response parsing |
 
-## 🚀 Architectural Highlights
+### Intelligent System Architecture
+```mermaid
+graph TD
+A[CrewManager] -->|generates| B[CrewRunner]
+B -->|callback| A
+A -->|monitors| C((Bot Cluster))
+C -->|status report| A
+B --> D[Code Generation]
+B --> E[Dialogue Processing]
+B --> F[Resource Management]
+```
 
-### Core Innovation
-**Intelligent Task Routing Engine**  
-- Implements multi-dimensional CR selection strategy combining:
-  - Framework expertise matching (React/Python/Java specialists)
-  - Real-time workload monitoring
-  - Historical performance metrics
-  - Contextual awareness of resource dependencies
+## 🚀 Implementation Architecture
 
-**Unified Processing Pipeline**  
-- End-to-end request lifecycle management:
-  1. Intent Recognition (NLU-based classification)
-  2. Contextual Analysis (Dependency graph construction)
-  3. Resource Binding (File/Service discovery)
-  4. Expert Routing (QoS-based agent selection)
-  5. Execution Monitoring (Real-time tracing)
+### Key Design Patterns
+1. **Layered Process Architecture**:
+   - Manager Layer: Responsible for resource scheduling and monitoring
+   - Runner Layer: Focused on specific task execution
+   - Process isolation achieved through multiprocessing
 
-### Engineering Excellence
-**Observability Stack**  
-- Trace_ID propagation across distributed services
-- Structured logging with OpenTelemetry compatibility
-- Performance metrics aggregation (Prometheus/Grafana)
+2. **Elastic Communication Mechanism**:
+   - Built-in retry strategy (backoff.expo)
+   - Cross-process state synchronization (via Bot defaultTags)
 
-**Configuration Framework**  
-- YAML-driven agent/task definitions which leverage CrewAI's [Hierachical Process](https://docs.crewai.com/how-to/hierarchical-process), [Flows](https://docs.crewai.com/concepts/flows)
-- Dynamic workflow composition via declarative templates
+### Modular Design
 
-**Modular Architecture**  
-- Pluggable tool components with standardized interfaces:
-  - API Toolkits (REST/gRPC connectors)
-  - Data Processors (ETL pipelines)
-  - Monitoring Adapters
-- Service isolation through process boundaries
+| Module Path | Responsibility |
+|------------|----------------|
+| `src/core/` | Core runtime and base classes |
+| `src/crewai_ext/` | CrewAI extension implementation |
+| `src/opera_service/` | Business logic service layer |
+| `config/` | Agent configuration management |
+
+## 📊 Technology Stack Updates
+
+|| Domain | Technology Choice |
+|---|--------|-------------------|
+| Framework Core | CrewAI Extension | Custom Agent base classes<br>Process template engine |
+| Communication Layer | Async IO | asyncio + SignalR |
+| Reliability | Fault Tolerance | Backoff retry<br>Process health checks |
 
 ## Roadmap
-
+- [x] Implement Hierarchical Process based on CrewAI ✅
+- [x] Basic process management framework ✅
 - [ ] Init Prompt Template by CrewManager Spawning
 - [ ] Recurring summon opera
-- [x] Leverage CrewAI [Hierachical Process](https://docs.crewai.com/how-to/hierarchical-process), [Flows](https://docs.crewai.com/concepts/flows)
+- [x] Leverage CrewAI [Hierarchical Process](https://docs.crewai.com/how-to/hierarchical-process), [Flows](https://docs.crewai.com/concepts/flows) ✅
 - [ ] CrewRunner more Tools
