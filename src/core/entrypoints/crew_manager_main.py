@@ -49,22 +49,14 @@ async def run_crew_manager(bot_id: str):
                     # 为未激活的子Bot创建CrewRunner进程
                     process = multiprocessing.Process(
                         target=start_crew_runner_process,
-                        args=(child_bot_id, {
-                            "agents": [
-                                {
-                                    "name": "Default Agent",
-                                    "role": "Assistant",
-                                    "goal": "Help with tasks",
-                                    "backstory": "I am an AI assistant"
-                                }
-                            ],
-                            "max_retries": 3,  # 添加重试次数配置
-                            "retry_delay": 5    # 添加重试延迟配置
-                        })
+                        args=(
+                            child_bot_id,
+                            bot_id,
+                        ),  # 传递当前manager的bot_id作为parent_bot_id
                     )
                     process.start()
                     crew_processes.append(process)
-                    log.info(f"已为子Bot {child_bot_id} 启动CrewRunner进程")
+                    log.info(f"已为子Bot {child_bot_id} 启动CrewRunner进程，父Bot ID: {bot_id}")
             except Exception as e:
                 log.error(f"处理子Bot {child_bot_id} 时出错: {str(e)}")
                 continue
@@ -106,9 +98,9 @@ async def run_crew_runner(runner: CrewRunner, bot_id: str):
         raise
 
 
-def start_crew_runner_process(bot_id: str, config: dict):
+def start_crew_runner_process(bot_id: str, parent_bot_id: str):
     """在新进程中启动CrewRunner"""
-    runner = CrewRunner(config=config, bot_id=UUID(bot_id))
+    runner = CrewRunner(bot_id=UUID(bot_id), parent_bot_id=UUID(parent_bot_id))
     asyncio.run(run_crew_runner(runner, bot_id))
 
 def start_crew_manager_process(bot_id: str):

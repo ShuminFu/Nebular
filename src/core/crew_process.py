@@ -43,6 +43,7 @@ class BaseCrewProcess(ABC):
         self.persona_agent: Optional[Agent] = None
         # 为每个进程创建一个带trace_id的logger
         self.log = get_logger_with_trace_id()
+        self._staff_id_cache: Dict[str, Dict[UUID, UUID]] = {}  # opera_id -> {bot_id -> staff_id} 的缓存
 
     async def setup(self):
         """初始化设置"""
@@ -143,6 +144,56 @@ class BaseCrewProcess(ABC):
         """处理任务回调"""
         pass
 
+    async def _get_bot_staff_id(self, bot_id: UUID, opera_id: str) -> Optional[UUID]:
+        """获取指定Bot在特定Opera中的staff_id
+
+        Args:
+            bot_id: Bot的ID
+            opera_id: Opera的ID
+
+        Returns:
+            Optional[UUID]: 如果找到则返回staff_id，否则返回None
+        """
+        # 先检查缓存
+        cache_key = str(opera_id)
+        if cache_key in self._staff_id_cache and bot_id in self._staff_id_cache[cache_key]:
+            return self._staff_id_cache[cache_key][bot_id]
+
+        try:
+            # 使用bot_api_tool获取Bot的所有Staff信息
+            result = _SHARED_BOT_TOOL.run(
+                action="get_all_staffs",
+                bot_id=bot_id,
+                data={"need_opera_info": True, "need_staffs": 1, "need_staff_invitations": 0},
+            )
+
+            # 解析API响应
+            status_code, data = ApiResponseParser.parse_response(result)
+            if status_code != 200 or not data:
+                self.log.error(f"获取Bot {bot_id} 的Staff信息失败")
+                return None
+
+            # 遍历所有Opera的Staff信息
+            for opera_info in data:
+                if str(opera_info.get("operaId")) == str(opera_id):
+                    staffs = opera_info.get("staffs", [])
+                    if staffs:
+                        # 找到第一个属于这个Bot的Staff
+                        staff_id = UUID(staffs[0].get("id"))
+                        # 初始化缓存字典
+                        if cache_key not in self._staff_id_cache:
+                            self._staff_id_cache[cache_key] = {}
+                        # 缓存结果
+                        self._staff_id_cache[cache_key][bot_id] = staff_id
+                        return staff_id
+
+            self.log.error(f"在Opera {opera_id} 中未找到Bot {bot_id} 的Staff")
+            return None
+
+        except Exception as e:
+            self.log.error(f"获取Bot的staff_id时发生错误: {str(e)}")
+            return None
+
 
 class CrewManager(BaseCrewProcess):
     """管理所有工作型Crew的进程"""
@@ -183,42 +234,7 @@ class CrewManager(BaseCrewProcess):
         Returns:
             Optional[UUID]: 如果找到则返回staff_id，否则返回None
         """
-        # 先检查缓存
-        cache_key = str(opera_id)
-        if cache_key in self._staff_id_cache:
-            return self._staff_id_cache[cache_key]
-
-        try:
-            # 使用bot_api_tool获取Bot的所有Staff信息
-            result = _SHARED_BOT_TOOL.run(
-                action="get_all_staffs",
-                bot_id=self.bot_id,
-                data={"need_opera_info": True, "need_staffs": 1, "need_staff_invitations": 0},
-            )
-
-            # 解析API响应
-            status_code, data = ApiResponseParser.parse_response(result)
-            if status_code != 200 or not data:
-                self.log.error(f"获取Bot {self.bot_id} 的Staff信息失败")
-                return None
-
-            # 遍历所有Opera的Staff信息
-            for opera_info in data:
-                if str(opera_info.get("operaId")) == str(opera_id):
-                    staffs = opera_info.get("staffs", [])
-                    if staffs:
-                        # 找到第一个属于这个Bot的Staff
-                        staff_id = UUID(staffs[0].get("id"))
-                        # 缓存结果
-                        self._staff_id_cache[cache_key] = staff_id
-                        return staff_id
-
-            self.log.error(f"在Opera {opera_id} 中未找到Bot {self.bot_id} 的Staff")
-            return None
-
-        except Exception as e:
-            self.log.error(f"获取CM的staff_id时发生错误: {str(e)}")
-            return None
+        return await self._get_bot_staff_id(self.bot_id, opera_id)
 
     async def _handle_conversation_task(self, task: BotTask):
         """处理对话类型的任务"""
@@ -420,10 +436,24 @@ class CrewManager(BaseCrewProcess):
 class CrewRunner(BaseCrewProcess):
     """在独立进程中运行的Crew"""
 
-    def __init__(self, config: dict, bot_id: UUID):
+    def __init__(self, bot_id: UUID, parent_bot_id: Optional[UUID] = None):
         super().__init__()
-        self.config = config
         self.bot_id = bot_id
+        self.parent_bot_id = parent_bot_id
+        self._staff_id_cache: Dict[str, UUID] = {}  # opera_id -> staff_id 的缓存
+
+    async def _get_parent_staff_id(self, opera_id: str) -> Optional[UUID]:
+        """获取父Bot在指定Opera中的staff_id
+
+        Args:
+            opera_id: Opera的ID
+
+        Returns:
+            Optional[UUID]: 如果找到则返回staff_id，否则返回None
+        """
+        if not self.parent_bot_id:
+            return None
+        return await self._get_bot_staff_id(self.parent_bot_id, opera_id)
 
     def _setup_crew(self) -> Crew:
         return RunnerCrew().crew()
@@ -532,3 +562,45 @@ class CrewRunner(BaseCrewProcess):
 
         except Exception as e:
             self.log.error(f"发送任务回调时发生错误: {str(e)}")
+
+    async def _handle_message(self, message: MessageReceivedArgs):
+        """处理接收到的消息
+
+        只处理以下情况的消息：
+        1. 发送者是父Bot的staff
+        2. 消息是非提及对话或者提及了当前Bot
+        """
+        try:
+            # 获取消息的opera_id
+            opera_id = message.opera_id
+            if not opera_id:
+                self.log.error("消息缺少opera_id")
+                return
+
+            # 获取父Bot的staff_id
+            parent_staff_id = await self._get_parent_staff_id(opera_id)
+            if not parent_staff_id:
+                self.log.debug(f"无法获取父Bot在Opera {opera_id} 中的staff_id，跳过消息处理")
+                return
+
+            # 检查发送者是否是父Bot的staff
+            if str(message.sender_staff_id) != str(parent_staff_id):
+                self.log.debug(f"消息发送者 {message.sender_staff_id} 不是父Bot的staff {parent_staff_id}，跳过消息处理")
+                return
+
+            # 检查消息是否是非提及对话或者提及了当前Bot
+            mentioned_staff_ids = message.mentioned_staff_ids or []
+            is_mentioned = any(str(staff_id) == str(message.receiver_staff_id) for staff_id in mentioned_staff_ids)
+
+            if not (len(mentioned_staff_ids) == 0 or is_mentioned):
+                self.log.debug("消息既不是非提及对话也没有提及当前Bot，跳过消息处理")
+                return
+
+            # 记录将要处理的消息
+            self.log.info(f"处理来自父Bot staff的消息: {message.text}")
+
+            # 使用意图处理器处理消息
+            await self.intent_processor.process_message(message)
+
+        except Exception as e:
+            self.log.error(f"处理消息时发生错误: {str(e)}")
