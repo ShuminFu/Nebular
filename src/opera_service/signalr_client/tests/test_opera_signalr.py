@@ -4,7 +4,7 @@ from uuid import UUID
 
 from src.opera_service.signalr_client.opera_signalr_client import OperaSignalRClient
 
-TEST_BOT_ID = "4a4857d6-4664-452e-a37c-80a628ca28a0"
+TEST_BOT_ID = "4a2d346e-e045-4756-b7a9-a1f825055ee9"
 
 def test_connection():
     connection_successful = False
