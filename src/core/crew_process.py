@@ -115,9 +115,9 @@ class BaseCrewProcess(ABC):
                 await self._handle_task_callback(task)
         except Exception as e:
             self.log.exception(f"处理任务出错: {e}")
-            task.status = TaskStatus.FAILED
+            await self.task_queue.update_task_status(task.id, TaskStatus.FAILED)
         else:
-            task.status = TaskStatus.COMPLETED
+            await self.task_queue.update_task_status(task.id, TaskStatus.COMPLETED)
 
     async def _handle_message(self, message: MessageReceivedArgs):
         """处理接收到的消息"""
@@ -504,7 +504,7 @@ class CrewRunner(BaseCrewProcess):
                 raise Exception(f"发送代码生成对话失败: {result}")
 
             # 更新任务状态和结果
-            task.status = TaskStatus.COMPLETED
+            await self.task_queue.update_task_status(task.id, TaskStatus.COMPLETED)
             task.result = {
                 "dialogue_id": response_data["index"],
                 "status": "success",
@@ -517,7 +517,7 @@ class CrewRunner(BaseCrewProcess):
         except Exception as e:
             self.log.error(f"代码生成任务处理失败: {str(e)}")
             task.error_message = str(e)
-            task.status = TaskStatus.FAILED
+            await self.task_queue.update_task_status(task.id, TaskStatus.FAILED)
             # 发送错误回调
             error_result = {"status": "failed", "error": str(e)}
             await self._handle_task_completion(task, json.dumps(error_result))

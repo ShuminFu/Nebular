@@ -279,11 +279,11 @@ class OperaSignalRClient:
             # 构造接受邀请的数据
             acceptance_data = {
                 "name": bot_name,
-                "parameter": args.get("parameter", "{}"),  # 使用get方法提供默认值
+                "parameter": args.get("parameter", "{}"),  
                 "is_on_stage": True,
-                "tags": args.get("tags", ""),  # 使用get方法提供默认值
-                "roles": args["roles"],
-                "permissions": args["permissions"],
+                "tags": args.get("tags", ""),  
+                "roles": args.get("roles", ""),  
+                "permissions": args.get("permissions", ""),  
             }
 
             # 使用StaffInvitationTool接受邀请
