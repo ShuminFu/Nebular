@@ -6,8 +6,24 @@ import shutil
 from crewai import Agent, Task, Crew, Process
 import litellm
 from litellm.caching import Cache
-from src.crewai_ext.config.llm_setup import test_config
 from src.crewai_ext.config.llm_factory import get_llm
+
+test_config = {
+    "agents": [
+        {
+            "name": "前端架构师",
+            "role": "前端架构师",
+            "goal": "设计一个现代化的前端项目结构",
+            "backstory": "专注于前端架构设计的前端架构师"
+        },
+        {
+            "name": "UI交互专家",
+            "role": "UI交互专家",
+            "goal": "设计一个现代化的UI交互规范",
+            "backstory": "专注于UI交互设计的前端交互专家"
+        }
+    ]
+}
 
 
 class TestCrewAIWithCache(unittest.TestCase):
