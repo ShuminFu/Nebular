@@ -133,7 +133,59 @@ class BaseCrewProcess(ABC):
     @abstractmethod
     async def _handle_conversation_task(self, task: BotTask):
         """处理对话类型的任务"""
-        pass
+        try:
+            # 获取对话内容和参数
+            dialogue_context = task.parameters.get("dialogue_context", {})
+            if not dialogue_context:
+                self.log.error("对话任务缺少dialogue_context参数")
+                return
+
+            # 使用Crew生成回复
+            result = self.crew.kickoff(inputs={"text": dialogue_context.get("text", "")})
+
+            # 获取回复文本
+            reply_text = result.raw if hasattr(result, "raw") else str(result)
+
+            # 构造对话消息
+            dialogue_data = DialogueForCreation(
+                is_stage_index_null=False,
+                staff_id=str(task.response_staff_id),
+                is_narratage=False,
+                is_whisper=False,
+                text=reply_text,
+                tags=dialogue_context.get("tags", ""),
+                mentioned_staff_ids=[str(task.source_staff_id)] if task.source_staff_id else None,
+            )
+
+            # 发送对话
+            result = _SHARED_DIALOGUE_TOOL.run(
+                action="create",
+                opera_id=task.parameters.get("opera_id"),
+                data=dialogue_data,
+            )
+
+            # 检查结果
+            status_code, _ = ApiResponseParser.parse_response(result)
+            if status_code not in [200, 201, 204]:
+                raise Exception(f"发送对话失败: {result}")
+
+            # 更新任务状态
+            await self.task_queue.update_task_status(task.id, TaskStatus.COMPLETED)
+            task.result = {
+                "status": "success",
+                "reply": reply_text
+            }
+
+            # 发送任务完成回调
+            await self._handle_task_completion(task, json.dumps(task.result))
+
+        except Exception as e:
+            self.log.error(f"处理对话任务失败: {str(e)}")
+            task.error_message = str(e)
+            await self.task_queue.update_task_status(task.id, TaskStatus.FAILED)
+            # 发送错误回调
+            error_result = {"status": "failed", "error": str(e)}
+            await self._handle_task_completion(task, json.dumps(error_result))
 
     @abstractmethod
     async def _handle_generation_task(self, task: BotTask):
@@ -530,7 +582,7 @@ class CrewRunner(BaseCrewProcess):
     async def _handle_conversation_task(self, task: BotTask):
         """处理对话类型的任务"""
         # 实现CrewRunner特定的对话任务处理逻辑
-        pass
+        await super()._handle_conversation_task(task)
 
     async def _handle_task_completion(self, task: BotTask, result: str):
         """处理任务完成后的回调"""

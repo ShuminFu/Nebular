@@ -15,7 +15,7 @@ intent_analysis_task:
         - 是否包含明确的意图或目的
         - 是否需要响应或处理
         - 是否包含实质性的内容
-        - 如果是纯粹的表情、语气词或无意义的重复，返回空字符串作为意图
+        - 如果是纯粹的表情、语气词或无意义的重复，返回"general chat"
 
     2. 如果对话有意义：
         - 用一句简洁的话描述意图
@@ -39,8 +39,8 @@ intent_analysis_task:
   expected_output: |
     返回格式为JSON对象，示例如下：
     {{
-        "intent": "意图描述，无意义对话则返回空字符串",
-        "reason": "如果intent为空，说明原因",
+        "intent": "意图描述，无意义对话则返回'general chat'",
+        "reason": "说明意图分析的原因",
         "is_code_request": true/false,
         "code_details": {{
             "project_type": "web/python/java等项目类型",

@@ -76,9 +76,9 @@ class DialogueAnalyzer:
             intent = analysis_result.get("intent", "").strip()
 
             # 如果意图为空（无意义对话），返回基本分析结果
-            if not intent:
+            if intent == "general chat":
                 return IntentAnalysis(
-                    intent="",
+                    intent="general chat",
                     confidence=0.1,
                     parameters={
                         "text": dialogue.text,
