@@ -10,15 +10,30 @@ import json
 import asyncio
 from datetime import datetime
 from dataclasses import dataclass
+import functools
 
 from pysignalr.client import SignalRClient
 from pysignalr.messages import CompletionMessage
+import aiohttp
 from src.core.logger_config import get_logger, get_logger_with_trace_id
 from src.crewai_ext.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
 
 # 获取logger实例
 logger = get_logger(__name__, log_file="logs/opera_signalr.log")
 
+# Monkey Patch: 修改 aiohttp.ClientSession 的默认行为
+original_init = aiohttp.ClientSession.__init__
+
+@functools.wraps(original_init)
+def patched_init(self, *args, **kwargs):
+    """
+    对 aiohttp.ClientSession 的初始化方法进行补丁,
+    强制设置 trust_env=True 以支持从环境变量读取代理设置
+    """
+    kwargs['trust_env'] = True
+    return original_init(self, *args, **kwargs)
+
+aiohttp.ClientSession.__init__ = patched_init
 
 @dataclass
 class OperaCreatedArgs:
@@ -88,7 +103,7 @@ class OperaSignalRClient:
         }
 
         # 设置回调超时时间(秒)
-        self.callback_timeout = 30
+        self.callback_timeout = 3000
         self._connection_task = None
 
     async def _on_open(self) -> None:
