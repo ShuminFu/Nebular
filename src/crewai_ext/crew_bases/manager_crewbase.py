@@ -38,4 +38,26 @@ class ManagerCrew:
     @crew
     def crew(self) -> Crew:
         """Creates bot management crew"""
-        return Crew(agents=self.agents, tasks=self.tasks, process=Process.sequential, verbose=True)
+        selected_agents = [
+            agent for agent in self.agents 
+            if agent.role == "bot_manager"
+        ]
+        selected_tasks = [
+            task for task in self.tasks 
+            if task.name == "check_bot_task"
+        ]   
+        return Crew(agents=selected_agents, tasks=selected_tasks, process=Process.sequential, verbose=True)
+
+    @crew
+    def chat_crew(self) -> Crew:
+        """Creates chat crew"""
+        selected_agents = [
+            agent for agent in self.agents 
+            if "bot_manager" in agent.role.strip().lower()
+        ]
+        selected_tasks = [
+            task for task in self.tasks 
+            if task.name == "chat_task"
+        ]
+        return Crew(agents=selected_agents, tasks=selected_tasks, process=Process.sequential, verbose=True)
+

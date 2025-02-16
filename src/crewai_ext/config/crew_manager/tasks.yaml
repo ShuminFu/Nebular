@@ -3,19 +3,18 @@ check_bot_task:
   expected_output: "返回不在活跃状态的Bot ID列表以及详情"
   agent: bot_manager
 
-# conversation_task:
-#   description: >
-#     根据以下对话信息生成回复：
-#     1. 内容：{text}
-
-#     要求：
-#     1. 保持友好和专业的语气
-#     2. 根据对话类型和标签调整回复风格
-#     3. 如果是普通对话，给出合适的回应
-#     4. 如果提到了其他Staff，注意回复的针对性
-#     5. 避免过于冗长的回复
-#     6. 保持对话的连贯性
-#   expected_output: >
-#     返回一个友好且专业的回复文本
-#   agent: bot_manager
+chat_task:
+  description: >
+    根据以下对话信息生成回复：
+    1. 内容：{text}
+    要求：
+    1. 保持友好和专业的语气
+    2. 根据对话类型和标签调整回复风格
+    3. 如果是普通对话，给出合适的回应
+    4. 如果提到了其他Staff，注意回复的针对性
+    5. 避免过于冗长的回复
+    6. 保持对话的连贯性
+  expected_output: >
+    返回一个友好且专业的回复文本
+  agent: bot_manager
 

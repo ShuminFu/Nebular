@@ -39,16 +39,12 @@ class BaseCrewProcess(ABC):
         self.client: Optional[OperaSignalRClient] = None
         self.is_running: bool = True
         self.crew: Optional[Crew] = None
-        self.intent_agent: Optional[Agent] = None
-        self.persona_agent: Optional[Agent] = None
         # 为每个进程创建一个带trace_id的logger
         self.log = get_logger_with_trace_id()
         self._staff_id_cache: Dict[str, Dict[UUID, UUID]] = {}  # opera_id -> {bot_id -> staff_id} 的缓存
 
     async def setup(self):
         """初始化设置"""
-        # self.intent_agent = create_intent_agent() # 无实际用途，占位
-        # self.persona_agent = create_persona_agent()  # 无实际用途，占位
 
         # 设置Crew
         self.crew = self._setup_crew()
@@ -141,7 +137,7 @@ class BaseCrewProcess(ABC):
                 return
 
             # 使用Crew生成回复
-            result = self.crew.kickoff(inputs={"text": dialogue_context.get("text", "")})
+            result = self.crew.chat_crew().kickoff(inputs={"text": dialogue_context.get("text", "")})
 
             # 获取回复文本
             reply_text = result.raw if hasattr(result, "raw") else str(result)
@@ -270,7 +266,7 @@ class CrewManager(BaseCrewProcess):
         self.task_queue.add_status_callback(self._handle_task_status_changed)
 
     def _setup_crew(self) -> Crew:
-        return ManagerCrew().crew()
+        return ManagerCrew()
 
     async def _handle_task_status_changed(self, task_id: UUID, new_status: TaskStatus):
         """处理任务状态变更"""
@@ -508,7 +504,7 @@ class CrewRunner(BaseCrewProcess):
         return await self._get_bot_staff_id(self.parent_bot_id, opera_id)
 
     def _setup_crew(self) -> Crew:
-        return RunnerCrew().crew()
+        return RunnerCrew()
 
     async def _handle_generation_task(self, task: BotTask):
         """处理代码生成类型的任务"""
@@ -530,7 +526,7 @@ class CrewRunner(BaseCrewProcess):
                 f"[LLM Input] Generation Task for file {task.parameters['file_path']}:\n{generation_inputs.model_dump_json()}"
             )
 
-            result = self.crew.kickoff(inputs=generation_inputs.model_dump())
+            result = self.crew.crew().kickoff(inputs=generation_inputs.model_dump())
             code_content = result.raw if hasattr(result, "raw") else str(result)
 
             # 记录LLM输出

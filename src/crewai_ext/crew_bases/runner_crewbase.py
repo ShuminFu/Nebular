@@ -43,4 +43,25 @@ class RunnerCrew:
     @crew
     def crew(self) -> Crew:
         """Creates code generation crew with validation workflow"""
-        return Crew(agents=self.agents, tasks=self.tasks, process=Process.sequential, verbose=True)
+        selected_agents = [
+            agent for agent in self.agents 
+            if agent.role == "code_generator"
+        ]
+        selected_tasks = [
+            task for task in self.tasks 
+            if task.name == "code_generation_task"
+        ]   
+        return Crew(agents=selected_agents, tasks=selected_tasks, process=Process.sequential, verbose=True)
+
+    @crew
+    def chat_crew(self) -> Crew:
+        """Creates chat crew"""
+        selected_agents = [
+            agent for agent in self.agents 
+            if "code_generator" in agent.role.strip().lower()
+        ]
+        selected_tasks = [
+            task for task in self.tasks 
+            if task.name == "chat_task"
+        ]
+        return Crew(agents=selected_agents, tasks=selected_tasks, process=Process.sequential, verbose=True)
