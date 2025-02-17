@@ -15,6 +15,7 @@ import os
 
 from pysignalr.client import SignalRClient
 from pysignalr.messages import CompletionMessage
+from pysignalr.transport.abstract import ConnectionState
 import aiohttp
 from src.core.logger_config import get_logger, get_logger_with_trace_id
 from src.crewai_ext.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
@@ -109,8 +110,9 @@ class OperaSignalRClient:
         }
 
         # 设置回调超时时间(秒)
-        self.callback_timeout = 3000
+        self.callback_timeout = 30
         self._connection_task = None
+        self._health_check_task = None
 
     async def _on_open(self) -> None:
         self.log.info(
@@ -135,6 +137,8 @@ class OperaSignalRClient:
         try:
             self.log.debug("开始建立连接...")
             self._connection_task = asyncio.create_task(self.client.run())
+            self._health_check_task = asyncio.create_task(self.check_health())
+
             await asyncio.sleep(0.1)  # 给予连接初始化的时间
         except Exception as e:
             self.log.exception(f"连接失败: {str(e)}")
@@ -377,11 +381,24 @@ class OperaSignalRClient:
 
     # 添加心跳检测
     async def check_health(self):
+        """健康检查，包含传输层状态验证"""
         while True:
+            # 新增传输层状态检查
+            transport = self.client._transport
+            transport_active = transport._state == ConnectionState.connected if transport else False
+
+            # 添加传输层状态与连接状态的同步判断
+            if self._connected != transport_active:
+                self.log.warning(f"状态不一致: 应用层连接状态={self._connected}, 传输层状态={transport._state.name}")
+                await self._on_close()
+
             if not self.is_connected():
                 self.log.warning("连接已断开，尝试重连")
-                await self.connect_with_retry()
-            await asyncio.sleep(30)  # 每30秒检查一次
+                try:
+                    await self.connect_with_retry()
+                except Exception as e:
+                    self.log.error(f"重连失败: {e}")
+            await asyncio.sleep(30)
 
     # 添加获取回调统计信息的方法
     def get_callback_stats(self) -> Dict[str, Dict]:

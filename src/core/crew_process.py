@@ -79,21 +79,29 @@ class BaseCrewProcess(ABC):
         try:
             await self.setup()
             while self.is_running:
-                # 检查连接状态
-                if self.client and not self.client._connected:
-                    self.log.warning("检测到连接断开，尝试重新连接")
-                    await self.setup()
-                    continue
-
-                # 处理任务队列中的任务
-                task = await self.task_queue.get_next_task()
-                if task:
-                    await self._process_task(task)
-                await asyncio.sleep(1)
+                # 并行处理连接检查和任务处理
+                await asyncio.gather(
+                    self._check_connection(),
+                    self._process_pending_tasks(),
+                )
         except Exception as e:
             self.log.exception(f"Crew运行出错: {e}")
         finally:
             await self.stop()
+
+    async def _check_connection(self):
+        """非阻塞的连接状态检查"""
+        if self.client and not self.client.is_connected():
+            self.log.warning("连接断开，尝试重连...")
+            await self.setup()
+        await asyncio.sleep(1)  # 控制检查频率
+
+    async def _process_pending_tasks(self):
+        """处理待办任务"""
+        while task := await self.task_queue.get_next_task():
+            asyncio.create_task(  
+                self._process_task(task)
+            )
 
     async def _handle_hello(self):
         """处理hello消息"""
@@ -150,7 +158,7 @@ class BaseCrewProcess(ABC):
             )
 
             # 使用Crew生成回复
-            result = self.chat_crew.crew().kickoff(inputs={"text": full_context})
+            result = await self.chat_crew.crew().kickoff_async(inputs={"text": full_context})
 
             # 获取回复文本
             reply_text = result.raw if hasattr(result, "raw") else str(result)
@@ -533,7 +541,7 @@ class CrewRunner(BaseCrewProcess):
                 f"[LLM Input] Generation Task for file {task.parameters['file_path']}:\n{generation_inputs.model_dump_json()}"
             )
 
-            result = self.crew.crew().kickoff(inputs=generation_inputs.model_dump())
+            result = await self.chat_crew.crew().kickoff_async(inputs=generation_inputs.model_dump())
             code_content = result.raw if hasattr(result, "raw") else str(result)
 
             # 记录LLM输出
