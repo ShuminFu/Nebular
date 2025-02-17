@@ -112,8 +112,6 @@ class BaseCrewProcess(ABC):
         except Exception as e:
             self.log.exception(f"处理任务出错: {e}")
             await self.task_queue.update_task_status(task.id, TaskStatus.FAILED)
-        else:
-            await self.task_queue.update_task_status(task.id, TaskStatus.COMPLETED)
 
     async def _handle_message(self, message: MessageReceivedArgs):
         """处理接收到的消息"""
@@ -131,13 +129,28 @@ class BaseCrewProcess(ABC):
         """处理对话类型的任务"""
         try:
             # 获取对话内容和参数
-            dialogue_context = task.parameters.get("dialogue_context", {})
-            if not dialogue_context:
+            input_text = task.parameters.get("text", "")
+
+            if not input_text:
                 self.log.error("对话任务缺少dialogue_context参数")
                 return
 
+            context = task.parameters.get("context", {})  # 直接获取context参数
+
+            # 组合完整的对话上下文
+            full_context = json.dumps(
+                {
+                    "text": input_text,
+                    "stage_index": context.get("stage_index"),
+                    "conversation_state": context.get("conversation_state", {}),
+                    "flow": context.get("flow", {}),
+                    "code_context": context.get("code_context", {}),
+                },
+                ensure_ascii=False,
+            )
+
             # 使用Crew生成回复
-            result = self.chat_crew.crew().kickoff(inputs={"text": dialogue_context.get("text", "")})
+            result = self.chat_crew.crew().kickoff(inputs={"text": full_context})
 
             # 获取回复文本
             reply_text = result.raw if hasattr(result, "raw") else str(result)
@@ -149,8 +162,7 @@ class BaseCrewProcess(ABC):
                 is_narratage=False,
                 is_whisper=False,
                 text=reply_text,
-                tags=dialogue_context.get("tags", ""),
-                mentioned_staff_ids=[str(task.source_staff_id)] if task.source_staff_id else None,
+                # mentioned_staff_ids=[str(task.source_staff_id)] if task.source_staff_id else None,
             )
 
             # 发送对话
@@ -172,16 +184,9 @@ class BaseCrewProcess(ABC):
                 "reply": reply_text
             }
 
-            # 发送任务完成回调
-            await self._handle_task_completion(task, json.dumps(task.result))
-
         except Exception as e:
             self.log.error(f"处理对话任务失败: {str(e)}")
             task.error_message = str(e)
-            await self.task_queue.update_task_status(task.id, TaskStatus.FAILED)
-            # 发送错误回调
-            error_result = {"status": "failed", "error": str(e)}
-            await self._handle_task_completion(task, json.dumps(error_result))
 
     @abstractmethod
     async def _handle_generation_task(self, task: BotTask):
@@ -288,7 +293,7 @@ class CrewManager(BaseCrewProcess):
     async def _handle_conversation_task(self, task: BotTask):
         """处理对话类型的任务"""
         # 实现CrewManager特定的对话任务处理逻辑
-        pass
+        await super()._handle_conversation_task(task)
 
     async def _handle_generation_task(self, task: BotTask):
         """处理动作类型的任务"""
@@ -567,10 +572,6 @@ class CrewRunner(BaseCrewProcess):
         except Exception as e:
             self.log.error(f"代码生成任务处理失败: {str(e)}")
             task.error_message = str(e)
-            await self.task_queue.update_task_status(task.id, TaskStatus.FAILED)
-            # 发送错误回调
-            error_result = {"status": "failed", "error": str(e)}
-            await self._handle_task_completion(task, json.dumps(error_result))
 
     async def _handle_analysis_task(self, task: BotTask):
         """处理分析类型的任务"""
@@ -640,7 +641,7 @@ class CrewRunner(BaseCrewProcess):
 
             # 检查消息是否是非提及对话或者提及了当前Bot
             mentioned_staff_ids = message.mentioned_staff_ids or []
-            is_mentioned = any(str(staff_id) == str(message.receiver_staff_id) for staff_id in mentioned_staff_ids)
+            is_mentioned = any(str(staff_id) == str(message.receiver_staff_ids) for staff_id in mentioned_staff_ids)
 
             if not (len(mentioned_staff_ids) == 0 or is_mentioned):
                 self.log.debug("消息既不是非提及对话也没有提及当前Bot，跳过消息处理")

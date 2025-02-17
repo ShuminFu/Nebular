@@ -1,6 +1,6 @@
 index_task:
   description: >
-    不使用工具，分析以下对话的上下文关联，关注代码生成相关的上下文：
+    不使用任何工具，分析以下对话的上下文关联，关注代码生成相关的上下文：
 
     当前对话：
     - Opera ID: {opera_id}
@@ -26,7 +26,7 @@ index_task:
 
 context_structure_task:
   description: |
-    使用对话工具的get action来分析相关对话并生成结构化的上下文数据：
+    使用对话工具的get action来分析相关对话并生成结构化的上下文数据（非必要不使用get all来获取所有对话）：
 
     当前对话：
     - Opera ID: {opera_id}
