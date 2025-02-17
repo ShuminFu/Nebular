@@ -43,7 +43,7 @@ class TestMultiResourceGeneration(AsyncTestCase):
         self.mock_get_llm.side_effect = get_llm_with_cache
 
         # 创建测试用的Bot IDs
-        self.cm_bot_id = UUID('4a4857d6-4664-452e-a37c-80a628ca28a0')  # CM的Bot ID
+        self.cm_bot_id = UUID("4a2d346e-e045-4756-b7a9-a1f825055ee9")  # CM的Bot ID
         self.test_opera_id = UUID('96028f82-9f76-4372-976c-f0c5a054db79')  # 测试用Opera ID
         self.user_staff_id = UUID('c2a71833-4403-4d08-8ef6-23e6327832b2')  # 用户的Staff ID
         self.cm_staff_id = UUID('ab01d4f7-bbf1-44aa-a55b-cbc7d62fbfbc')  # CM的Staff ID
@@ -80,7 +80,7 @@ class TestMultiResourceGeneration(AsyncTestCase):
         消息会通过对话池的分析器添加intent_analysis。
         """
         return MessageReceivedArgs(
-            index=1,
+            index=343,
             text=text,
             tags="",  # 使用基础标签，让分析器来识别具体意图
             sender_staff_id=self.user_staff_id,
@@ -90,7 +90,7 @@ class TestMultiResourceGeneration(AsyncTestCase):
             mentioned_staff_ids=None,
             receiver_staff_ids=[self.cm_staff_id, self.user_staff_id],
             time=self.test_time,
-            stage_index=1
+            stage_index=4,
         )
 
     def test_multiple_file_generation_request(self):
@@ -259,7 +259,7 @@ class TestMultiResourceGeneration(AsyncTestCase):
             'verbose': True
         }
 
-        crew_runner = CrewRunner(config=test_config, bot_id=cr_bot_id)
+        crew_runner = CrewRunner(bot_id=cr_bot_id, parent_bot_id=self.cm_bot_id)
 
         # 初始化CrewRunner
         original_is_running = crew_runner.is_running

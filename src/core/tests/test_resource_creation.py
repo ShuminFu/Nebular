@@ -624,7 +624,7 @@ class TestResourceGeneration(AsyncTestCase):
         }
 
         # 创建CrewRunner实例
-        self.crew_runner = CrewRunner(config=self.test_config, bot_id=self.cr_bot_id)
+        self.crew_runner = CrewRunner(bot_id=self.cr_bot_id)
 
         # 设置通用的测试时间
         self.test_time = datetime.now(timezone.utc).isoformat()

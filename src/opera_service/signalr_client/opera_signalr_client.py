@@ -11,6 +11,7 @@ import asyncio
 from datetime import datetime
 from dataclasses import dataclass
 import functools
+import os
 
 from pysignalr.client import SignalRClient
 from pysignalr.messages import CompletionMessage
@@ -21,19 +22,24 @@ from src.crewai_ext.tools.opera_api.staff_invitation_api_tool import StaffInvita
 # 获取logger实例
 logger = get_logger(__name__, log_file="logs/opera_signalr.log")
 
-# Monkey Patch: 修改 aiohttp.ClientSession 的默认行为
+# # Monkey Patch: 根据环境变量决定是否修改 aiohttp.ClientSession 的默认行为
 original_init = aiohttp.ClientSession.__init__
 
 @functools.wraps(original_init)
 def patched_init(self, *args, **kwargs):
     """
     对 aiohttp.ClientSession 的初始化方法进行补丁,
-    强制设置 trust_env=True 以支持从环境变量读取代理设置
+    当环境变量 ENABLE_AIOHTTP_PROXY=1 时强制设置 trust_env=True
+    以支持从环境变量读取代理设置
     """
-    kwargs['trust_env'] = True
+    if os.getenv("ENABLE_AIOHTTP_PROXY", "0").lower() in ("1", "true", "yes"):
+        kwargs["trust_env"] = True
     return original_init(self, *args, **kwargs)
 
-aiohttp.ClientSession.__init__ = patched_init
+# 根据环境变量决定是否应用补丁
+if os.getenv("ENABLE_AIOHTTP_PROXY", "0").lower() in ("1", "true", "yes"):
+    aiohttp.ClientSession.__init__ = patched_init
+    logger.info("已启用 aiohttp 代理支持 (由环境变量 ENABLE_AIOHTTP_PROXY 控制)")
 
 @dataclass
 class OperaCreatedArgs:
@@ -143,7 +149,7 @@ class OperaSignalRClient:
                 try:
                     await self._connection_task
                 except asyncio.CancelledError:
-                    pass
+                    self.log.debug("连接任务已正常取消")
             self._connection_task = None
 
         except Exception as e:

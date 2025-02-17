@@ -30,7 +30,7 @@ class TestTaskDispatch(AsyncTestCase):
         self.crew_manager.intent_processor = IntentMind(self.crew_manager.task_queue)
 
         # 创建CrewRunner实例
-        self.crew_runner = CrewRunner({}, self.cr_bot_id)
+        self.crew_runner = CrewRunner(bot_id=self.cr_bot_id)
         # 为CR创建任务队列
         self.crew_runner.task_queue = BotTaskQueue(bot_id=self.cr_bot_id)
 
