@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import asyncio
 import multiprocessing
 from abc import ABC, abstractmethod
-from crewai import Agent, Task, Crew
+from crewai import Crew
 from src.opera_service.api.models import BotForUpdate, DialogueForCreation
 from src.core.logger_config import get_logger_with_trace_id
 from src.core.parser.api_response_parser import ApiResponseParser
@@ -15,8 +15,8 @@ from src.core.intent_mind import IntentMind
 from src.core.task_utils import BotTaskQueue, TaskType, TaskStatus, BotTask, PersistentTaskState, TaskPriority
 from src.core.code_monkey import CodeMonkey
 from src.core.topic.topic_tracker import TopicTracker
-from src.crewai_ext.crew_bases.runner_crewbase import RunnerCrew, GenerationInputs
-from src.crewai_ext.crew_bases.manager_crewbase import ManagerCrew
+from src.crewai_ext.crew_bases.runner_crewbase import RunnerCodeGenerationCrew, GenerationInputs, RunnerChatCrew
+from src.crewai_ext.crew_bases.manager_crewbase import ManagerCrew, ManagerChatCrew
 import json
 
 
@@ -137,7 +137,7 @@ class BaseCrewProcess(ABC):
                 return
 
             # 使用Crew生成回复
-            result = self.crew.chat_crew().kickoff(inputs={"text": dialogue_context.get("text", "")})
+            result = self.chat_crew.crew().kickoff(inputs={"text": dialogue_context.get("text", "")})
 
             # 获取回复文本
             reply_text = result.raw if hasattr(result, "raw") else str(result)
@@ -266,6 +266,7 @@ class CrewManager(BaseCrewProcess):
         self.task_queue.add_status_callback(self._handle_task_status_changed)
 
     def _setup_crew(self) -> Crew:
+        self.chat_crew = ManagerChatCrew()
         return ManagerCrew()
 
     async def _handle_task_status_changed(self, task_id: UUID, new_status: TaskStatus):
@@ -504,7 +505,8 @@ class CrewRunner(BaseCrewProcess):
         return await self._get_bot_staff_id(self.parent_bot_id, opera_id)
 
     def _setup_crew(self) -> Crew:
-        return RunnerCrew()
+        self.chat_crew = RunnerChatCrew()
+        return RunnerCodeGenerationCrew()
 
     async def _handle_generation_task(self, task: BotTask):
         """处理代码生成类型的任务"""

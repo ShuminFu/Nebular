@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, StrictStr
 from src.crewai_ext.config.llm_setup import llm
 from typing import List, Optional
 
+
 class ResourceItem(BaseModel):
     """资源项数据结构"""
 
@@ -11,6 +12,7 @@ class ResourceItem(BaseModel):
     type: StrictStr = Field(..., description="资源类型")
     mime_type: StrictStr = Field(..., description="MIME类型")
     description: StrictStr = Field(..., description="资源描述")
+
 
 class GenerationInputs(BaseModel):
     """代码生成任务的输入参数验证模型"""
@@ -26,7 +28,7 @@ class GenerationInputs(BaseModel):
 
 
 @CrewBase
-class RunnerCrew:
+class RunnerCodeGenerationCrew:
     agents_config = "../config/crew_runner/agents.yaml"
     tasks_config = "../config/crew_runner/tasks.yaml"
 
@@ -43,25 +45,25 @@ class RunnerCrew:
     @crew
     def crew(self) -> Crew:
         """Creates code generation crew with validation workflow"""
-        selected_agents = [
-            agent for agent in self.agents 
-            if agent.role == "code_generator"
-        ]
-        selected_tasks = [
-            task for task in self.tasks 
-            if task.name == "code_generation_task"
-        ]   
-        return Crew(agents=selected_agents, tasks=selected_tasks, process=Process.sequential, verbose=True)
 
-    @crew
-    def chat_crew(self) -> Crew:
+        return Crew(agents=self.agents, tasks=self.tasks, process=Process.sequential, verbose=True)
+
+
+@CrewBase
+class RunnerChatCrew:
+    agents_config = "../config/crew_runner/agents.yaml"
+    tasks_config = "../config/crew_runner/tasks.yaml"
+
+    @agent
+    def code_generator(self) -> Agent:
+        """Create a code generation agent with validation capabilities"""
+        return Agent(config=self.agents_config["code_generator"], llm=llm, verbose=True)
+
+    @task
+    def chat_task(self) -> Task:
+        """Create a chat task"""
+        return Task(config=self.tasks_config["chat_task"])
+
+    def crew(self) -> Crew:
         """Creates chat crew"""
-        selected_agents = [
-            agent for agent in self.agents 
-            if "code_generator" in agent.role.strip().lower()
-        ]
-        selected_tasks = [
-            task for task in self.tasks 
-            if task.name == "chat_task"
-        ]
-        return Crew(agents=selected_agents, tasks=selected_tasks, process=Process.sequential, verbose=True)
+        return Crew(agents=self.agents, tasks=self.tasks, process=Process.sequential, verbose=True)
