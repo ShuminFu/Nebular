@@ -73,6 +73,7 @@ class OperaSignalRClient:
         self.bot_id = UUID(bot_id) if bot_id else None
         self.snitch_mode: bool = False
         self._connected = False
+        self._running = True  # 添加运行状态标志
         self.staff_invitation_tool = StaffInvitationTool()  # 初始化StaffInvitationTool
         self.roles: List[str] = []  # 添加roles属性
         # 为每个实例创建一个带trace_id的logger
@@ -145,10 +146,13 @@ class OperaSignalRClient:
             raise
 
     async def disconnect(self):
-        """安全地断开连接"""
+        """安全地断开连接并清理所有后台任务"""
         try:
+            # 首先设置运行标志为False，让健康检查任务自然退出
+            self._running = False
+
+            # 取消连接任务
             if self._connection_task and not self._connection_task.done():
-                # 只在任务还在运行时才取消
                 self._connection_task.cancel()
                 try:
                     await self._connection_task
@@ -156,8 +160,26 @@ class OperaSignalRClient:
                     self.log.debug("连接任务已正常取消")
             self._connection_task = None
 
+            # 等待并取消健康检查任务
+            if self._health_check_task and not self._health_check_task.done():
+                try:
+                    await asyncio.wait_for(self._health_check_task, timeout=1.0)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    self._health_check_task.cancel()
+                    try:
+                        await self._health_check_task
+                    except asyncio.CancelledError:
+                        self.log.debug("健康检查任务已正常取消")
+            self._health_check_task = None
+
+            # 确保客户端断开连接
+            if self.client:
+                await self.client.stop()
+
         except Exception as e:
             self.log.exception(f"断开连接时出错: {e}")
+        finally:
+            self._connected = False
 
     async def set_bot_id(self, bot_id: UUID):
         """设置Bot ID"""
@@ -389,7 +411,7 @@ class OperaSignalRClient:
     # 添加心跳检测
     async def check_health(self):
         """健康检查，包含传输层状态验证"""
-        while True:
+        while self._running:  # 使用_running标志控制循环
             try:
                 # 获取传输层状态（增加空值保护）
                 transport_state = ConnectionState.disconnected
@@ -421,6 +443,9 @@ class OperaSignalRClient:
                     self._connected = True  # 确保状态同步
                     await asyncio.sleep(15)
 
+            except asyncio.CancelledError:
+                self.log.info("健康检查任务被取消")
+                break  # 优雅地退出循环
             except Exception as e:
                 self.log.error(f"健康检查异常: {str(e)}")
                 self._connected = False  # 异常时强制状态更新

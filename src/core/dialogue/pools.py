@@ -40,8 +40,6 @@ class DialoguePool(CamelBaseModel):
     def __init__(self, **data):
         """初始化对话池，创建对话分析器实例"""
         super().__init__(**data)
-        from src.core.dialogue.analyzers import DialogueAnalyzer  # 延迟导入，避免循环依赖
-        self._analyzer = DialogueAnalyzer()
 
     @classmethod
     async def restore_from_api(cls, **kwargs) -> "DialoguePool":

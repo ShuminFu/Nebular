@@ -433,37 +433,46 @@ class TestMultiResourceGeneration(AsyncTestCase):
         self.run_async(self._tearDown())
 
     async def _tearDown(self):
-        # 清理缓存
-        self.crew_manager._staff_id_cache.clear()
-        # 清理任务队列
-        self.crew_manager.task_queue.tasks.clear()
-        # 清理对话池
-        if hasattr(self.crew_manager, 'intent_processor'):
-            self.crew_manager.intent_processor.dialogue_pool.dialogues.clear()
-
-        # 清理测试过程中创建的资源
+        """异步清理测试环境"""
         try:
-            # 获取所有资源
-            resources = await asyncio.to_thread(
-                _SHARED_RESOURCE_TOOL.run,
-                action="get_filtered",
-                opera_id=str(self.test_opera_id),
-                data={
-                    "name_like": "src/"  # 匹配测试中创建的资源
-                },
-            )
+            # 确保CrewManager正确断开连接
+            if hasattr(self.crew_manager, "client") and self.crew_manager.client:
+                await self.crew_manager.client.disconnect()
 
-            # 删除资源
-            # if resources:
-            #     for resource in resources:
-            #         await asyncio.to_thread(
-            #             _SHARED_RESOURCE_TOOL.run,
-            #             action="delete",
-            #             opera_id=str(self.test_opera_id),
-            #             resource_id=resource.id
-            #         )
+            # 清理缓存
+            self.crew_manager._staff_id_cache.clear()
+            # 清理任务队列
+            self.crew_manager.task_queue.tasks.clear()
+            # 清理对话池
+            if hasattr(self.crew_manager, "intent_processor"):
+                self.crew_manager.intent_processor.dialogue_pool.dialogues.clear()
+
+            # 清理测试过程中创建的资源
+            try:
+                # 获取所有资源
+                resources = await asyncio.to_thread(
+                    _SHARED_RESOURCE_TOOL.run,
+                    action="get_filtered",
+                    opera_id=str(self.test_opera_id),
+                    data={
+                        "name_like": "src/"  # 匹配测试中创建的资源
+                    },
+                )
+                # 删除资源
+                # if resources:
+                #     for resource in resources:
+                #         await asyncio.to_thread(
+                #             _SHARED_RESOURCE_TOOL.run,
+                #             action="delete",
+                #             opera_id=str(self.test_opera_id),
+                #             resource_id=resource.id
+                #         )
+            except Exception as e:
+                self.log.error(f"清理资源时出错: {e}")
         except Exception as e:
-            print(f"清理资源时出错: {e}")
+            print(f"清理测试环境时出错: {e}")
+            # 在测试清理阶段的错误不应该影响测试结果
+            pass
 
 
 if __name__ == '__main__':
