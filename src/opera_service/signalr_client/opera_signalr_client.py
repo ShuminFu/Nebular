@@ -369,6 +369,13 @@ class OperaSignalRClient:
 
     # 在OperaSignalRClient类中添加重试机制
     async def connect_with_retry(self, max_retries=3, retry_delay=5):
+        if self._connection_task and not self._connection_task.done():
+            self._connection_task.cancel()
+            try:
+                await self._connection_task
+            except asyncio.CancelledError:
+                pass
+
         for attempt in range(max_retries):
             try:
                 await self.connect()
@@ -383,22 +390,38 @@ class OperaSignalRClient:
     async def check_health(self):
         """健康检查，包含传输层状态验证"""
         while True:
-            # 新增传输层状态检查
-            transport = self.client._transport
-            transport_active = transport._state == ConnectionState.connected if transport else False
+            try:
+                # 获取传输层状态（增加空值保护）
+                transport_state = ConnectionState.disconnected
+                if self.client and self.client._transport:
+                    transport_state = self.client._transport._state
 
-            # 添加传输层状态与连接状态的同步判断
-            if self._connected != transport_active:
-                self.log.warning(f"状态不一致: 应用层连接状态={self._connected}, 传输层状态={transport._state.name}")
-                await self._on_close()
+                # 状态检查逻辑
+                if transport_state == ConnectionState.disconnected:
+                    self.log.warning("检测到传输层断开，触发重连流程")
+                    await self._on_close()  # 确保状态同步
 
-            if not self.is_connected():
-                self.log.warning("连接已断开，尝试重连")
-                try:
-                    await self.connect_with_retry()
-                except Exception as e:
-                    self.log.error(f"重连失败: {e}")
-            await asyncio.sleep(30)
+                    # 带退避策略的重连
+                    retry_delay = 5
+                    for attempt in range(3):
+                        try:
+                            await self.connect_with_retry()
+                            break
+                        except Exception as e:
+                            self.log.error(f"重连失败 (尝试 {attempt + 1}/3): {str(e)}")
+                            await asyncio.sleep(retry_delay)
+                            retry_delay *= 2  # 指数退避
+                    else:
+                        self.log.error("达到最大重试次数，停止重连")
+
+                    await asyncio.sleep(30)  # 失败后延长检查间隔
+                else:
+                    # 正常状态下的心跳间隔
+                    await asyncio.sleep(15)
+
+            except Exception as e:
+                self.log.error(f"健康检查异常: {str(e)}")
+                await asyncio.sleep(30)
 
     # 添加获取回调统计信息的方法
     def get_callback_stats(self) -> Dict[str, Dict]:
