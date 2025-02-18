@@ -517,7 +517,7 @@ class IntentMind:
             return
 
         # 分析对话 - 使用DialoguePool的分析器
-        self.dialogue_pool.analyze_dialogues()
+        await self.dialogue_pool.analyze_dialogues()
 
         # 从对话池中获取已分析的对话来创建任务
         analyzed_dialogue = self.dialogue_pool.get_dialogue(dialogue_index)

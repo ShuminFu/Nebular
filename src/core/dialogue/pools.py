@@ -4,6 +4,7 @@ from collections import Counter
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional, Any
 from uuid import UUID
+import asyncio
 
 from pydantic import Field
 
@@ -12,7 +13,6 @@ from src.core.parser.api_response_parser import ApiResponseParser
 from src.core.dialogue.enums import ProcessingStatus
 from src.core.dialogue.models import ProcessingDialogue, PersistentDialogueState
 from src.crewai_ext.tools.opera_api.staff_api_tool import _SHARED_STAFF_TOOL
-
 
 class DialoguePool(CamelBaseModel):
     """对话池模型
@@ -128,7 +128,7 @@ class DialoguePool(CamelBaseModel):
                 await self._persist_to_api()
                 break
 
-    def analyze_dialogues(self, target_opera_id: Optional[UUID] = None) -> None:
+    async def analyze_dialogues(self, target_opera_id: Optional[UUID] = None) -> None:
         """分析对话关联性并附加上下文
 
         使用CrewAI实现的对话分析器来：
@@ -140,6 +140,7 @@ class DialoguePool(CamelBaseModel):
             target_opera_id: 可选的目标Opera ID。如果指定，只分析该Opera的对话。
         """
         now = datetime.now(timezone(timedelta(hours=8)))
+        from src.core.dialogue.analysis_flow import AnalysisFlow
 
         # 按Opera分组处理对话
         opera_groups: Dict[UUID, List[ProcessingDialogue]] = {}
@@ -162,6 +163,7 @@ class DialoguePool(CamelBaseModel):
                 operas_to_analyze.add(opera_id)
 
         # 对需要分析的Opera进行处理
+        analysis_tasks = []
         for opera_id in operas_to_analyze:
             dialogues = opera_groups[opera_id]
 
@@ -170,47 +172,38 @@ class DialoguePool(CamelBaseModel):
             temp_pool.dialogues = dialogues
 
             for dialogue in dialogues:
-                # 1. 意图分析
+                # 使用AnalysisFlow进行分析
                 if not dialogue.intent_analysis:
-                    dialogue.intent_analysis = self._analyzer.analyze_intent(dialogue)
+                    flow = AnalysisFlow(dialogue=dialogue, temp_pool=temp_pool)
+                    # 创建异步任务并保存相关对话引用
+                    task = asyncio.create_task(
+                        self._process_dialogue_analysis(flow, dialogue.opera_id),
+                        name=f"analysis_{opera_id}_{dialogue.dialogue_index}",
+                    )
+                    analysis_tasks.append(task)
 
-                # 2. 上下文分析
-                related_indices = self._analyzer.analyze_context(dialogue, temp_pool)
+        # 等待所有分析任务完成
+        if analysis_tasks:
+            await asyncio.gather(*analysis_tasks, return_exceptions=True)
 
-                # 3. 更新对话上下文
-                # 获取当前对话和相关对话中的最大stage_index
-                current_stage_index = dialogue.context.stage_index if dialogue.context else None
+        # 更新分析状态
+        self.opera_analysis_state[target_opera_id] = {"last_analyzed_at": now, "needs_analysis": False}
 
-                # 只有当current_stage_index为None时，才从对话池中获取最大值
-                if current_stage_index is None:
-                    stage_indices = [
-                        d.context.stage_index
-                        for d in temp_pool.dialogues
-                        if d.context
-                        and d.context.stage_index is not None
-                    ]
+    async def _process_dialogue_analysis(self, flow, opera_id: UUID) -> None:
+        """处理单个对话分析任务"""
 
-                    # 从对话池中获取最大的stage_index
-                    max_stage_index = max(stage_indices, default=None)
-                    dialogue.context.stage_index = max_stage_index
-                else:
-                    max_stage_index = current_stage_index
+        try:
+            result = await flow.kickoff_async()
+            related_indices = flow.state.related_indices
 
-                # 更新intent相关信息
-                dialogue.context.conversation_state.update({
-                    "intent": dialogue.intent_analysis.intent,
-                    "confidence": dialogue.intent_analysis.confidence,
-                    "analyzed_at": now.isoformat(),
-                })
+            # 更新相关对话热度（在原始对话池中操作）
+            for related_index in related_indices:
+                related_dialogue = self.get_dialogue(related_index)
+                if related_dialogue and related_dialogue.opera_id == opera_id:
+                    related_dialogue.update_heat(0.3)
 
-                # 4. 更新相关对话的热度
-                for related_index in related_indices:
-                    related_dialogue = self.get_dialogue(related_index)
-                    if related_dialogue and related_dialogue.opera_id == opera_id:
-                        related_dialogue.update_heat(0.3)
-
-            # 更新分析状态
-            self.opera_analysis_state[opera_id] = {"last_analyzed_at": now, "needs_analysis": False}
+        except Exception as e:
+            print(f"分析对话 {flow.dialogue.dialogue_index} 时出错: {str(e)}")
 
     def get_dialogue(self, dialogue_index: int) -> Optional[ProcessingDialogue]:
         """根据对话索引获取ProcessingDialogue"""

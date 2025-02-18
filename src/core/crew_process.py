@@ -42,12 +42,10 @@ class BaseCrewProcess(ABC):
         # 为每个进程创建一个带trace_id的logger
         self.log = get_logger_with_trace_id()
         self._staff_id_cache: Dict[str, Dict[UUID, UUID]] = {}  # opera_id -> {bot_id -> staff_id} 的缓存
+        self.crew = self._setup_crew()
 
     async def setup(self):
         """初始化设置"""
-
-        # 设置Crew
-        self.crew = self._setup_crew()
         self.task_queue = BotTaskQueue(bot_id=self.bot_id)
         self.intent_processor = IntentMind(self.task_queue)
 
