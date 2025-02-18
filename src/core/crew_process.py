@@ -541,7 +541,7 @@ class CrewRunner(BaseCrewProcess):
                 f"[LLM Input] Generation Task for file {task.parameters['file_path']}:\n{generation_inputs.model_dump_json()}"
             )
 
-            result = await self.chat_crew.crew().kickoff_async(inputs=generation_inputs.model_dump())
+            result = await self.crew.crew().kickoff_async(inputs=generation_inputs.model_dump())
             code_content = result.raw if hasattr(result, "raw") else str(result)
 
             # 记录LLM输出
@@ -646,6 +646,9 @@ class CrewRunner(BaseCrewProcess):
             if str(message.sender_staff_id) != str(parent_staff_id):
                 self.log.debug(f"消息发送者 {message.sender_staff_id} 不是父Bot的staff {parent_staff_id}，跳过消息处理")
                 return
+            elif not message.tags:
+                self.log.debug("消息没有包含任何tag，跳过处理")
+                return
 
             # 检查消息是否是非提及对话或者提及了当前Bot
             mentioned_staff_ids = message.mentioned_staff_ids or []
@@ -654,6 +657,7 @@ class CrewRunner(BaseCrewProcess):
             if not (len(mentioned_staff_ids) == 0 or is_mentioned):
                 self.log.debug("消息既不是非提及对话也没有提及当前Bot，跳过消息处理")
                 return
+
 
             # 记录将要处理的消息
             self.log.info(f"处理来自父Bot staff的消息: {message.text}")

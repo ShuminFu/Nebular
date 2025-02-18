@@ -413,14 +413,17 @@ class OperaSignalRClient:
                             retry_delay *= 2  # 指数退避
                     else:
                         self.log.error("达到最大重试次数，停止重连")
+                        self._connected = False  # 确保状态同步
 
-                    await asyncio.sleep(30)  # 失败后延长检查间隔
+                    await asyncio.sleep(30)
                 else:
                     # 正常状态下的心跳间隔
+                    self._connected = True  # 确保状态同步
                     await asyncio.sleep(15)
 
             except Exception as e:
                 self.log.error(f"健康检查异常: {str(e)}")
+                self._connected = False  # 异常时强制状态更新
                 await asyncio.sleep(30)
 
     # 添加获取回调统计信息的方法
@@ -471,4 +474,7 @@ class OperaSignalRClient:
 
     def is_connected(self) -> bool:
         """检查是否已连接"""
-        return self._connected
+        # 增加传输层状态验证
+        if hasattr(self.client, "_transport") and self.client._transport:
+            return self._connected and self.client._transport._state == ConnectionState.connected
+        return False  # 无transport实例时直接返回False

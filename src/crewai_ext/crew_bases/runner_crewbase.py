@@ -64,6 +64,7 @@ class RunnerChatCrew:
         """Create a chat task"""
         return Task(config=self.tasks_config["chat_task"])
 
+    @crew
     def crew(self) -> Crew:
         """Creates chat crew"""
         return Crew(agents=self.agents, tasks=self.tasks, process=Process.sequential, verbose=True)
