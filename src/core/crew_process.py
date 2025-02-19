@@ -122,8 +122,27 @@ class BaseCrewProcess(ABC):
     async def _handle_message(self, message: MessageReceivedArgs):
         """处理接收到的消息"""
         self.log.info(f"收到消息: {message.text}")
-        # 使用意图处理器处理消息，直接生成任务到共享的任务队列中
-        await self.intent_processor.process_message(message)
+        try:
+            # 获取消息的opera_id
+            opera_id = message.opera_id
+            if not opera_id:
+                self.log.error("消息缺少opera_id")
+                return
+
+            # 获取当前Bot的staff_id
+            current_staff_id = await self._get_bot_staff_id(self.bot_id, opera_id)
+            if not current_staff_id:
+                self.log.error("无法获取当前Bot的staff_id")
+                return
+
+            # 检查是否是自己的消息
+            if str(message.sender_staff_id) == str(current_staff_id):
+                self.log.debug("忽略自己发送的消息，避免循环")
+                return
+
+            asyncio.create_task(self.intent_processor.process_message(message))
+        except Exception as e:
+            self.log.error(f"处理消息时发生错误: {str(e)}")
 
     @abstractmethod
     def _setup_crew(self) -> Crew:
@@ -656,12 +675,7 @@ class CrewRunner(BaseCrewProcess):
                 self.log.debug("消息既不是非提及对话也没有提及当前Bot，跳过消息处理")
                 return
 
-
-            # 记录将要处理的消息
-            self.log.info(f"处理来自父Bot staff的消息: {message.text}")
-
-            # 使用意图处理器处理消息
-            await self.intent_processor.process_message(message)
-
+            # 消息验证通过，使用与基类相同的异步处理方式
+            super()._handle_message(message)
         except Exception as e:
             self.log.error(f"处理消息时发生错误: {str(e)}")

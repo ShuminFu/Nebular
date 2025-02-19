@@ -82,10 +82,10 @@ class DialoguePool(CamelBaseModel):
         4. 强制执行大小限制
         5. 持久化更新后的状态
         """
-        self._clean_expired_dialogues()  # 先清理过期对话
-        self._decay_heat()         # 再进行热度衰减
-        self._clean_cold_dialogues()     # 清理低热度对话
-        self._enforce_size_limit()       # 最后控制池大小
+        # self._clean_expired_dialogues()  # 先清理过期对话
+        self._decay_heat()  # 再进行热度衰减
+        # self._clean_cold_dialogues()     # 清理低热度对话
+        # self._enforce_size_limit()       # 最后控制池大小
         # 维护完成后持久化
         await self._persist_to_api()
 
@@ -182,7 +182,7 @@ class DialoguePool(CamelBaseModel):
 
         # 等待所有分析任务完成
         if analysis_tasks:
-            await asyncio.gather(*analysis_tasks, return_exceptions=True)
+            await asyncio.gather(*analysis_tasks)
 
         # 更新分析状态
         self.opera_analysis_state[target_opera_id] = {"last_analyzed_at": now, "needs_analysis": False}

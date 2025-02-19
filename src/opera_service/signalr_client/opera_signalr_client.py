@@ -111,7 +111,7 @@ class OperaSignalRClient:
         }
 
         # 设置回调超时时间(秒)
-        self.callback_timeout = 30
+        self.callback_timeout = 130
         self._connection_task = None
         self._health_check_task = None
 
@@ -364,27 +364,27 @@ class OperaSignalRClient:
     async def _handle_message_received(self, args: Dict[str, Any]) -> None:
         """处理接收到的消息"""
         self.log.info(f"收到消息: {json.dumps(args[0], ensure_ascii=False)}")
+
+        # 立即创建消息对象用于快速响应
+        message_args = MessageReceivedArgs(
+            opera_id=UUID(args[0]["operaId"]),
+            receiver_staff_ids=[UUID(id_str) for id_str in args[0]["receiverStaffIds"]],
+            index=args[0]["index"],
+            time=datetime.fromisoformat(args[0]["time"]),
+            stage_index=args[0].get("stageIndex"),
+            sender_staff_id=UUID(args[0]["senderStaffId"]) if args[0].get("senderStaffId") else None,
+            is_narratage=args[0]["isNarratage"],
+            is_whisper=args[0]["isWhisper"],
+            text=args[0]["text"],
+            tags=args[0].get("tags"),
+            mentioned_staff_ids=[UUID(id_str) for id_str in args[0].get("mentionedStaffIds", [])]
+            if args[0].get("mentionedStaffIds")
+            else None,
+        )
+
         if self.callbacks["on_message_received"]:
-            message_args = MessageReceivedArgs(
-                opera_id=UUID(args[0]["operaId"]),
-                receiver_staff_ids=[UUID(id_str)
-                                    for id_str in args[0]["receiverStaffIds"]],
-                index=args[0]["index"],
-                time=datetime.fromisoformat(args[0]["time"]),
-                stage_index=args[0].get("stageIndex"),
-                sender_staff_id=UUID(args[0]["senderStaffId"]) if args[0].get(
-                    "senderStaffId") else None,
-                is_narratage=args[0]["isNarratage"],
-                is_whisper=args[0]["isWhisper"],
-                text=args[0]["text"],
-                tags=args[0].get("tags"),
-                mentioned_staff_ids=[UUID(id_str) for id_str in args[0].get(
-                    "mentionedStaffIds", [])] if args[0].get("mentionedStaffIds") else None
-            )
-            await self._execute_callback(
-                "on_message_received",
-                self.callbacks["on_message_received"],
-                message_args
+            asyncio.create_task(
+                self._execute_callback("on_message_received", self.callbacks["on_message_received"], message_args)
             )
         else:
             self.log.warning("收到消息，但未设置处理回调")
