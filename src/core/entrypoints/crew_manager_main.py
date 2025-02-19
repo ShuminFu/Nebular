@@ -8,7 +8,7 @@ from src.core.parser.api_response_parser import ApiResponseParser
 import backoff
 
 # 获取logger实例
-logger = get_logger(__name__, log_file="logs/crew_manager.log")
+logger = get_logger(__name__, log_file="logs/crew_process.log")
 
 # 重试装饰器
 
