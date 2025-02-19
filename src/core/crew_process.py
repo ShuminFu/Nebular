@@ -168,8 +168,6 @@ class BaseCrewProcess(ABC):
                     "text": input_text,
                     "stage_index": context.get("stage_index"),
                     "conversation_state": context.get("conversation_state", {}),
-                    "flow": context.get("flow", {}),
-                    "code_context": context.get("code_context", {}),
                 },
                 ensure_ascii=False,
             )

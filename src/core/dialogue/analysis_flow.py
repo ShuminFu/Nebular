@@ -220,8 +220,13 @@ class AnalysisFlow(Flow[AnalysisState]):
         from datetime import datetime, timezone, timedelta
 
         try:
-            # 使用ApiResponseParser解析结果
-            context_data = json.loads(result_str)
+            if result_str.startswith("```json\n"):
+                result_str = result_str[8:]
+            if result_str.endswith("\n```"):
+                result_str = result_str[:-4]
+            result_str = result_str.replace("'", '"')  # 替换单引号为双引号
+
+            context_data = json.loads(result_str, strict=False)
 
             # 验证必要的字段
             required_fields = ["conversation_flow", "code_context", "decision_points"]
@@ -262,7 +267,7 @@ class AnalysisFlow(Flow[AnalysisState]):
             return related_indices
 
         except (ValueError, KeyError, AttributeError, json.JSONDecodeError) as e:
-            print(f"解析上下文数据结构失败: {str(e)}")
+            print(f"解析上下文数据结构失败: {str(e)}, result_str: {result_str}")
             return set()
 
     def _handle_code_request(self, analysis_result: Dict) -> None:

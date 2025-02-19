@@ -52,7 +52,6 @@ class ConversationFlow(BaseModel):
     topic_id: str
     topic_type: str
     status: str
-    created_at: str
     derived_from: Optional[str] = None
     change_reason: Optional[str] = None
     evolution_chain: List[str]
