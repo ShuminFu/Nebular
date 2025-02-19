@@ -137,7 +137,7 @@ class BaseCrewProcess(ABC):
 
             # 检查是否是自己的消息
             if str(message.sender_staff_id) == str(current_staff_id):
-                self.log.debug("忽略自己发送的消息，避免循环")
+                self.log.info("忽略自己发送的消息，避免循环")
                 return
 
             asyncio.create_task(self.intent_processor.process_message(message))
