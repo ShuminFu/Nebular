@@ -11,9 +11,6 @@ def setup_logger(name: str = None, log_file: str = None):
         name: 模块名称，用于日志标识
         log_file: 日志文件路径，如果不指定则只输出到控制台
     """
-    # 移除默认的处理器
-    logger.remove()
-
     # 控制台输出配置
     logger.add(
         sys.stderr,
@@ -38,7 +35,8 @@ def setup_logger(name: str = None, log_file: str = None):
                 "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
                 "{name}:{function}:{line} - [{extra[trace_id]}] {message}"
             ),
-            level="DEBUG",
+            level="INFO",
+            filter=lambda record: record["name"] == name
         )
 
     # 设置默认trace_id

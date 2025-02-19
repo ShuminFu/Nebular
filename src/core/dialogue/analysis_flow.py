@@ -11,7 +11,9 @@ from src.crewai_ext.crew_bases.analyzers_crewbase import (
     IntentAnalysisInputs,
     ContextAnalysisInputs,
 )
+from src.core.logger_config import get_logger, get_logger_with_trace_id
 
+logger = get_logger(__name__, log_file="logs/analysis_flow.log")
 
 # 在AnalysisFlow类之前添加状态模型
 class AnalysisState(BaseModel):
@@ -43,6 +45,7 @@ class AnalysisFlow(Flow[AnalysisState]):
         # 初始化分析器
         self.intent_crew = IntentAnalyzerCrew()
         self.context_crew = ContextAnalyzerCrew()
+        self.log = get_logger_with_trace_id()
 
     @start()
     def start_method(self):
@@ -69,17 +72,18 @@ class AnalysisFlow(Flow[AnalysisState]):
             dialogue_index=self.dialogue.dialogue_index,
             stage_index=self.dialogue.context.stage_index if self.dialogue.context else None,
         )
-
+        self.log.info(f"意图分析输入: {intent_inputs.model_dump()}")
         # 执行意图分析
         result = await self.intent_crew.crew().kickoff_async(inputs=intent_inputs.model_dump())
 
         # 解析结果并更新对话的意图分析
         intent_analysis = self._parse_intent_result(result.raw)
         self.dialogue.intent_analysis = intent_analysis
+        self.log.info(f"意图分析结果: {intent_analysis}")
         # 如果意图分析表明这是一个代码请求，更新对话类型
         if self.dialogue.intent_analysis and self.dialogue.intent_analysis.parameters.get("is_code_request"):
             self.dialogue.type = DialogueType.CODE_RESOURCE
-
+            self.log.info(f"更新对话类型为: {self.dialogue.type}")
         # 将分析结果存储在Flow状态中
         self.state.intent_analysis = intent_analysis
 
@@ -135,10 +139,10 @@ class AnalysisFlow(Flow[AnalysisState]):
                 {"index": d.dialogue_index, "text": d.text, "type": d.type.name, "tags": d.tags} for d in stage_dialogues[-10:]
             ],  # 只取最近10条对话
         )
-
+        self.log.info(f"上下文分析输入: {context_inputs.model_dump()}")
         # 执行上下文分析
         result = await self.context_crew.crew().kickoff_async(inputs=context_inputs.model_dump())
-
+        self.log.info(f"上下文分析结果: {result.raw}")
         # 解析结果并更新对话的上下文
         related_indices = self._parse_context_result(result.raw)
 

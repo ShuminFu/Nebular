@@ -4,7 +4,9 @@ from pydantic import BaseModel, Field, StrictStr
 from src.crewai_ext.config.llm_setup import llm
 from typing import List, Optional
 
-
+class ChatReply(BaseModel):
+    """对话回复模型"""
+    reply_text: str
 class ResourceItem(BaseModel):
     """资源项数据结构"""
 
@@ -62,7 +64,7 @@ class RunnerChatCrew:
     @task
     def chat_task(self) -> Task:
         """Create a chat task"""
-        return Task(config=self.tasks_config["chat_task"])
+        return Task(config=self.tasks_config["chat_task"], output_json=ChatReply)
 
     @crew
     def crew(self) -> Crew:

@@ -3,7 +3,11 @@ from crewai.project import CrewBase, agent, crew, task
 from src.crewai_ext.config.llm_setup import llm
 from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
 from uuid import UUID
+from pydantic import BaseModel
 
+class ChatReply(BaseModel):
+    """对话回复模型"""
+    reply_text: str
 
 @CrewBase
 class ManagerCrew:
@@ -70,7 +74,7 @@ class ManagerChatCrew:
     @task
     def chat_task(self) -> Task:
         """Create a chat task"""
-        return Task(config=self.tasks_config["chat_task"])
+        return Task(config=self.tasks_config["chat_task"], output_json=ChatReply)
     @crew
     def crew(self) -> Crew:
         """Creates chat crew"""

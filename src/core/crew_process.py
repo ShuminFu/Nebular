@@ -171,13 +171,20 @@ class BaseCrewProcess(ABC):
                 },
                 ensure_ascii=False,
             )
-
+            self.log.info(f"对话任务输入: {full_context}")
             # 使用Crew生成回复
             result = await self.chat_crew.crew().kickoff_async(inputs={"text": full_context})
-
+            self.log.info(f"对话任务结果: {result.raw}")
             # 获取回复文本
             reply_text = result.raw if hasattr(result, "raw") else str(result)
+            if reply_text.startswith("```json\n"):
+                reply_text = reply_text[8:]
+            if reply_text.endswith("\n```"):
+                reply_text = reply_text[:-4]
 
+            reply_json = json.loads(reply_text)
+            reply_text = reply_json.get("reply_text", "").strip()
+            
             # 构造对话消息
             dialogue_data = DialogueForCreation(
                 is_stage_index_null=False,
