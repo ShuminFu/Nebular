@@ -1,4 +1,4 @@
-""" Opera SignalR Bot对话处理器的实现。
+"""Opera SignalR Bot对话处理器的实现。
 
 负责将Staff的对话转换为任务并管理任务队列。
 主要用于CrewManager和CrewRunner的对话处理和任务管理的桥接。
@@ -123,24 +123,24 @@ class IntentMind:
             return False
 
         # 检查是否已经是标准格式的代码资源
-        if any(marker in text for marker in ['@file:', '@description:', '@tags:', '@version:']):
+        if any(marker in text for marker in ["@file:", "@description:", "@tags:", "@version:"]):
             return True
 
         # 常见编程语言关键字
-        keywords = r'\b(def|class|function|import|from|return|if|else|for|while|try|catch|async|await)\b'
+        keywords = r"\b(def|class|function|import|from|return|if|else|for|while|try|catch|async|await)\b"
 
         # 函数或类定义模式
-        definitions = r'(def\s+\w+\s*\(|class\s+\w+\s*[:\(])'
+        definitions = r"(def\s+\w+\s*\(|class\s+\w+\s*[:\(])"
 
         # 代码注释模式
-        comments = r'(#.*$|\/\/.*$|\/\*[\s\S]*?\*\/)'
+        comments = r"(#.*$|\/\/.*$|\/\*[\s\S]*?\*\/)"
 
         # 代码缩进结构
-        indentation = r'^\s{2,}.*$'
+        indentation = r"^\s{2,}.*$"
 
         # 检查文本是否符合上述任一模式
         patterns = [keywords, definitions, comments, indentation]
-        text_lines = text.split('\n')
+        text_lines = text.split("\n")
 
         # 统计符合模式的行数
         pattern_matches = 0
@@ -176,10 +176,7 @@ class IntentMind:
             Optional[UUID]: 选中的CR的staff_id
         """
         # 获取所有可能的CR（排除CM自己）
-        crs = [
-            staff_id for staff_id in dialogue.receiver_staff_ids
-            if staff_id != dialogue.sender_staff_id
-        ]
+        crs = [staff_id for staff_id in dialogue.receiver_staff_ids if staff_id != dialogue.sender_staff_id]
 
         if not crs:
             return None
@@ -249,9 +246,9 @@ class IntentMind:
                 "conversation_state": dialogue.context.conversation_state,
                 "flow": dialogue.context.conversation_state.get("flow", {}),
                 "code_context": dialogue.context.conversation_state.get("code_context", {}),
-                "decision_points": dialogue.context.conversation_state.get("decision_points", [])
+                "decision_points": dialogue.context.conversation_state.get("decision_points", []),
             },
-            "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None
+            "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None,
         }
 
         # 检查是否是任务回调
@@ -329,11 +326,16 @@ class IntentMind:
                 resources = code_details.get("resources", [])
                 if not resources:
                     # 如果没有明确指定resources，创建默认的单文件资源
-                    resources = [{
-                        "file_path": code_details.get("file_path", f"src/{code_details.get('type', 'python').lower()}/main.{code_details.get('type', 'py').lower()}"),
-                        "type": code_details.get("type", "python"),
-                        "mime_type": "text/x-python"
-                    }]
+                    resources = [
+                        {
+                            "file_path": code_details.get(
+                                "file_path",
+                                f"src/{code_details.get('type', 'python').lower()}/main.{code_details.get('type', 'py').lower()}",
+                            ),
+                            "type": code_details.get("type", "python"),
+                            "mime_type": "text/x-python",
+                        }
+                    ]
 
                 # 为每个文件创建独立的CODE_GENERATION任务
                 tasks = []
@@ -352,7 +354,9 @@ class IntentMind:
                                     "text": related_dialogue.text,
                                     "type": related_dialogue.type.name,
                                     "tags": related_dialogue.tags,
-                                    "intent": related_dialogue.intent_analysis.model_dump() if related_dialogue.intent_analysis else None,
+                                    "intent": related_dialogue.intent_analysis.model_dump()
+                                    if related_dialogue.intent_analysis
+                                    else None,
                                 })
 
                     task = BotTask(
@@ -370,7 +374,7 @@ class IntentMind:
                                 "project_description": code_details.get("project_description"),
                                 "requirements": code_details.get("requirements", []),
                                 "frameworks": code_details.get("frameworks", []),
-                                "resources": resources  # 包含所有资源信息，便于理解文件间关系
+                                "resources": resources,  # 包含所有资源信息，便于理解文件间关系
                             },
                             "dialogue_context": {
                                 "text": dialogue.text,
@@ -383,17 +387,17 @@ class IntentMind:
                                 "flow": dialogue.context.conversation_state.get("flow", {}),
                                 "code_context": dialogue.context.conversation_state.get("code_context", {}),
                                 "decision_points": dialogue.context.conversation_state.get("decision_points", []),
-                                "related_dialogues": related_dialogues
+                                "related_dialogues": related_dialogues,
                             },
-                            "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None
+                            "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None,
                         },
                         source_dialogue_index=dialogue.dialogue_index,
                         source_staff_id=dialogue.sender_staff_id,
-                        response_staff_id=selected_cr if selected_cr else (
-                            dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None
-                        ),
+                        response_staff_id=selected_cr
+                        if selected_cr
+                        else (dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None),
                         topic_id=topic_id,
-                        topic_type=topic_type
+                        topic_type=topic_type,
                     )
                     tasks.append(task)
                 return tasks
@@ -447,8 +451,8 @@ class IntentMind:
         # 如果是代码相关的任务，需要选择合适的CR
         if task_type in [TaskType.RESOURCE_CREATION, TaskType.RESOURCE_GENERATION]:
             selected_cr = self._select_code_resource_handler(dialogue, task_parameters.get("code_details", {}))
-            response_staff_id = selected_cr if selected_cr else (
-                dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None
+            response_staff_id = (
+                selected_cr if selected_cr else (dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None)
             )
         else:
             response_staff_id = dialogue.receiver_staff_ids[0] if dialogue.receiver_staff_ids else None
@@ -462,7 +466,7 @@ class IntentMind:
             response_staff_id=response_staff_id,
             source_staff_id=dialogue.sender_staff_id,  # 设置源Staff ID为对话的发送者
             topic_id=topic_id,
-            topic_type=topic_type
+            topic_type=topic_type,
         )
 
         return task
@@ -481,9 +485,7 @@ class IntentMind:
         dialogue_type = self._determine_dialogue_type(message)
 
         # 创建ProcessingDialogue
-        processing_dialogue = ProcessingDialogue.from_message_args(
-            message, priority=priority, dialogue_type=dialogue_type
-        )
+        processing_dialogue = ProcessingDialogue.from_message_args(message, priority=priority, dialogue_type=dialogue_type)
 
         # 如果是DIRECT_CREATION类型，直接返回None，不添加到对话池
         if dialogue_type == DialogueType.DIRECT_CREATION:
@@ -509,9 +511,7 @@ class IntentMind:
             # 创建临时ProcessingDialogue用于任务创建
             priority = self._determine_dialogue_priority(message)
             dialogue_type = self._determine_dialogue_type(message)
-            temp_dialogue = ProcessingDialogue.from_message_args(
-                message, priority=priority, dialogue_type=dialogue_type
-            )
+            temp_dialogue = ProcessingDialogue.from_message_args(message, priority=priority, dialogue_type=dialogue_type)
             task = await self._create_task_from_dialogue(temp_dialogue)
             await self.task_queue.add_task(task)
             return
@@ -536,6 +536,7 @@ class IntentMind:
         return self.dialogue_pool
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from src.core.tests.test_intent_mind import main
+
     main()

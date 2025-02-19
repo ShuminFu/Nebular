@@ -1,7 +1,7 @@
 from crewai.flow.flow import Flow, listen, start, router, or_
 from typing import Dict, Set
 from pydantic import BaseModel
-
+from src.core.dialogue.enums import DialogueType
 from src.core.dialogue.models import ProcessingDialogue, IntentAnalysis
 from src.core.dialogue.pools import DialoguePool
 from src.core.dialogue.enums import EXT_TO_MIME_TYPE
@@ -76,6 +76,9 @@ class AnalysisFlow(Flow[AnalysisState]):
         # 解析结果并更新对话的意图分析
         intent_analysis = self._parse_intent_result(result.raw)
         self.dialogue.intent_analysis = intent_analysis
+        # 如果意图分析表明这是一个代码请求，更新对话类型
+        if self.dialogue.intent_analysis and self.dialogue.intent_analysis.parameters.get("is_code_request"):
+            self.dialogue.type = DialogueType.CODE_RESOURCE
 
         # 将分析结果存储在Flow状态中
         self.state.intent_analysis = intent_analysis
