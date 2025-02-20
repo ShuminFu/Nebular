@@ -22,22 +22,8 @@ def setup_logger(name: str = None, log_file: str = None):
             "<white>{message}</white>"
         ),
         level="INFO",
+        enqueue=True,
     )
-
-    # 如果指定了日志文件，添加文件输出
-    if log_file:
-        logger.add(
-            log_file,
-            rotation="500 MB",
-            retention="10 days",
-            compression="zip",
-            format=(
-                "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
-                "{name}:{function}:{line} - [{extra[trace_id]}] {message}"
-            ),
-            level="INFO",
-            filter=lambda record: record["name"] == name
-        )
 
     # 设置默认trace_id
     return logger.bind(trace_id=None)
@@ -53,7 +39,21 @@ def get_logger(name: str = None, log_file: Optional[str] = None):
     Returns:
         配置好的logger实例
     """
-    return setup_logger(name, log_file)
+    # 如果指定了日志文件，添加文件输出
+    if log_file:
+        logger.add(
+            log_file,
+            rotation="500 MB",
+            retention="10 days",
+            compression="zip",
+            format=(
+                "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
+                "{name}:{function}:{line} - [{extra[trace_id]}] {message}"
+            ),
+            level="INFO",
+            filter=lambda record: record["name"] == name
+        )
+
 
 
 def get_logger_with_trace_id():

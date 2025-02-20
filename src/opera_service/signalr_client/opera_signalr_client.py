@@ -5,7 +5,7 @@
 """
 
 from typing import Optional, List, Callable, Any, Dict
-from uuid import UUID, uuid4
+from uuid import UUID
 import json
 import asyncio
 from datetime import datetime
@@ -17,7 +17,7 @@ from pysignalr.client import SignalRClient
 from pysignalr.messages import CompletionMessage
 from pysignalr.transport.abstract import ConnectionState
 import aiohttp
-from src.core.logger_config import get_logger
+from src.core.logger_config import get_logger, get_logger_with_trace_id
 from src.crewai_ext.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
 
 # 获取logger实例
@@ -77,7 +77,7 @@ class OperaSignalRClient:
         self.staff_invitation_tool = StaffInvitationTool()  # 初始化StaffInvitationTool
         self.roles: List[str] = []  # 添加roles属性
         # 为每个实例创建一个带trace_id的logger
-        self.log = logger.bind(trace_id=str(uuid4()))
+        self.log = get_logger_with_trace_id()
 
         # 设置基本回调
         self.client.on_open(self._on_open)

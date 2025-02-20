@@ -1,14 +1,13 @@
 import asyncio
 import multiprocessing
 from uuid import UUID
-from src.core.logger_config import get_logger, get_logger_with_trace_id
+from src.core.logger_config import get_logger, get_logger_with_trace_id, setup_logger
 from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
 from src.core.crew_process import CrewManager, CrewRunner
 from src.core.parser.api_response_parser import ApiResponseParser
 import backoff
 
-# 获取logger实例
-logger = get_logger(__name__, log_file="logs/main.log")
+
 
 # 重试装饰器
 
@@ -108,6 +107,9 @@ def start_crew_manager_process(bot_id: str):
     asyncio.run(run_crew_manager(bot_id))
 
 async def main():
+    # 获取logger实例
+    setup_logger(name="main")
+    log = get_logger(__name__, log_file="logs/main.log")
     # 为main函数创建新的trace_id
     log = get_logger_with_trace_id()
     # 创建BotTool实例
