@@ -38,9 +38,9 @@ class ManagerInitFlow(Flow[InitState]):
     def _load_default_config(self, config_path: str) -> dict:
         """加载默认YAML配置"""
         try:
-            base_dir = Path(__file__).parent.parent.parent
-            full_path = base_dir / config_path
-            with open(full_path, "r") as f:
+            base_dir = Path(__file__).parent
+            full_path = base_dir.joinpath(config_path).resolve()
+            with open(full_path, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f)
         except Exception as e:
             self.log.warning(f"加载默认配置失败: {str(e)}")

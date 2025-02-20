@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import patch, AsyncMock
 import yaml
+import json
 from src.crewai_ext.flows.manager_init_flow import ManagerInitFlow, InitState
 from src.crewai_ext.crew_bases.manager_crewbase import ManagerInitCrew
 
@@ -16,14 +17,14 @@ def mock_default_configs():
     """模拟默认配置"""
     default_agents = {
         "code_generator": {
-            "role": "injected_code_generator, 专业的代码生成和优化专家",
+            "role": "code_generator, 专业的代码生成和优化专家",
             "goal": "生成高质量、可维护的代码",
             "backstory": "作为一名经验丰富的代码生成专家，我精通各种编程语言和框架。 我注重代码的可读性、可维护性和性能，能够根据需求生成最佳实践的代码实现。 我会考虑项目的整体架构，确保生成的代码符合项目规范和最佳实践。",
         }
     }
     default_tasks = {
         "code_generation_task": {
-            "description": "injected 根据以下信息生成代码： 1. 文件路径：{file_path} 2. 文件类型：{file_type} 3. 需求描述：{requirement} 4. 项目信息：\n    - 类型：{project_type}\n    - 描述：{project_description}\n    - 框架：{frameworks}\n5. 相关文件：{resources} 6. 引用关系：{references}\n",
+            "description": "根据以下信息生成代码： 1. 文件路径：{file_path} 2. 文件类型：{file_type} 3. 需求描述：{requirement} 4. 项目信息：\n    - 类型：{project_type}\n    - 描述：{project_description}\n    - 框架：{frameworks}\n5. 相关文件：{resources} 6. 引用关系：{references}\n",
             "expected_output": "@file: {file_path} @description: [简要描述文件的主要功能和用途] @tags: [相关标签，如framework_xxx,feature_xxx等，用逗号分隔] @version: 1.0.0 @version_id: [UUID格式的版本ID] --- [完整的代码实现，包含： 1. 必要的导入语句 2. 类型定义（如果需要） 3. 主要功能实现 4. 错误处理 5. 导出语句（如果需要）]\n",
             "agent": "code_generator",
         },
@@ -71,14 +72,14 @@ async def test_generate_configs(manager_flow):
             {
                 "agents": {
                     "code_generator": {
-                        "role": "injected_code_generator, 专业的代码生成和优化专家",
+                        "role": "code_generator, 专业的代码生成和优化专家",
                         "goal": "生成高质量、可维护的代码",
                         "backstory": "作为一名经验丰富的代码生成专家，我精通各种编程语言和框架。 我注重代码的可读性、可维护性和性能，能够根据需求生成最佳实践的代码实现。 我会考虑项目的整体架构，确保生成的代码符合项目规范和最佳实践。",
                     }
                 },
                 "tasks": {
                     "code_generation_task": {
-                        "description": "injected 根据以下信息生成代码： 1. 文件路径：{file_path} 2. 文件类型：{file_type} 3. 需求描述：{requirement} 4. 项目信息：\n    - 类型：{project_type}\n    - 描述：{project_description}\n    - 框架：{frameworks}\n5. 相关文件：{resources} 6. 引用关系：{references}\n",
+                        "description": "根据以下信息生成代码： 1. 文件路径：{file_path} 2. 文件类型：{file_type} 3. 需求描述：{requirement} 4. 项目信息：\n    - 类型：{project_type}\n    - 描述：{project_description}\n    - 框架：{frameworks}\n5. 相关文件：{resources} 6. 引用关系：{references}\n",
                         "expected_output": "@file: {file_path} @description: [简要描述文件的主要功能和用途] @tags: [相关标签，如framework_xxx,feature_xxx等，用逗号分隔] @version: 1.0.0 @version_id: [UUID格式的版本ID] --- [完整的代码实现，包含： 1. 必要的导入语句 2. 类型定义（如果需要） 3. 主要功能实现 4. 错误处理 5. 导出语句（如果需要）]\n",
                         "agent": "code_generator",
                     },
@@ -94,14 +95,15 @@ async def test_generate_configs(manager_flow):
 
     with patch.object(ManagerInitCrew, "crew") as mock_crew:
         mock_crew_instance = AsyncMock()
-        mock_crew_instance.kickoff_async.return_value.raw = yaml.dump(mock_config)
+        mock_crew_instance.kickoff_async.return_value.raw = json.dumps(mock_config)
         mock_crew.return_value = mock_crew_instance
 
         await manager_flow.generate_configs()
 
         assert manager_flow.state.current_step == "need_validate_configs"
-        assert "data_processor" in manager_flow.state.config["runners"][0]["agents"]
-        assert "process_data" in manager_flow.state.config["runners"][0]["tasks"]
+        assert "code_generator" in manager_flow.state.config["runners"][0]["agents"]
+        assert "code_generation_task" in manager_flow.state.config["runners"][0]["tasks"]
+
 
 
 @pytest.mark.asyncio
@@ -217,11 +219,11 @@ async def test_full_flow_execution(manager_flow, mock_default_configs):
 
         # 模拟crew执行
         mock_crew_instance = AsyncMock()
-        mock_crew_instance.kickoff_async.return_value.raw = yaml.dump(mock_config)
+        mock_crew_instance.kickoff_async.return_value.raw = json.dumps(mock_config)
         mock_crew.return_value = mock_crew_instance
 
         # 执行完整流程
-        await manager_flow.kickoff()
+        await manager_flow.kickoff_async()
 
         # 验证状态转换
         assert manager_flow.state.current_step == "need_output_config"
