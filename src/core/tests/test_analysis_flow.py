@@ -77,11 +77,11 @@ class TestAnalysisFlow:
         flow = AnalysisFlow(dialogue=mock_dialogue, temp_pool=mock_dialogue_pool)
 
         # 测试没有意图分析时
-        assert flow.check_intent_analysis() == "analyze_intent"
+        assert flow.check_intent_analysis() == "route_analyze_intent"
 
         # 测试有意图分析时
         mock_dialogue.intent_analysis = IntentAnalysis(intent="code_generation", confidence=0.9, parameters={})
-        assert flow.check_intent_analysis() == "analyze_context"
+        assert flow.check_intent_analysis() == "route_analyze_context"
 
     @pytest.mark.asyncio
     async def test_analyze_intent(self, mock_dialogue, mock_dialogue_pool):
