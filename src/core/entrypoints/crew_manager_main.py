@@ -37,6 +37,7 @@ async def run_crew_manager(bot_id: str):
         default_tags = parser.parse_default_tags(bot_data)
         child_bots = parser.get_child_bots(default_tags)
         log.info(f"从defaultTags获取到的子Bot列表: {child_bots}")
+        # TODO 如果没有child_bots，则需要读opera的标题和名称，来配置3个runner
 
         # 检查每个子Bot的状态并启动未激活的Bot
         for child_bot_id in child_bots:
@@ -52,6 +53,7 @@ async def run_crew_manager(bot_id: str):
                         args=(
                             child_bot_id,
                             bot_id,
+                            # TODO 这里添加从childbot中获取的动态配置并且传入
                         ),  # 传递当前manager的bot_id作为parent_bot_id
                     )
                     process.start()
