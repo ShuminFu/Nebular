@@ -50,12 +50,11 @@ class RunnerCodeGenerationCrew:
 
             def __init__(self):
                 super().__init__()
-                self.agents_config = self._dynamic_config.get("agents", {})
-                self.tasks_config = self._dynamic_config.get("tasks", {})
 
             def load_configurations(self):
                 """Override配置加载方法"""
-                pass
+                self.agents_config = self._dynamic_config.get("agents", {})
+                self.tasks_config = self._dynamic_config.get("tasks", {})
 
         return DynamicCrew
 
