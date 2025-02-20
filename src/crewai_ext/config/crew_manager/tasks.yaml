@@ -18,3 +18,12 @@ chat_task:
     返回一个友好且专业的回复文本
   agent: bot_manager
 
+init_task:
+  description: "根据用户对话需求{query}, 以及CrewRunner数量要求{num_runners}，分析每个CrewRunner的职责，并生成每个CrewRunner的配置"
+  expected_output: "返回json格式的初始化CrewRunner的配置"
+  agent: bot_manager
+
+config_validator_task:
+  description: "验证初始化CrewRunner的配置是否符合要求, 不符合要求则修改"
+  expected_output: "返回最后的符合json格式的结果"
+  agent: config_validator
