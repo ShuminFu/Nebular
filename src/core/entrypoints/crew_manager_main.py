@@ -6,6 +6,7 @@ from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
 from src.core.crew_process import CrewManager, CrewRunner
 from src.core.parser.api_response_parser import ApiResponseParser
 import backoff
+from typing import Optional
 
 
 
@@ -97,9 +98,13 @@ async def run_crew_runner(runner: CrewRunner, bot_id: str):
         raise
 
 
-def start_crew_runner_process(bot_id: str, parent_bot_id: str):
+def start_crew_runner_process(bot_id: str, parent_bot_id: str, crew_config: Optional[dict] = None):
     """在新进程中启动CrewRunner"""
-    runner = CrewRunner(bot_id=UUID(bot_id), parent_bot_id=UUID(parent_bot_id))
+    runner = CrewRunner(
+        bot_id=UUID(bot_id),
+        parent_bot_id=UUID(parent_bot_id),
+        crew_config=crew_config,  # 传递动态配置
+    )
     asyncio.run(run_crew_runner(runner, bot_id))
 
 def start_crew_manager_process(bot_id: str):

@@ -1,5 +1,5 @@
 import pytest
-from ..flows.template_flow import DynamicResearchFlow, DynamicResearchState, RESEARCH_TOPICS, ResearchCrew
+from tests.flows.template_flow import DynamicResearchFlow, DynamicResearchState, RESEARCH_TOPICS, ResearchCrew
 from unittest.mock import patch, mock_open, MagicMock
 from crewai import Agent, Task
 
