@@ -87,7 +87,7 @@ class DialoguePool(CamelBaseModel):
         self._clean_cold_dialogues()  # 清理低热度对话
         self._enforce_size_limit()  # 最后控制池大小
         # 维护完成后持久化
-        await self._persist_to_api()
+        # await self._persist_to_api()
 
     async def add_dialogue(self, dialogue: ProcessingDialogue) -> None:
         """添加对话并更新计数器"""
@@ -123,7 +123,7 @@ class DialoguePool(CamelBaseModel):
                 self.status_counter[new_status_name] += 1
 
                 # 状态更新后持久化
-                await self._persist_to_api()
+                # await self._persist_to_api()
                 break
 
     async def analyze_dialogues(self, target_opera_id: Optional[UUID] = None) -> None:
