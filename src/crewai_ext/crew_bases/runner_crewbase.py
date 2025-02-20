@@ -2,7 +2,7 @@ from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 from pydantic import BaseModel, Field, StrictStr
 from src.crewai_ext.config.llm_setup import llm
-from typing import List, Optional
+from typing import List, Optional, Type, Dict, Any
 
 class ChatReply(BaseModel):
     """对话回复模型"""
@@ -33,6 +33,31 @@ class GenerationInputs(BaseModel):
 class RunnerCodeGenerationCrew:
     agents_config = "../config/crew_runner/agents.yaml"
     tasks_config = "../config/crew_runner/tasks.yaml"
+
+    @classmethod
+    def create_dynamic_crew(cls, config: Dict[str, Any]) -> Type["RunnerCodeGenerationCrew"]:
+        """工厂方法创建动态配置的Crew类
+
+        Args:
+            config: 包含agents和tasks配置的字典
+
+        Returns:
+            动态生成的Crew子类
+        """
+
+        class DynamicCrew(RunnerCodeGenerationCrew):
+            _dynamic_config = config  # 类级别配置存储
+
+            def __init__(self):
+                super().__init__()
+                self.agents_config = self._dynamic_config.get("agents", {})
+                self.tasks_config = self._dynamic_config.get("tasks", {})
+
+            def load_configurations(self):
+                """Override配置加载方法"""
+                pass
+
+        return DynamicCrew
 
     @agent
     def code_generator(self) -> Agent:

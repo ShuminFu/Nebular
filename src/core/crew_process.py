@@ -284,7 +284,6 @@ class CrewManager(BaseCrewProcess):
     def __init__(self):
         super().__init__()
         self.crew_processes: Dict[UUID, CrewProcessInfo] = {}
-        self._staff_id_cache: Dict[str, UUID] = {}  # opera_id -> staff_id 的缓存
 
         # 初始化主题追踪器
         self.topic_tracker = TopicTracker()
@@ -520,11 +519,13 @@ class CrewManager(BaseCrewProcess):
 class CrewRunner(BaseCrewProcess):
     """在独立进程中运行的Crew"""
 
-    def __init__(self, bot_id: UUID, parent_bot_id: Optional[UUID] = None):
+    def __init__(self, bot_id: UUID, parent_bot_id: Optional[UUID] = None, crew_config: Optional[dict] = None):
+        self.crew_config = crew_config  # 存储动态配置
         super().__init__()
         self.bot_id = bot_id
         self.parent_bot_id = parent_bot_id
-        self._staff_id_cache: Dict[str, UUID] = {}  # opera_id -> staff_id 的缓存
+
+        self.chat_crew = RunnerChatCrew()
 
     async def _get_parent_staff_id(self, opera_id: str) -> Optional[UUID]:
         """获取父Bot在指定Opera中的staff_id
@@ -540,7 +541,10 @@ class CrewRunner(BaseCrewProcess):
         return await self._get_bot_staff_id(self.parent_bot_id, opera_id)
 
     def _setup_crew(self) -> Crew:
-        self.chat_crew = RunnerChatCrew()
+        """根据配置动态创建Crew"""
+        if self.crew_config:
+            DynamicCrewClass = RunnerCodeGenerationCrew.create_dynamic_crew(self.crew_config)
+            return DynamicCrewClass()
         return RunnerCodeGenerationCrew()
 
     async def _handle_generation_task(self, task: BotTask):
