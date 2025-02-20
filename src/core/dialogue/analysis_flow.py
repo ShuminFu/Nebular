@@ -22,7 +22,6 @@ class AnalysisState(BaseModel):
     related_indices: Set[int] = set()
 
 
-# 修改类继承
 class AnalysisFlow(Flow[AnalysisState]):
     """对话分析流程
 

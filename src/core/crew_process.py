@@ -349,6 +349,8 @@ class CrewManager(BaseCrewProcess):
                 self.topic_tracker.add_task(task)
             await self.resource_handler.handle_resource_creation(task)
             return
+        if task.type == TaskType.CHAT_PLANNING:
+            pass
 
         # 3. 其他任务交给父类处理
         await super()._process_task(task)
