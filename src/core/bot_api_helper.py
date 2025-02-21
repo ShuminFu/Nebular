@@ -168,7 +168,7 @@ async def get_child_bot_staff_info(bot_tool: BotTool, child_bot_id: str, log) ->
             opera_id = str(opera["operaId"])
             staff_info[opera_id] = {
                 "staff_ids": [UUID(staff["id"]) for staff in opera.get("staffs", [])],
-                "roles": [staff.get("roles", "").split(",") for staff in opera.get("staffs", [])],
+                "roles": [(staff.get("roles") or "").split(",") for staff in opera.get("staffs", [])],
             }
         log.info(f"获取到ChildBot {child_bot_id} 的staff信息: {len(staff_info)}个opera")
         return staff_info

@@ -173,7 +173,7 @@ async def main():
             crew_manager_bots = [bot for bot in bots_data if "测试" in bot["name"] and not bot["isActive"]]
             log.info("符合条件的Bot列表:")
             for bot in crew_manager_bots:
-                log.info(f"ID: {bot['id']}, Name: {bot['name']}, Description: {bot['description']}")
+                log.info(f"ID: {bot['id']}, Name: {bot['name']}")
 
                 # 为每个Bot创建新进程
                 process = multiprocessing.Process(
