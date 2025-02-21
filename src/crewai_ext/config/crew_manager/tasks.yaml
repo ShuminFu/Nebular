@@ -23,7 +23,3 @@ init_task:
   expected_output: "返回json格式的初始化CrewRunner的配置"
   agent: bot_manager
 
-config_validator_task:
-  description: "验证初始化CrewRunner的配置是否符合要求, 不符合要求则修改"
-  expected_output: "返回最后的符合json格式的结果"
-  agent: config_validator

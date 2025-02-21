@@ -2,11 +2,14 @@ import asyncio
 import multiprocessing
 from uuid import UUID
 from src.core.logger_config import get_logger, get_logger_with_trace_id, setup_logger
-from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
+from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool, BotForCreation, BotForUpdate
 from src.core.crew_process import CrewManager, CrewRunner
 from src.core.parser.api_response_parser import ApiResponseParser
-import backoff
+from src.crewai_ext.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
+
 from typing import Optional
+import backoff
+import json
 
 
 
@@ -28,19 +31,101 @@ async def run_crew_manager(bot_id: str):
     parser = ApiResponseParser()
 
     try:
-        # 获取Bot信息以读取defaultTags
+        # 1. 获取Bot信息和关联的Opera
         bot_info = bot_tool.run(action="get", bot_id=bot_id)
-        log.info(f"获取Bot {bot_id} 信息: {bot_info}")
-
-        # 解析Bot信息
         _, bot_data = parser.parse_response(bot_info)
-        default_tags = parser.parse_default_tags(bot_data)
-        child_bots = parser.get_child_bots(default_tags)
-        log.info(f"从defaultTags获取到的子Bot列表: {child_bots}")
-        # TODO 如果没有child_bots，则需要读opera的标题和名称，来配置3个runner
+        log.info(f"获取Bot {bot_id} 信息: {bot_data}")
 
-        # 检查每个子Bot的状态并启动未激活的Bot
-        for child_bot_id in child_bots:
+        # 获取所有关联的Opera
+        staffs_result = bot_tool.run(
+            action="get_all_staffs", bot_id=bot_id, data={"need_opera_info": True, "need_staffs": 1, "need_staff_invitations": 0}
+        )
+        _, staffs_data = parser.parse_response(staffs_result)
+        managed_operas = [
+            {
+                "id": opera["operaId"],
+                "name": opera.get("operaName", ""),
+                "parent_id": opera.get("operaParentId"),
+                "staff_id": [staff["id"] for staff in opera.get("staffs", [])],
+            }
+            for opera in staffs_data
+            if opera.get("staffs")
+        ]
+        log.info(f"Bot {bot_id} 管理的Opera: {managed_operas}")
+
+        # 2. 获取现有ChildBots及其管理的Opera
+        default_tags = parser.parse_default_tags(bot_data)
+        existing_child_bots = parser.get_child_bots(default_tags) or []
+        log.info(f"现有ChildBots: {existing_child_bots}")
+
+        # 获取ChildBots管理的Opera
+        childbot_related_opera_ids = set()
+        for child_bot_id in existing_child_bots:
+            try:
+                child_bot_info = bot_tool.run(action="get", bot_id=child_bot_id)
+                _, child_data = parser.parse_response(child_bot_info)
+                child_tags = parser.parse_default_tags(child_data)
+                if child_tags and "related_operas" in child_tags:
+                    childbot_related_opera_ids.update(child_tags["related_operas"])
+                else:
+                    # 与CrewManager相同的获取逻辑
+                    staffs_result = bot_tool.run(
+                        action="get_all_staffs",
+                        bot_id=child_bot_id,
+                        data={"need_opera_info": True, "need_staffs": 1, "need_staff_invitations": 0},
+                    )
+                    _, staffs_data = parser.parse_response(staffs_result)
+                    child_operas = [str(opera["operaId"]) for opera in staffs_data if opera.get("staffs")]
+                    childbot_related_opera_ids.update(child_operas)
+                    log.warning(f"ChildBot {child_bot_id} 缺少managed_operas标签，已通过API获取到 {len(child_operas)} 个opera")
+            except Exception as e:
+                log.error(f"获取ChildBot {child_bot_id} 信息失败: {str(e)}")
+
+        # 3. 为未覆盖的Opera创建ChildBot
+        staff_invitation_tool = StaffInvitationTool()
+        for opera in managed_operas:
+            if str(opera["id"]) not in childbot_related_opera_ids:
+                try:
+                    # TODO 这里考虑先获取CR的配置，并且根据CR的配置来创建多个新的ChildBot
+                    bot_config = BotForCreation(
+                        name=f"CR-{opera['name']}",
+                        description=f"管理Opera {opera['name']} 的自动Bot",
+                        default_tags=json.dumps({
+                            "related_operas": [str(opera["id"])],
+                            "parent_bot": bot_id,
+                        }),
+                    )
+                    create_result = bot_tool.run(action="create", data=bot_config)
+                    _, new_bot = parser.parse_response(create_result)
+
+                    # 发送Staff邀请
+                    invitation_result = staff_invitation_tool.run(
+                        action="create",
+                        opera_id=opera["id"],
+                        data={
+                            "bot_id": new_bot["id"],
+                            "roles": "auto_manager",
+                            "permissions": "full_access",
+                            "parameter": json.dumps({
+                                "management_scope": {"opera_id": str(opera["id"]), "inherited_from": bot_id}
+                            }),
+                        },
+                    )
+
+                    # 更新CM的managed_bots列表
+                    existing_child_bots.append(new_bot["id"])
+                    # TODO 这里还要确保不会覆盖掉其他的字段
+                    update_data = BotForUpdate(
+                        is_default_tags_updated=True, default_tags=json.dumps({"childBots": existing_child_bots})
+                    )
+                    bot_tool.run(action="update", bot_id=bot_id, data=update_data)
+
+                    log.info(f"为Opera {opera['id']} 创建了新的ChildBot: {new_bot['id']}")
+                except Exception as e:
+                    log.error(f"为Opera {opera['id']} 创建ChildBot失败: {str(e)}")
+
+        # 4. 启动未激活的ChildBots
+        for child_bot_id in existing_child_bots:
             try:
                 # 获取子Bot状态
                 child_bot_info = bot_tool.run(action="get", bot_id=child_bot_id)
@@ -71,14 +156,12 @@ async def run_crew_manager(bot_id: str):
         raise
     except KeyboardInterrupt:
         await manager.stop()
-        # 停止所有CrewRunner进程
         for process in crew_processes:
             process.terminate()
             process.join()
         log.info(f"CrewManager和所有CrewRunner已停止，Bot ID: {bot_id}")
     except Exception as e:
         log.error(f"CrewManager运行出错，Bot ID: {bot_id}, 错误: {str(e)}")
-        # 确保清理所有进程
         for process in crew_processes:
             process.terminate()
             process.join()

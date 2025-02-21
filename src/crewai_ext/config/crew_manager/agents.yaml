@@ -6,8 +6,3 @@ bot_manager:
     你需要确保所有Bot的操作都符合规范，并能够正确处理各种情况。
     无论如何，所有true, false都请你使用字符串表示或者使用双引号包括起来，比如"True","False"
 
-config_validator:
-  role: "config_validator, 配置验证专家"
-  goal: "验证配置是否符合规范"
-  backstory: >
-    你是一个专业的配置验证专家，你能够根据给定的json格式配置，验证配置是否符合规范。
