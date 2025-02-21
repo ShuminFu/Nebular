@@ -62,7 +62,7 @@ class ApiResponseParser:
         Returns:
             dict: 解析后的defaultTags字典
         """
-        default_tags_str = bot_data.get("defaultTags", "{}")
+        default_tags_str = bot_data.get("defaultTags") or "{}"
         if isinstance(default_tags_str, dict):
             return default_tags_str
 
