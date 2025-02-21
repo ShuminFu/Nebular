@@ -372,6 +372,7 @@ class CrewManager(BaseCrewProcess):
             task_data = task.model_dump(by_alias=True)
             task_data["sourceStaffId"] = str(cm_staff_id)
 
+            # TODO: 这里可以改成发送私聊对话来分发任务
             # 使用Bot API更新CR的DefaultTags
             result = _SHARED_BOT_TOOL.run(
                 action="update",
