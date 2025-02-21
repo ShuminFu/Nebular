@@ -4,6 +4,7 @@ from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool, BotForCreation,
 from src.crewai_ext.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
 from src.core.parser.api_response_parser import ApiResponseParser
 from src.crewai_ext.flows.manager_init_flow import ManagerInitFlow
+from uuid import UUID
 
 
 async def fetch_bot_data(bot_tool: BotTool, bot_id: str, log) -> dict:
@@ -149,3 +150,28 @@ async def get_child_bot_opera_ids(bot_tool: BotTool, child_bot_id: str, log) -> 
     except Exception as e:
         log.error(f"获取ChildBot {child_bot_id} 信息失败: {str(e)}")
         return set()
+
+
+async def get_child_bot_staff_info(bot_tool: BotTool, child_bot_id: str, log) -> dict:
+    """获取ChildBot的staff信息和roles"""
+    try:
+        parser = ApiResponseParser()
+        staffs_result = bot_tool.run(
+            action="get_all_staffs",
+            bot_id=child_bot_id,
+            data={"need_opera_info": True, "need_staffs": 1, "need_staff_invitations": 0},
+        )
+        _, staffs_data = parser.parse_response(staffs_result)
+
+        staff_info = {}
+        for opera in staffs_data:
+            opera_id = str(opera["operaId"])
+            staff_info[opera_id] = {
+                "staff_ids": [UUID(staff["id"]) for staff in opera.get("staffs", [])],
+                "roles": [staff.get("roles", "").split(",") for staff in opera.get("staffs", [])],
+            }
+        log.info(f"获取到ChildBot {child_bot_id} 的staff信息: {len(staff_info)}个opera")
+        return staff_info
+    except Exception as e:
+        log.error(f"获取ChildBot {child_bot_id} 的staff信息失败: {str(e)}")
+        return {}
