@@ -26,9 +26,10 @@ class CrewProcessInfo:
 
     process: multiprocessing.Process
     bot_id: UUID
-    opera_ids: List[UUID]  # 一个Bot可以在多个Opera中
-    roles: Dict[UUID, List[str]]  # opera_id -> roles
-    staff_ids: Dict[UUID, List[UUID]]  # opera_id -> staff_ids
+    crew_config: dict  # 新增CR配置字段, 设计上这个CR的所有staff都将使用这个配置
+    opera_ids: List[UUID]
+    roles: Dict[UUID, List[str]]  # opera id 为键，staff roles为值
+    staff_ids: Dict[UUID, List[UUID]]  # opera id 为键，staff id 为值
 
 
 class BaseCrewProcess(ABC):
