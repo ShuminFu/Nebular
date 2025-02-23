@@ -16,7 +16,7 @@ from src.core.dialogue.enums import DialoguePriority, DialogueType, ProcessingSt
 from src.core.task_utils import BotTask, BotTaskQueue, TaskType, TaskPriority
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
 from src.core.parser.code_resource_parser import CodeResourceParser
-
+from src.core.crew_process import CrewProcessInfo
 
 class IntentMind:
     """Bot的意图处理器
@@ -28,9 +28,10 @@ class IntentMind:
     4. 识别和处理代码资源
     """
 
-    def __init__(self, task_queue: BotTaskQueue):
+    def __init__(self, task_queue: BotTaskQueue, crew_processes: Optional[Dict[UUID, CrewProcessInfo]] = None):
         self.dialogue_pool = DialoguePool()
         self.task_queue = task_queue  # 使用外部传入的任务队列
+        self.crew_processes = crew_processes
         self.staff_dialogues: Dict[UUID, Set[int]] = {}  # 记录每个Staff的对话索引
 
     def _determine_dialogue_priority(self, message: MessageReceivedArgs) -> DialoguePriority:
@@ -157,39 +158,35 @@ class IntentMind:
         return CodeResourceParser.parse(content)
 
     def _select_code_resource_handler(self, dialogue: ProcessingDialogue, code_details: dict) -> Optional[UUID]:
-        """选择合适的CR来处理代码生成任务
+        """选择合适的CR来处理代码生成任务"""
+        # 新增根据opera_id选择CR的逻辑
+        if self.crew_processes and dialogue.opera_id:
+            candidate_staffs = []
+            
+            # 遍历所有CrewProcess查找匹配opera_id的配置
+            for process_info in self.crew_processes.values():
+                if dialogue.opera_id in process_info.opera_ids:
+                    # 获取该opera_id对应的staff列表
+                    staff_id = process_info.staff_ids.get(dialogue.opera_id[0], None)
+                    crew_config = process_info.crew_config["agents"]
+                    if staff_id:
+                        candidate_staff = f"{staff_id}:{crew_config}"
+                        candidate_staffs.append(candidate_staff)
+            
+            if candidate_staff:
+                # TODO: 根据crew_config中的专长信息进行匹配
+                return random.choice(candidate_staff)
+        else:    
+            # 获取所有可能的CR（排除CM自己）
+            crs = [staff_id for staff_id in dialogue.receiver_staff_ids if staff_id != dialogue.sender_staff_id]
 
-        选择策略：
-        1. 如果只有一个CR，直接选择
-        2. 如果有多个CR，根据以下因素选择：
-           - 代码类型匹配（比如Python专家）
-           - 框架经验（比如pandas专家）
-           - 当前任务负载
-           - 历史成功率
-
-        Args:
-            dialogue: 当前对话
-            code_details: 代码相关信息
-
-        Returns:
-            Optional[UUID]: 选中的CR的staff_id
-        """
-        # 获取所有可能的CR（排除CM自己）
-        crs = [staff_id for staff_id in dialogue.receiver_staff_ids if staff_id != dialogue.sender_staff_id]
-
-        if not crs:
-            return None
-        elif len(crs) == 1:
-            return crs[0]
-
-        # TODO: 实现更复杂的CR选择逻辑
-        # 1. 从staff的parameters中获取专长信息, 或者通过api接口获取他们的prompt
-        # 2. 匹配代码类型和框架需求
-        # 3. 考虑当前任务队列负载
-        # 4. 考虑历史完成率
-
-        # 暂时随机选择一个CR
-        return random.choice(crs)
+            if not crs:
+                return None
+            elif len(crs) == 1:
+                return crs[0]
+            
+            # 保留原有随机选择作为fallback
+            return random.choice(crs)
 
     def _parse_tags(self, tags_data: Union[str, List[str], None]) -> List[str]:
         """解析tags数据，支持字符串和列表格式
@@ -341,6 +338,7 @@ class IntentMind:
                 tasks = []
                 for resource in resources:
                     # 选择合适的CR来处理代码生成任务
+                    # TODO: 应该是try，catch，如果选择失败，则默认为自身的staff_id
                     selected_cr = self._select_code_resource_handler(dialogue, code_details)
 
                     # 获取相关对话的内容

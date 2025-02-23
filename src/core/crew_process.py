@@ -48,7 +48,7 @@ class BaseCrewProcess(ABC):
     async def setup(self):
         """初始化设置"""
         self.task_queue = BotTaskQueue(bot_id=self.bot_id)
-        self.intent_processor = IntentMind(self.task_queue)
+        self.intent_processor = IntentMind(self.task_queue, self._get_crew_processes())
 
         if self.bot_id:
             self.client = OperaSignalRClient(bot_id=str(self.bot_id))
@@ -149,8 +149,11 @@ class BaseCrewProcess(ABC):
     def _setup_crew(self) -> Crew:
         """设置Crew配置，由子类实现"""
         pass
-
     @abstractmethod
+    def _get_crew_processes(self) -> Optional[Dict[UUID, CrewProcessInfo]]:
+        """获取当前进程的配置，由子类实现"""
+        pass
+    
     async def _handle_conversation_task(self, task: BotTask):
         """处理对话类型的任务"""
         try:
@@ -319,6 +322,10 @@ class CrewManager(BaseCrewProcess):
             Optional[UUID]: 如果找到则返回staff_id，否则返回None
         """
         return await self._get_bot_staff_id(self.bot_id, opera_id)
+    
+    def _get_crew_processes(self) -> Optional[Dict[UUID, CrewProcessInfo]]:
+        """获取所有子Crew的配置集合"""
+        return self.crew_processes
 
     async def _handle_conversation_task(self, task: BotTask):
         """处理对话类型的任务"""
@@ -550,6 +557,9 @@ class CrewRunner(BaseCrewProcess):
             DynamicCrewClass = RunnerCodeGenerationCrew.create_dynamic_crew(self.crew_config)
             return DynamicCrewClass()
         return RunnerCodeGenerationCrew()
+
+    def _get_crew_processes(self) -> Optional[Dict[UUID, CrewProcessInfo]]:
+        return None
 
     async def _handle_generation_task(self, task: BotTask):
         """处理代码生成类型的任务"""
