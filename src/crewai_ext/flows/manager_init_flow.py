@@ -51,7 +51,7 @@ class ManagerInitFlow(Flow[InitState]):
         """初始化配置生成流程"""
         # 使用默认配置作为基础
         self.state.config = {
-            "runners": [{"agents": self.default_agents.copy(), "tasks": self.default_tasks.copy()}],
+            "runners": [{"agents": self.default_agents['code_generator'].copy(), "tasks": self.default_tasks['code_generation_task'].copy()}],
             "validation": {"passed": False},
         }
         self.state.current_step = "need_generate_configs"

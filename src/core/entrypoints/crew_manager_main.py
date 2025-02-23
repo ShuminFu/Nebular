@@ -58,7 +58,7 @@ async def run_crew_manager(bot_id: str):
                 new_bot_ids = await create_child_bot(bot_tool, opera, bot_id, log)
                 if new_bot_ids:
                     existing_child_bots.extend(new_bot_ids)
-                    await update_parent_bot_tags(bot_tool, bot_id, existing_child_bots, log)
+                    await update_parent_bot_tags(bot_tool, bot_id, existing_child_bots, log, existing_bot_data=bot_data)
 
         # 4. 启动未激活的ChildBots
         for child_bot_id in existing_child_bots:
@@ -68,8 +68,8 @@ async def run_crew_manager(bot_id: str):
                 if not child_bot_data.get("isActive", True):
                     # 获取子Bot的配置信息
                     child_tags = parser.parse_default_tags(child_bot_data)
-                    crew_config = child_tags.get("crew_config", {})
-                    related_operas = child_tags.get("related_operas", [])
+                    crew_config = child_tags.get("CrewConfig", {})
+                    related_operas = child_tags.get("RelatedOperas", [])
 
                     # 获取子Bot在各个Opera中的staff_id和roles
                     staff_info = await get_child_bot_staff_info(bot_tool, child_bot_id, log)
@@ -170,7 +170,7 @@ async def main():
 
         if status_code == 200:
             # 过滤符合条件的Bot
-            crew_manager_bots = [bot for bot in bots_data if "测试" in bot["name"] and not bot["isActive"]]
+            crew_manager_bots = [bot for bot in bots_data if "前端" in bot["name"] and not bot["isActive"]]
             log.info("符合条件的Bot列表:")
             for bot in crew_manager_bots:
                 log.info(f"ID: {bot['id']}, Name: {bot['name']}")

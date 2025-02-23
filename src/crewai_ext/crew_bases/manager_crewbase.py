@@ -4,17 +4,14 @@ from src.crewai_ext.config.llm_setup import llm
 from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
 from uuid import UUID
 from pydantic import BaseModel, Field
-from typing import Dict, List
+from typing import Dict, List, Any
 
 class ChatReply(BaseModel):
     """对话回复模型"""
     reply_text: str
 class CrewRunnerConfig(BaseModel):
-    """单个CrewRunner的配置模型"""
-
-    agents: Dict[str, Dict] = Field(..., description="Agents配置字典，格式为 {agent_name: config_dict}")
-    tasks: Dict[str, Dict] = Field(..., description="Tasks配置字典，格式为 {task_name: config_dict}")
-
+    agents: Dict[str, Dict[str, Any]] = Field(..., description="Agents配置字典，格式为 {agent_name: config_dict}")
+    tasks: Dict[str, Dict[str, Any]] = Field(..., description="Tasks配置字典，格式为 {task_name: config_dict}")
 
 class MultiCrewConfigOutput(BaseModel):
     """支持多CrewRunner的配置输出模型"""
@@ -118,10 +115,10 @@ class ManagerInitCrew:
         """Create an bot management agent"""
         return Agent(config=self.agents_config["bot_manager"], llm=llm, verbose=True)
 
-    @agent
-    def config_validator(self) -> Agent:
-        """Create a crew runner config agent"""
-        return Agent(config=self.agents_config["config_validator"], llm=llm, verbose=True)
+    # @agent
+    # def config_validator(self) -> Agent:
+    #     """Create a crew runner config agent"""
+    #     return Agent(config=self.agents_config["config_validator"], llm=llm, verbose=True)
 
     @task
     def init_task(self) -> Task:
@@ -136,4 +133,4 @@ class ManagerInitCrew:
     @crew
     def crew(self) -> Crew:
         """Creates init crew"""
-        return Crew(agents=self.agents, tasks=self.tasks, process=Process.hierarchical, verbose=True)
+        return Crew(agents=self.agents, tasks=self.tasks, process=Process.sequential, verbose=True)
