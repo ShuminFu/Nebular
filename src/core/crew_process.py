@@ -18,6 +18,7 @@ from src.core.topic.topic_tracker import TopicTracker
 from src.crewai_ext.crew_bases.runner_crewbase import RunnerCodeGenerationCrew, GenerationInputs, RunnerChatCrew
 from src.crewai_ext.crew_bases.manager_crewbase import ManagerCrew, ManagerChatCrew
 import json
+import litellm
 
 
 @dataclass
@@ -177,17 +178,47 @@ class BaseCrewProcess(ABC):
             )
             self.log.info(f"对话任务输入: {full_context}")
             # 使用Crew生成回复
-            result = await self.chat_crew.crew().kickoff_async(inputs={"text": full_context})
-            self.log.info(f"对话任务结果: {result.raw}")
-            # 获取回复文本
-            reply_text = result.raw if hasattr(result, "raw") else str(result)
-            if reply_text.startswith("```json\n"):
-                reply_text = reply_text[8:]
-            if reply_text.endswith("\n```"):
-                reply_text = reply_text[:-4]
+            try:
+                result = await self.chat_crew.crew().kickoff_async(inputs={"text": full_context})
+                self.log.info(f"对话任务结果: {result.raw}")
+                
+                # 获取回复文本
+                reply_text = result.raw if hasattr(result, "raw") else str(result)
+                if reply_text.startswith("```json\n"):
+                    reply_text = reply_text[8:]
+                if reply_text.endswith("\n```"):
+                    reply_text = reply_text[:-4]
 
-            reply_json = json.loads(reply_text)
-            reply_text = reply_json.get("reply_text", "").strip()
+                reply_json = json.loads(reply_text)
+                reply_text = reply_json.get("reply_text", "").strip()
+                
+            except json.JSONDecodeError as e:
+                error_msg = f"LLM响应解析失败: {str(e)}"
+                self.log.error(error_msg)
+                reply_text = "抱歉，我的回复似乎出现了格式问题，请检查我的输出内容"
+            except litellm.APIConnectionError as e:
+                error_msg = f"LLM服务连接失败: {str(e)}"
+                self.log.error(error_msg)
+                reply_text = "当前AI服务连接不稳定，请稍后再试"
+                
+                # 直接发送错误通知
+                dialogue_data = DialogueForCreation(
+                    is_stage_index_null=False,
+                    staff_id=str(task.response_staff_id),
+                    is_narratage=False,
+                    is_whisper=False,  
+                    text=f"⚠️ 系统通知：{error_msg}",
+                    tags="LLM_ERROR;SYSTEM_ALERT",
+                )
+                _SHARED_DIALOGUE_TOOL.run(
+                    action="create",
+                    opera_id=task.parameters.get("opera_id"),
+                    data=dialogue_data,
+                )
+            except Exception as e:
+                error_msg = f"对话处理异常: {str(e)}"
+                self.log.error(error_msg)
+                reply_text = "处理您的请求时遇到意外错误，请联系管理员"
             
             # 构造对话消息
             dialogue_data = DialogueForCreation(
@@ -196,7 +227,6 @@ class BaseCrewProcess(ABC):
                 is_narratage=False,
                 is_whisper=False,
                 text=reply_text,
-                # mentioned_staff_ids=[str(task.source_staff_id)] if task.source_staff_id else None,
             )
 
             # 发送对话
