@@ -1,0 +1,28 @@
+cr_matching_task:
+  description: >
+    分析以下任务需求和可用的CR信息，选择最合适的CR：
+
+    任务信息：
+    - 任务详情：{code_details}
+
+    可用的CR列表：
+    {candidate_staffs}
+
+    每个CR的信息包含：
+    1. bot_id: CR的唯一标识
+    2. crew_config: CR的配置信息，包含专长和能力
+    3. opera_ids: CR所在的Opera列表
+    4. roles: CR在各个Opera中的角色
+    5. staff_ids: CR在各个Opera中的Staff ID
+
+    分析要求：
+    1. 确保CR支持目标Opera
+    2. 分析任务的技术需求
+    3. 评估CR的专长匹配度
+    4. 考虑CR的当前负载
+    5. 检查CR的配置是否满足需求
+    6. 优先选择专长最匹配的CR
+    7. 在相同专长的情况下选择负载较轻的CR
+
+  expected_output: 以json格式回复最终选择的CR的staff_id，必须要从可选列表中选择一个最符合的。
+  agent: cr_matcher 

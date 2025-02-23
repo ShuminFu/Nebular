@@ -17,7 +17,7 @@ from src.core.task_utils import BotTask, BotTaskQueue, TaskType, TaskPriority
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
 from src.core.parser.code_resource_parser import CodeResourceParser
 from src.core.crew_process import CrewProcessInfo
-
+from src.crewai_ext.crew_bases.cr_matcher_crewbase import CRMatcherCrew
 class IntentMind:
     """Bot的意图处理器
 
@@ -157,7 +157,7 @@ class IntentMind:
         """解析代码资源内容，使用CodeResourceParser"""
         return CodeResourceParser.parse(content)
 
-    def _select_code_resource_handler(self, dialogue: ProcessingDialogue, code_details: dict) -> Optional[UUID]:
+    def _select_code_resource_handler(self, dialogue: ProcessingDialogue, code_details: str) -> Optional[UUID]:
         """选择合适的CR来处理代码生成任务"""
         # 新增根据opera_id选择CR的逻辑
         if self.crew_processes and dialogue.opera_id:
@@ -174,8 +174,12 @@ class IntentMind:
                         candidate_staffs.append(candidate_staff)
             
             if candidate_staff:
-                # TODO: 根据crew_config中的专长信息进行匹配
-                return random.choice(candidate_staff)
+                result = CRMatcherCrew.kickoff(inputs={
+                    "code_details": code_details,
+                    "candidate_staffs": candidate_staffs,
+                })
+                selected_cr = json.loads(result.raw)
+                return UUID(selected_cr)
         else:    
             # 获取所有可能的CR（排除CM自己）
             crs = [staff_id for staff_id in dialogue.receiver_staff_ids if staff_id != dialogue.sender_staff_id]
