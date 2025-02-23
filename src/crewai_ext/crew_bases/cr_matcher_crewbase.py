@@ -2,7 +2,7 @@
 
 from crewai import Agent, Crew, Task, Process
 from crewai.project import CrewBase, agent, crew, task
-from src.crewai_ext.config.llm_setup import llm
+from src.crewai_ext.config.llm_setup import small_llm
 from pydantic import BaseModel, Field
 
 class CRMatchingResult(BaseModel):
@@ -32,7 +32,7 @@ class CRMatcherCrew:
         """创建CR匹配专家Agent"""
         return Agent(
             config=self.agents_config["cr_matcher"],
-            llm=llm,
+            llm=small_llm,
             verbose=True
         )
 
