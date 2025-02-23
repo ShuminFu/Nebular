@@ -19,7 +19,51 @@ chat_task:
   agent: bot_manager
 
 init_task:
-  description: "根据用户对话需求{query}, 以及CrewRunner数量要求{num_runners}，分析每个CrewRunner的职责，并生成每个CrewRunner的配置"
-  expected_output: "返回json格式的初始化CrewRunner的配置"
+  description: "Opera相当于一个隔离的业务沙箱，一个独立的工作空间或协作环境。请你根据用户对话需求{query},生成{num_runners}个CrewRunner配置来完成用户需求的任务。注意要分析每个CrewRunner的职责（不需要架构相关的职责），并生成每个CrewRunner的配置。其中每一个runner只有一个agent和一个task，runner的名字要尽可能地反应它在项目中的能力。"
+  expected_output: |
+    返回json格式的初始化CrewRunner的配置。json的字段意义参考如下示例：
+    {{
+      "runners": [
+        {{
+          "agents": {{
+            "role": "根据需求分解任务后，针对这个任务能反映其职能的runner名称",
+            "goal": "根据需求分解任务后，针对这个任务能反映其职能的runner目标",
+            "backstory": "根据需求分解任务后，针对这个任务能反映其职能的runner背景",
+          }},
+          "tasks": {{
+            "description": "根据需求分解任务后，针对这个任务能反映其职能的task",
+            "expected_output": [
+              "根据需求分解任务后，针对这个任务能反映其职能的expected_output",
+            ]
+          }}
+        }},
+        {{
+          "agents": {{
+            "role": "根据需求分解任务后，针对这个任务能反映其职能的runner名称",
+            "goal": "根据需求分解任务后，针对这个任务能反映其职能的runner目标",
+            "backstory": "根据需求分解任务后，针对这个任务能反映其职能的runner背景",
+          }},
+          "tasks": {{
+            "description": "根据需求分解任务后，针对这个任务能反映其职能的task",
+            "expected_output": [
+              "根据需求分解任务后，针对这个任务能反映其职能的expected_output",
+            ]
+          }}
+        }},
+        {{
+          "agents": {{
+            "role": "根据需求分解任务后，针对这个任务能反映其职能的runner名称",
+            "goal": "根据需求分解任务后，针对这个任务能反映其职能的runner目标",
+            "backstory": "根据需求分解任务后，针对这个任务能反映其职能的runner背景",
+          }},
+          "tasks": {{
+            "description": "根据需求分解任务后，针对这个任务能反映其职能的task",
+            "expected_output": [
+              "根据需求分解任务后，针对这个任务能反映其职能的expected_output",
+            ]
+          }}
+        }}
+      ]
+    }}
   agent: bot_manager
 

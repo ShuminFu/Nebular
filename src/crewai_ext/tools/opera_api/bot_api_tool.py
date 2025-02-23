@@ -73,12 +73,12 @@ class BotTool(BaseApiTool):
         'bot_id': 'uuid', 
         'data': {
             'name': '新名称',  # 可选
-            'isDescriptionUpdated': True,
+            'is_description_updated': True,
             'description': '新描述',  # 如果isDescriptionUpdated为True则必填
-            'isCallShellOnOperaStartedUpdated': False,
-            'isDefaultTagsUpdated': False,
-            'isDefaultRolesUpdated': False,
-            'isDefaultPermissionsUpdated': False
+            'is_call_shell_on_opera_started_updated': False,
+            'is_default_tags_updated': False,
+            'is_default_roles_updated': False,
+            'is_default_permissions_updated': False
         }
     }    
     5. 删除Bot: {'action': 'delete', 'bot_id': 'uuid'}
@@ -111,11 +111,11 @@ class BotTool(BaseApiTool):
                     raise ValueError("获取Bot的Staff信息需要提供bot_id")
                 
                 params = {
-                    'need_opera_info': data.get('need_opera_info', False),
-                    'need_staffs': data.get('need_staffs', 1),
-                    'need_staff_invitations': data.get('need_staff_invitations', 1)
+                    'needOperaInfo': data.get('need_opera_info', False),
+                    'needStaffs': data.get('need_staffs', 1),
+                    'needStaffInvitations': data.get('need_staff_invitations', 1)
                 }
-                
+                # 这里因为没有写BotForGetAllStaffs，所以需要手动构造params
                 result = self._make_request(
                     "GET", 
                     f"{self.base_url}/{bot_id}/GetAllStaffs",

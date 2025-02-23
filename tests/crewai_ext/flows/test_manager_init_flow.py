@@ -1,6 +1,5 @@
 import pytest
 from unittest.mock import patch, AsyncMock
-import yaml
 import json
 from src.crewai_ext.flows.manager_init_flow import ManagerInitFlow, InitState
 from src.crewai_ext.crew_bases.manager_crewbase import ManagerInitCrew
