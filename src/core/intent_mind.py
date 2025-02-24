@@ -66,6 +66,8 @@ class IntentMind:
         4. 私密对话（is_whisper）- 私密对话同时也是提及对话
         5. 提及对话（mentioned_staff_ids非空）
         6. 普通对话（其他情况）
+        7. 代码资源（通过tags判断）
+        8. 迭代对话（通过tags判断）
         注意：
         - whisper类型的对话自动被视为mention类型
         - mention类型的对话不一定是whisper类型
@@ -87,6 +89,8 @@ class IntentMind:
             # 检查代码相关标签
             if any(tag in message.tags.lower() for tag in ["code_resource", "code", "script", "function"]):
                 return DialogueType.CODE_RESOURCE
+            if any(tag in message.tags.lower() for tag in ["ResourcesMentionedFromViewer", "ResourcesForIncarnating", "ResourcesForViewing", "SelectedTextsFromViewer"]):
+                return DialogueType.ITERATION
 
         # 如果消息内容看起来像代码，将其标记为代码资源
         if self._is_code_content(message.text):
@@ -447,10 +451,13 @@ class IntentMind:
                 })
 
         elif dialogue.type == DialogueType.ITERATION:
-            # 迭代类型对话需要继承父级话题ID
-            # TODO: 从对话的tag或者特定信息中提取出父级话题ID，通常为version id, 这里可以选择在前置步骤跳过对话池分析。
+            # 从tags中解析version_id作为父级话题ID
+            version_id = parse_version_id(self._parse_tags(dialogue.tags))
+            
             task_parameters.update({
-                "parent_topic_id": topic_id or "0"  # 使用当前话题ID作为父级话题ID
+                "parent_topic_id": version_id,
+                "text": dialogue.text,
+                "tags": dialogue.tags
             })
             task_type = TaskType.RESOURCE_ITERATION
         elif dialogue.type == DialogueType.SYSTEM:
@@ -501,7 +508,7 @@ class IntentMind:
         processing_dialogue = ProcessingDialogue.from_message_args(message, priority=priority, dialogue_type=dialogue_type)
 
         # 如果是DIRECT_CREATION类型，直接返回None，不添加到对话池
-        if dialogue_type == DialogueType.DIRECT_CREATION:
+        if dialogue_type == DialogueType.DIRECT_CREATION or dialogue_type == DialogueType.ITERATION:
             return None
 
         # 添加到对话池
@@ -519,7 +526,7 @@ class IntentMind:
         """处理单个MessageReceivedArgs消息"""
         dialogue_index = await self._process_single_message(message)
 
-        # 如果是DIRECT_CREATION类型，直接创建任务并添加到队列
+        # 特定的对话类型没有加入对话池的返回值，直接创建任务并添加到队列
         if dialogue_index is None:
             # 创建临时ProcessingDialogue用于任务创建
             priority = self._determine_dialogue_priority(message)
@@ -548,7 +555,26 @@ class IntentMind:
         """获取当前对话池"""
         return self.dialogue_pool
 
-
+def parse_version_id(tags: List[str]) -> Optional[str]:
+    """从tags中解析version_id"""
+    for tag in tags:
+        try:
+            tag_data = json.loads(tag)
+            # 优先从SelectedTextsFromViewer获取version_id
+            if "SelectedTextsFromViewer" in tag_data:
+                for item in tag_data["SelectedTextsFromViewer"]:
+                    if "VersionId" in item:
+                        return item["VersionId"]
+            # 其次从ResourcesForViewing获取
+            if "ResourcesForViewing" in tag_data:
+                return tag_data["ResourcesForViewing"].get("VersionId")
+            # 最后从ResourcesForIncarnating获取
+            if "ResourcesForIncarnating" in tag_data:
+                return tag_data["ResourcesForIncarnating"].get("VersionId")
+        except (json.JSONDecodeError, TypeError):
+            continue
+    return None
+        
 if __name__ == "__main__":
     from src.core.tests.test_intent_mind import main
 

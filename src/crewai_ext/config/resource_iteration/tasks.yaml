@@ -1,0 +1,22 @@
+task_decomposition_task:
+  description: |
+    请你首先理解并且分析整体资源的架构和作用，其次将迭代需求:{iteration_requirement}, 分解为针对每个resource文件的修改任务。涉及到的资源在{resource_list}中（每个资源包含file_path和resource_id）。要求：
+    1. 每个任务对应一个文件的修改
+    2. 明确修改类型（create/update/delete）
+    3. 标注修改位置（行号或代码块标识）
+    4. 保持文件完整性（返回完整文件内容）
+
+  expected_output: |
+    {
+        "tasks": [
+            {
+                "file_path": "文件路径（如src/utils/helper.py）",
+                "action": "create|update|delete",
+                "resource_id": "资源ID",
+                "position": "如果是修改，指出有问题的修改位置。如果是新增或者删除则为全部",
+                "task_description": "针对任务需求，要对这个资源进行怎样的操作和改动的描述",
+            },
+            // ... 其他任务
+        ]
+    }
+  agent: task_decomposer

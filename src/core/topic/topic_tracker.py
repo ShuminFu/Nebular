@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Set, Optional, List, Callable, Awaitable
 from uuid import UUID
 
@@ -7,9 +7,9 @@ from src.core.task_utils import BotTask, TaskStatus
 @dataclass
 class VersionMeta:
     parent_version: Optional[str]  # 父版本ID
-    modified_files: List[str]  # 本次涉及的的文件路径url
+    modified_files: List[Dict[str, str]]  # 本次修改的文件列表，包含file_path和resource_id
     description: str  # 修改原因/用户反馈/任务描述
-    current_files: List[str]  # 当前版本的完整文件路径url列表
+    current_files: List[Dict[str, str]]  # 当前版本的完整文件列表，包含file_path和resource_id
 
 
 # TODO:delta changes fields for diff modification such as line 1-20
@@ -61,12 +61,14 @@ class TopicTracker:
         topic.tasks.add(task.id)
 
         # 处理文件路径更新
-        if file_path := task.parameters.get("file_path"):
+        if (file_path := task.parameters.get("file_path")) and (resource_id := task.parameters.get("resource_id")):
+            file_entry = {"file_path": file_path, "resource_id": resource_id}
+            
             # 更新当前版本
-            if file_path not in topic.current_version.modified_files:
-                topic.current_version.modified_files.append(file_path)
-            if file_path not in topic.current_version.current_files:
-                topic.current_version.current_files.append(file_path)
+            if not any(f["file_path"] == file_path for f in topic.current_version.modified_files):
+                topic.current_version.modified_files.append(file_entry)
+            if not any(f["file_path"] == file_path for f in topic.current_version.current_files):
+                topic.current_version.current_files.append(file_entry)
 
     async def update_task_status(self, task_id: UUID, status: TaskStatus):
         """更新任务状态并检查主题完成情况"""

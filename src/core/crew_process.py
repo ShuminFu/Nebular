@@ -17,6 +17,7 @@ from src.core.code_monkey import CodeMonkey
 from src.core.topic.topic_tracker import TopicTracker
 from src.crewai_ext.crew_bases.runner_crewbase import RunnerCodeGenerationCrew, GenerationInputs, RunnerChatCrew
 from src.crewai_ext.crew_bases.manager_crewbase import ManagerCrew, ManagerChatCrew
+from src.crewai_ext.crew_bases.resource_iteration_crewbase import IterationAnalyzerCrew
 import json
 import litellm
 
@@ -388,8 +389,63 @@ class CrewManager(BaseCrewProcess):
             await self.resource_handler.handle_resource_creation(task)
             return
         if task.type == TaskType.RESOURCE_ITERATION:
-            # TODO: use crew here
+            # 解析Tags中的资源信息
+            tags = json.loads(task.parameters.get("tags", "{}"))
+            resource_list = []
+            version_id = None
+            
+            # 场景1：直接包含资源列表
+            for tag_key in ["ResourcesForViewing", "ResourcesForIncarnating", "ResourcesMentionedFromViewer"]:
+                if tag_key in tags:
+                    resources = tags[tag_key].get("Resources", [])
+                    resource_list.extend([
+                        {
+                            "file_path": res["Url"],
+                            "resource_id": res["ResourceId"]
+                        } for res in resources
+                    ])
+            
+            # 场景2：通过SelectedTextsFromViewer获取version_id
+            if not resource_list and "SelectedTextsFromViewer" in tags:
+                selected_items = tags["SelectedTextsFromViewer"]
+                if selected_items:
+                    version_id = selected_items[0].get("VersionId")
+            
+            # 场景3：从TopicTracker获取资源列表
+            if version_id and not resource_list:
+                try:
+                    # 从主题追踪器获取版本对应资源
+                    topic_info = self.topic_tracker.get_topic_info(version_id)
+                    if topic_info:
+                        resource_list = [
+                            {
+                                "file_path": res["file_path"],
+                                "resource_id": res["resource_id"]
+                            } for res in topic_info.current_version.current_files
+                        ]
+                except Exception as e:
+                    self.log.error(f"获取版本资源失败: {str(e)}")
+                    await self.task_queue.update_task_status(task.id, TaskStatus.FAILED)
+                    return
+            
+            # 去重处理
+            seen = set()
+            unique_resources = [
+                r for r in resource_list 
+                if not (r["resource_id"] in seen or seen.add(r["resource_id"]))
+            ]
+            
+            # 调用Crew进行任务分解
+            analysis_result = await IterationAnalyzerCrew().crew().kickoff_async(
+                inputs={
+                    "iteration_requirement": task.parameters["text"],
+                    "resource_list": unique_resources
+                }
+            )
+            
+            # TODO select CR然后分发子任务
             pass
+
         if task.type == TaskType.CHAT_PLANNING:
             pass
 
@@ -520,7 +576,7 @@ class CrewManager(BaseCrewProcess):
             topic_info = self.topic_tracker.get_topic_info(topic_id)
             current_version = topic_info.current_version
             if len(current_version.current_files) != len(current_version.modified_files):
-                # TODO: Removing, adding or updating flag here.
+                # TODO: Removing, adding or updating flag here. Hashing the files to check if there are any changes.
                 pass
 
             # 构建ResourcesForViewing标签的基本结构

@@ -1,4 +1,0 @@
-task_decomposition_task:
-  description: Break down the iteration requirement into smaller tasks
-  expected_output: A list of well-defined subtasks with clear objectives
-  agent: task_decomposer
