@@ -25,9 +25,10 @@ class ManagerInitFlow(Flow[InitState]):
     包含agents和tasks的完整配置生成
     """
 
-    def __init__(self, query: str):
+    def __init__(self, query: str, num_runners: int = 3):
         super().__init__()
         self.query = query
+        self.num_runners = num_runners
         self.config_crew = ManagerInitCrew()
         self.log = get_logger_with_trace_id()
 
@@ -49,9 +50,15 @@ class ManagerInitFlow(Flow[InitState]):
     @start()
     def start_flow(self):
         """初始化配置生成流程"""
-        # 使用默认配置作为基础
+        # 根据num_runners数量初始化多个runner
         self.state.config = {
-            "runners": [{"agents": self.default_agents['code_generator'].copy(), "tasks": self.default_tasks['code_generation_task'].copy()}],
+            "runners": [
+                {
+                    "agents": self.default_agents["code_generator"].copy(),
+                    "tasks": self.default_tasks["code_generation_task"].copy(),
+                }
+                for _ in range(self.num_runners)  # 根据num_runners生成多个配置
+            ],
             "validation": {"passed": False},
         }
         self.state.current_step = "need_generate_configs"
@@ -60,14 +67,13 @@ class ManagerInitFlow(Flow[InitState]):
     async def generate_configs(self):
         """解析用户需求生成配置骨架"""
         try:
-            # 调用配置生成Crew
             if self.state.error_messages:
                 inputs = {
                     "query": f"{self.query}\n[ERRORS]: {self.state.error_messages}\n[CURRENT_CONFIG]: {self.state.config}",
-                    "num_runners": 3,
+                    "num_runners": self.num_runners,  # 使用实例变量代替硬编码
                 }
             else:
-                inputs = {"query": self.query, "num_runners": 3}
+                inputs = {"query": self.query, "num_runners": self.num_runners}  # 使用实例变量
 
             result = await self.config_crew.crew().kickoff_async(inputs=inputs)
 
@@ -139,9 +145,9 @@ class ManagerInitFlow(Flow[InitState]):
                 self.state.config["runners"][i]["agents"] = deep_merge(
                     self.state.config["runners"][i]["agents"], runner.get("agents", {})
                 )
-                self.state.config["runners"][i]["tasks"] = deep_merge(
-                    self.state.config["runners"][i]["tasks"], runner.get("tasks", {})
-                )
+                # self.state.config["runners"][i]["tasks"] = deep_merge(
+                #     self.state.config["runners"][i]["tasks"], runner.get("tasks", {})
+                # )
 
         except JSONDecodeError:
             self.log.error("配置骨架解析失败")
