@@ -50,6 +50,8 @@ class TaskType(IntEnum):
 
     RESOURCE_GENERATION = 51  # LLM代码生成任务：通过AI生成代码文件内容, 由cr处理
 
+    RESOURCE_ITERATION = 52  # 资源迭代任务：用于迭代生成代码，由cm分析并分解任务
+
 
 class TaskStatus(IntEnum):
     """任务状态枚举"""

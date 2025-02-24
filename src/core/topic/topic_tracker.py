@@ -21,7 +21,7 @@ class TopicInfo:
     type: str  # 主题类型
     status: str  # 主题状态
     opera_id: str  # Opera ID
-    version_tree: List[VersionMeta] = field(default_factory=list)  # 新增版本历史
+    current_version: Optional[VersionMeta] = None  # 当前版本
 
 
 # 定义回调类型
@@ -47,12 +47,26 @@ class TopicTracker:
 
         if task.topic_id not in self.topics:
             self.topics[task.topic_id] = TopicInfo(
-                tasks=set(), type=task.topic_type, status="active", opera_id=task.parameters.get("opera_id"), version_tree=[]
+                tasks=set(), type=task.topic_type, status="active", opera_id=task.parameters.get("opera_id"), current_version=None
             )
+            # 初始化版本（当parent_topic_id为0时）
+            if parent_topic_id := task.parameters.get("parent_topic_id"):
+                parent_version = None if parent_topic_id == "0" else parent_topic_id
+                self.topics[task.topic_id].current_version = VersionMeta(
+                    parent_version=parent_version, modified_files=[], description="Initial version", current_files=[]
+                )
             self._completed_tasks[task.topic_id] = set()
 
         topic = self.topics[task.topic_id]
         topic.tasks.add(task.id)
+
+        # 处理文件路径更新
+        if file_path := task.parameters.get("file_path"):
+            # 更新当前版本
+            if file_path not in topic.current_version.modified_files:
+                topic.current_version.modified_files.append(file_path)
+            if file_path not in topic.current_version.current_files:
+                topic.current_version.current_files.append(file_path)
 
     async def update_task_status(self, task_id: UUID, status: TaskStatus):
         """更新任务状态并检查主题完成情况"""

@@ -387,6 +387,9 @@ class CrewManager(BaseCrewProcess):
                 self.topic_tracker.add_task(task)
             await self.resource_handler.handle_resource_creation(task)
             return
+        if task.type == TaskType.RESOURCE_ITERATION:
+            # TODO: use crew here
+            pass
         if task.type == TaskType.CHAT_PLANNING:
             pass
 
@@ -412,7 +415,6 @@ class CrewManager(BaseCrewProcess):
             task_data = task.model_dump(by_alias=True)
             task_data["sourceStaffId"] = str(cm_staff_id)
 
-            # TODO: 这里可以改成发送私聊对话来分发任务
             # 使用Bot API更新CR的DefaultTags
             result = _SHARED_BOT_TOOL.run(
                 action="update",
@@ -515,11 +517,18 @@ class CrewManager(BaseCrewProcess):
                     if file_path.lower().endswith(".html"):
                         html_files.append(file_path)
 
+            topic_info = self.topic_tracker.get_topic_info(topic_id)
+            current_version = topic_info.current_version
+            if len(current_version.current_files) != len(current_version.modified_files):
+                # TODO: Removing, adding or updating flag here.
+                pass
+
             # 构建ResourcesForViewing标签的基本结构
             resources_tag = {
                 "ResourcesForViewing": {
                     "VersionId": topic_id,
                     "Resources": resources,
+                    "CurrentVersion": current_version,
                 },
                 "RemovingAllResources": True,
             }

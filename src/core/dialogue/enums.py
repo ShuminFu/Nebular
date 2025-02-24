@@ -19,6 +19,7 @@ class DialogueType(IntEnum):
     SYSTEM = 5      # 系统消息
     CODE_RESOURCE = 6  # 代码资源
     DIRECT_CREATION = 7  # 跳过对话池分析，在OPERA系统中创建资源
+    ITERATION = 8
 
 class ProcessingStatus(IntEnum):
     """处理状态枚举"""

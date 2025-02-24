@@ -395,6 +395,7 @@ class IntentMind:
                                 "related_dialogues": related_dialogues,
                             },
                             "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None,
+                            "parent_topic_id": "0",
                         },
                         source_dialogue_index=dialogue.dialogue_index,
                         source_staff_id=dialogue.sender_staff_id,
@@ -445,6 +446,13 @@ class IntentMind:
                     "code_content": code_content.strip(),  # 确保去除首尾空白字符
                 })
 
+        elif dialogue.type == DialogueType.ITERATION:
+            # 迭代类型对话需要继承父级话题ID
+            # TODO: 从对话的tag或者特定信息中提取出父级话题ID，通常为version id, 这里可以选择在前置步骤跳过对话池分析。
+            task_parameters.update({
+                "parent_topic_id": topic_id or "0"  # 使用当前话题ID作为父级话题ID
+            })
+            task_type = TaskType.RESOURCE_ITERATION
         elif dialogue.type == DialogueType.SYSTEM:
             task_type = TaskType.SYSTEM
         elif dialogue.type in [DialogueType.WHISPER, DialogueType.MENTION]:
