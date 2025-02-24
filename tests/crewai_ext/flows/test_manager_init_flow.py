@@ -47,7 +47,9 @@ def test_initial_state(manager_flow):
 
 
 @pytest.mark.asyncio
-async def test_start_flow(manager_flow, mock_default_configs):
+async def test_start_flow(
+    manager_flow: ManagerInitFlow, mock_default_configs: tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]
+):
     """测试流程初始化"""
     default_agents, default_tasks = mock_default_configs
 
@@ -63,7 +65,7 @@ async def test_start_flow(manager_flow, mock_default_configs):
 
 
 @pytest.mark.asyncio
-async def test_generate_configs(manager_flow):
+async def test_generate_configs(manager_flow: ManagerInitFlow):
     """测试配置生成"""
     # 模拟配置生成结果
     mock_config = {
@@ -106,7 +108,7 @@ async def test_generate_configs(manager_flow):
 
 
 @pytest.mark.asyncio
-async def test_validate_configuration(manager_flow):
+async def test_validate_configuration(manager_flow: ManagerInitFlow):
     """测试配置验证"""
     # 设置有效配置
     manager_flow.state.config = {"runners": [{"agents": {"test_agent": {}}, "tasks": {"test_task": {}}}]}
@@ -119,7 +121,7 @@ async def test_validate_configuration(manager_flow):
 
 
 @pytest.mark.asyncio
-async def test_validate_configuration_failure(manager_flow):
+async def test_validate_configuration_failure(manager_flow: ManagerInitFlow):
     """测试配置验证失败"""
     # 设置无效配置
     manager_flow.state.config = {
@@ -138,7 +140,7 @@ async def test_validate_configuration_failure(manager_flow):
 
 
 @pytest.mark.asyncio
-async def test_output_configuration(manager_flow):
+async def test_output_configuration(manager_flow: ManagerInitFlow):
     """测试配置输出"""
     test_config = {"runners": [{"agents": {"test_agent": {}}, "tasks": {"test_task": {}}}], "validation": {"passed": True}}
     manager_flow.state.config = test_config
@@ -149,7 +151,7 @@ async def test_output_configuration(manager_flow):
 
 
 @pytest.mark.asyncio
-async def test_parse_config_skeleton(manager_flow):
+async def test_parse_config_skeleton(manager_flow: ManagerInitFlow):
     """测试配置骨架解析"""
     raw_config = """
     {
@@ -188,7 +190,9 @@ async def test_parse_config_skeleton(manager_flow):
 
 
 @pytest.mark.asyncio
-async def test_full_flow_execution(manager_flow, mock_default_configs):
+async def test_full_flow_execution(
+    manager_flow: ManagerInitFlow, mock_default_configs: tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]
+):
     """测试完整流程执行"""
     default_agents, default_tasks = mock_default_configs
 

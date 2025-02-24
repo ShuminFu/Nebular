@@ -1,17 +1,27 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Set, Optional, List, Callable, Awaitable
 from uuid import UUID
 
 from src.core.task_utils import BotTask, TaskStatus
 
+@dataclass
+class VersionMeta:
+    parent_version: Optional[str]  # 父版本ID
+    modified_files: List[str]  # 本次涉及的的文件路径url
+    description: str  # 修改原因/用户反馈/任务描述
+    current_files: List[str]  # 当前版本的完整文件路径url列表
+
+
+# TODO:delta changes fields for diff modification such as line 1-20
 
 @dataclass
 class TopicInfo:
     """主题信息"""
     tasks: Set[UUID]  # 任务ID集合
-    type: str        # 主题类型
-    status: str      # 主题状态
-    opera_id: str    # Opera ID
+    type: str  # 主题类型
+    status: str  # 主题状态
+    opera_id: str  # Opera ID
+    version_tree: List[VersionMeta] = field(default_factory=list)  # 新增版本历史
 
 
 # 定义回调类型
@@ -37,10 +47,7 @@ class TopicTracker:
 
         if task.topic_id not in self.topics:
             self.topics[task.topic_id] = TopicInfo(
-                tasks=set(),
-                type=task.topic_type,
-                status='active',
-                opera_id=task.parameters.get('opera_id')
+                tasks=set(), type=task.topic_type, status="active", opera_id=task.parameters.get("opera_id"), version_tree=[]
             )
             self._completed_tasks[task.topic_id] = set()
 

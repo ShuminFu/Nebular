@@ -4,7 +4,7 @@
 主要用于CrewManager和CrewRunner的对话处理和任务管理的桥接。
 """
 
-from typing import Set, Dict, Optional, Union, List
+from typing import Set, Dict, Optional, Union, List, TYPE_CHECKING
 from uuid import UUID
 import json
 import re
@@ -16,8 +16,12 @@ from src.core.dialogue.enums import DialoguePriority, DialogueType, ProcessingSt
 from src.core.task_utils import BotTask, BotTaskQueue, TaskType, TaskPriority
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
 from src.core.parser.code_resource_parser import CodeResourceParser
-from src.core.crew_process import CrewProcessInfo
 from src.crewai_ext.crew_bases.cr_matcher_crewbase import CRMatcherCrew
+
+if TYPE_CHECKING:
+    from src.core.crew_process import CrewProcessInfo
+
+
 class IntentMind:
     """Bot的意图处理器
 
@@ -28,7 +32,7 @@ class IntentMind:
     4. 识别和处理代码资源
     """
 
-    def __init__(self, task_queue: BotTaskQueue, crew_processes: Optional[Dict[UUID, CrewProcessInfo]] = None):
+    def __init__(self, task_queue: BotTaskQueue, crew_processes: Optional[Dict[UUID, "CrewProcessInfo"]] = None):
         self.dialogue_pool = DialoguePool()
         self.task_queue = task_queue  # 使用外部传入的任务队列
         self.crew_processes = crew_processes
@@ -342,7 +346,6 @@ class IntentMind:
                 tasks = []
                 for resource in resources:
                     # 选择合适的CR来处理代码生成任务
-                    # TODO: 应该是try，catch，如果选择失败，则默认为自身的staff_id
                     selected_cr = self._select_code_resource_handler(dialogue, code_details)
 
                     # 获取相关对话的内容
