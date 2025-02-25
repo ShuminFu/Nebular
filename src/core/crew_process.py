@@ -377,9 +377,19 @@ class CrewManager(BaseCrewProcess):
     async def _process_task(self, task: BotTask):
         """处理任务，包括主题任务跟踪"""
         # 1. 处理需要转发的任务
-        if task.response_staff_id in self.crew_processes:
-            cr_process = self.crew_processes[task.response_staff_id]
-            await self._update_cr_task_queue(cr_process.bot_id, task)
+        cr_for_task = None
+        for cr_bot_id, cr_info in self.crew_processes.items():
+            # 遍历每个CR的所有opera中的staff_ids
+            for opera_id, staff_ids in cr_info.staff_ids.items():
+                if task.response_staff_id in staff_ids:
+                    cr_for_task = cr_info
+                    break
+            if cr_for_task:
+                break
+
+        # 找到CR后转发任务
+        if cr_for_task:
+            await self._update_cr_task_queue(cr_for_task.bot_id, task)
             return
 
         # 2. 处理资源创建任务
@@ -471,6 +481,35 @@ class CrewManager(BaseCrewProcess):
             task_data = task.model_dump(by_alias=True)
             task_data["sourceStaffId"] = str(cm_staff_id)
 
+            # 首先获取CR的当前信息
+            get_result = _SHARED_BOT_TOOL.run(
+                action="get",
+                bot_id=cr_bot_id,
+                data=None,
+            )
+
+            # 检查获取结果
+            status_code, bot_data = ApiResponseParser.parse_response(get_result)
+            if status_code != 200 or not bot_data:
+                self.log.error(f"获取CrewRunner {cr_bot_id} 的信息失败")
+                return
+
+            # 解析现有的default_tags
+            current_default_tags = {}
+            if bot_data.get("defaultTags"):
+                try:
+                    current_default_tags = json.loads(bot_data["defaultTags"])
+                except json.JSONDecodeError:
+                    self.log.warning(f"解析CrewRunner {cr_bot_id} 的default_tags失败，将创建新的default_tags")
+
+            # 更新TaskStates字段
+            task_state = PersistentTaskState.from_bot_task(task).model_dump(by_alias=True)
+            if "TaskStates" not in current_default_tags:
+                current_default_tags["TaskStates"] = [task_state]
+            else:
+                # 添加新任务状态
+                current_default_tags["TaskStates"].append(task_state)
+
             # 使用Bot API更新CR的DefaultTags
             result = _SHARED_BOT_TOOL.run(
                 action="update",
@@ -482,7 +521,7 @@ class CrewManager(BaseCrewProcess):
                     is_call_shell_on_opera_started_updated=False,
                     call_shell_on_opera_started=None,
                     is_default_tags_updated=True,
-                    default_tags=json.dumps({"TaskStates": [PersistentTaskState.from_bot_task(task).model_dump(by_alias=True)]}),
+                    default_tags=json.dumps(current_default_tags),
                     is_default_roles_updated=False,
                     default_roles=None,
                     is_default_permissions_updated=False,

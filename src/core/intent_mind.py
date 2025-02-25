@@ -173,20 +173,23 @@ class IntentMind:
             
             # 遍历所有CrewProcess查找匹配opera_id的配置
             for process_info in self.crew_processes.values():
-                if dialogue.opera_id in process_info.opera_ids:
-                    # 获取该opera_id对应的staff列表
-                    staff_id = process_info.staff_ids.get(dialogue.opera_id[0], None)
+                staff_ids = process_info.staff_ids.get(str(dialogue.opera_id), [])
+                if staff_ids:
+                    staff_id = staff_ids[0]  # 或者使用其他方式选择一个合适的staff_id
                     crew_config = process_info.crew_config["agents"]
-                    if staff_id:
-                        candidate_staff = f"{staff_id}:{crew_config}"
-                        candidate_staffs.append(candidate_staff)
-            
-            if candidate_staff:
-                result = CRMatcherCrew.kickoff(inputs={
-                    "code_details": code_details,
-                    "candidate_staffs": candidate_staffs,
-                })
-                selected_cr = json.loads(result.raw)
+                    candidate_staff = f"{staff_id}:{crew_config}"
+                    candidate_staffs.append(candidate_staff)
+
+            if candidate_staffs:
+                # Create an instance of CRMatcherCrew before calling crew()
+                matcher_crew = CRMatcherCrew()
+                result = matcher_crew.crew().kickoff(
+                    inputs={
+                        "code_details": code_details,
+                        "candidate_staffs": candidate_staffs,
+                    }
+                )
+                selected_cr = json.loads(result.raw)["selected_cr"]
                 return UUID(selected_cr)
         else:    
             # 获取所有可能的CR（排除CM自己）
@@ -327,8 +330,6 @@ class IntentMind:
         elif dialogue.type == DialogueType.CODE_RESOURCE:
             # 从intent_analysis中获取代码生成相关信息
             if dialogue.intent_analysis and dialogue.intent_analysis.parameters.get("is_code_request"):
-                task_type = TaskType.RESOURCE_GENERATION
-                task_priority = TaskPriority.HIGH
                 code_details = dialogue.intent_analysis.parameters.get("code_details", {})
 
                 # 获取需要生成的文件列表
@@ -343,10 +344,23 @@ class IntentMind:
                             ),
                             "type": code_details.get("type", "python"),
                             "mime_type": "text/x-python",
+                            # 默认情况下不设置action字段，表示非迭代任务
                         }
                     ]
 
-                # 为每个文件创建独立的CODE_GENERATION任务
+                # 判断是迭代操作还是直接生成操作
+                has_iteration = False
+                for resource in resources:
+                    # 检查是否存在action字段，如果存在则为迭代任务
+                    if "action" in resource:
+                        has_iteration = True
+                        break
+
+                # 根据操作类型选择任务类型
+                task_type = TaskType.RESOURCE_ITERATION if has_iteration else TaskType.RESOURCE_GENERATION
+                task_priority = TaskPriority.HIGH
+
+                # 为每个文件创建独立的任务
                 tasks = []
                 for resource in resources:
                     # 选择合适的CR来处理代码生成任务
@@ -368,39 +382,53 @@ class IntentMind:
                                     else None,
                                 })
 
-                    task = BotTask(
-                        type=TaskType.RESOURCE_GENERATION,
-                        priority=TaskPriority.HIGH,
-                        description=f"生成代码文件: {resource['file_path']}",
-                        parameters={
-                            "file_path": resource["file_path"],
-                            "file_type": resource["type"],
-                            "mime_type": resource["mime_type"],
-                            "description": resource.get("description", ""),
-                            "references": resource.get("references", []),
-                            "code_details": {  # 保留完整的代码细节，便于上下文理解
-                                "project_type": code_details.get("project_type"),
-                                "project_description": code_details.get("project_description"),
-                                "requirements": code_details.get("requirements", []),
-                                "frameworks": code_details.get("frameworks", []),
-                                "resources": resources,  # 包含所有资源信息，便于理解文件间关系
-                            },
-                            "dialogue_context": {
-                                "text": dialogue.text,
-                                "type": dialogue.type.name,
-                                "tags": dialogue.tags,
-                                "intent": dialogue.intent_analysis.model_dump() if dialogue.intent_analysis else None,
-                                "stage_index": dialogue.context.stage_index,
-                                "related_dialogue_indices": list(dialogue.context.related_dialogue_indices),
-                                "conversation_state": dialogue.context.conversation_state,
-                                "flow": dialogue.context.conversation_state.get("flow", {}),
-                                "code_context": dialogue.context.conversation_state.get("code_context", {}),
-                                "decision_points": dialogue.context.conversation_state.get("decision_points", []),
-                                "related_dialogues": related_dialogues,
-                            },
-                            "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None,
-                            "parent_topic_id": "0",
+                    # 获取版本ID作为父级话题ID
+                    version_id = parse_version_id(self._parse_tags(dialogue.tags)) if has_iteration else "0"
+
+                    # 处理任务参数，只有迭代任务才添加action相关字段
+                    task_params = {
+                        "file_path": resource["file_path"],
+                        "file_type": resource["type"],
+                        "mime_type": resource["mime_type"],
+                        "description": resource.get("description", ""),
+                        "references": resource.get("references", []),
+                        "code_details": {  # 保留完整的代码细节，便于上下文理解
+                            "project_type": code_details.get("project_type"),
+                            "project_description": code_details.get("project_description"),
+                            "requirements": code_details.get("requirements", []),
+                            "frameworks": code_details.get("frameworks", []),
+                            "resources": resources,  # 包含所有资源信息，便于理解文件间关系
                         },
+                        "dialogue_context": {
+                            "text": dialogue.text,
+                            "type": dialogue.type.name,
+                            "tags": dialogue.tags,
+                            "intent": dialogue.intent_analysis.model_dump() if dialogue.intent_analysis else None,
+                            "stage_index": dialogue.context.stage_index,
+                            "related_dialogue_indices": list(dialogue.context.related_dialogue_indices),
+                            "conversation_state": dialogue.context.conversation_state,
+                            "flow": dialogue.context.conversation_state.get("flow", {}),
+                            "code_context": dialogue.context.conversation_state.get("code_context", {}),
+                            "decision_points": dialogue.context.conversation_state.get("decision_points", []),
+                            "related_dialogues": related_dialogues,
+                        },
+                        "opera_id": str(dialogue.opera_id) if dialogue.opera_id else None,
+                        "parent_topic_id": version_id,
+                    }
+
+                    # 只有迭代任务才添加action相关字段
+                    if has_iteration:
+                        task_params.update({
+                            "action": resource.get("action", "create"),  # 操作类型
+                            "position": resource.get("position", "全部"),  # 修改位置
+                            "resource_id": resource.get("resource_id", ""),  # 资源ID
+                        })
+
+                    task = BotTask(
+                        type=task_type,
+                        priority=TaskPriority.HIGH,
+                        description=f"{'迭代' if has_iteration else '生成'}代码文件: {resource['file_path']}",
+                        parameters=task_params,
                         source_dialogue_index=dialogue.dialogue_index,
                         source_staff_id=dialogue.sender_staff_id,
                         response_staff_id=selected_cr
@@ -450,16 +478,16 @@ class IntentMind:
                     "code_content": code_content.strip(),  # 确保去除首尾空白字符
                 })
 
-        elif dialogue.type == DialogueType.ITERATION:
-            # 从tags中解析version_id作为父级话题ID
-            version_id = parse_version_id(self._parse_tags(dialogue.tags))
-            
-            task_parameters.update({
-                "parent_topic_id": version_id,
-                "text": dialogue.text,
-                "tags": dialogue.tags
-            })
-            task_type = TaskType.RESOURCE_ITERATION
+        # elif dialogue.type == DialogueType.ITERATION:
+        #     # 从tags中解析version_id作为父级话题ID
+        #     version_id = parse_version_id(self._parse_tags(dialogue.tags))
+
+        #     task_parameters.update({
+        #         "parent_topic_id": version_id,
+        #         "text": dialogue.text,
+        #         "tags": dialogue.tags
+        #     })
+        #     task_type = TaskType.RESOURCE_ITERATION
         elif dialogue.type == DialogueType.SYSTEM:
             task_type = TaskType.SYSTEM
         elif dialogue.type in [DialogueType.WHISPER, DialogueType.MENTION]:

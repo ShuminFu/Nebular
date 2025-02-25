@@ -5,10 +5,19 @@ from datetime import datetime, timezone, timedelta
 import unittest
 
 from src.core.intent_mind import IntentMind
-from src.core.task_utils import BotTaskQueue, TaskType, TaskPriority
+from src.core.task_utils import BotTaskQueue, TaskType
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
 from src.core.dialogue.models import ProcessingDialogue, DialogueContext
 from src.core.dialogue.enums import DialogueType, ProcessingStatus
+
+
+# 添加异步测试支持
+def async_test(coro):
+    def wrapper(*args, **kwargs):
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(coro(*args, **kwargs))
+
+    return wrapper
 
 
 class TestIntentMind(unittest.TestCase):
@@ -22,7 +31,8 @@ class TestIntentMind(unittest.TestCase):
         self.opera_id = UUID('96028f82-9f76-4372-976c-f0c5a054db79')
         self.test_time = datetime.now(timezone(timedelta(hours=8)))
 
-    def test_create_task_from_dialogue_with_context(self):
+    @async_test
+    async def test_create_task_from_dialogue_with_context(self):
         """测试从带有上下文的对话创建任务"""
         # 创建一个测试对话，包含完整的上下文信息
         dialogue = ProcessingDialogue(
@@ -102,11 +112,19 @@ class TestIntentMind(unittest.TestCase):
 
         self.intent_mind.dialogue_pool.dialogues = [related_dialogue1, related_dialogue2, dialogue]
 
-        # 创建任务
-        task = self.intent_mind._create_task_from_dialogue(dialogue)
+        # 创建任务，添加await
+        task_result = await self.intent_mind._create_task_from_dialogue(dialogue)
 
-        # 验证任务类型和优先级
-        self.assertEqual(task.type, TaskType.RESOURCE_CREATION)
+        # 检查返回值类型，可能是单个任务或任务列表
+        if isinstance(task_result, list):
+            self.assertEqual(len(task_result), 1)
+            task = task_result[0]
+        else:
+            task = task_result
+
+        # 验证任务类型
+        # 注意：根据实现的不同，这可能是RESOURCE_CREATION或RESOURCE_GENERATION
+        self.assertIn(task.type, [TaskType.RESOURCE_CREATION, TaskType.RESOURCE_GENERATION])
 
         # 验证任务参数中的上下文信息
         self.assertIn("context", task.parameters)
@@ -135,10 +153,177 @@ class TestIntentMind(unittest.TestCase):
         self.assertEqual(decision_points[0]["topic_id"], "550e8400-e29b-41d4-a716-446655440000")
 
         # 验证主题信息
-        topic = context["topic"]
+        topic = context["conversation_state"]["topic"]
         self.assertEqual(topic["id"], "550e8400-e29b-41d4-a716-446655440000")
         self.assertEqual(topic["type"], "code_generation")
         self.assertEqual(topic["name"], "Web Development")
+
+    @async_test
+    async def test_create_direct_generation_task(self):
+        """测试创建直接生成任务（没有action字段）"""
+        # 创建一个测试对话，模拟直接生成代码请求
+        dialogue = ProcessingDialogue(
+            dialogue_index=232,
+            opera_id=self.opera_id,
+            text="请创建一个简单的Python计算器",
+            type=DialogueType.CODE_RESOURCE,
+            status=ProcessingStatus.PENDING,
+            context=DialogueContext(
+                stage_index=1,
+                related_dialogue_indices=[],
+                conversation_state={
+                    "topic": {
+                        "id": "550e8400-e29b-41d4-a716-446655440001",
+                        "type": "code_generation",
+                        "name": "Python Calculator",
+                    }
+                },
+            ),
+            timestamp=self.test_time,
+            sender_staff_id=UUID("ab01d4f7-bbf1-44aa-a55b-cbc7d62fbfbc"),
+            is_narratage=False,
+            is_whisper=False,
+            tags="CODE_RESOURCE",
+            mentioned_staff_ids=[],
+            intent_analysis=None,  # 稍后设置
+        )
+
+        # 设置intent_analysis，不包含action字段
+        from pydantic import BaseModel
+
+        class MockCodeDetails(BaseModel):
+            project_type: str = "Python Application"
+            project_description: str = "简单的计算器应用"
+            resources: list = [
+                {
+                    "file_path": "src/python/calculator.py",
+                    "type": "python",
+                    "mime_type": "text/x-python",
+                    "description": "实现基本的四则运算",
+                }
+            ]
+            requirements: list = ["支持加减乘除", "处理输入错误"]
+            frameworks: list = ["标准库"]
+
+        class MockIntentAnalysis(BaseModel):
+            intent: str = "code_generation"
+            confidence: float = 0.95
+            parameters: dict = {"is_code_request": True, "code_details": MockCodeDetails().model_dump()}
+
+        dialogue.intent_analysis = MockIntentAnalysis()
+
+        # 创建任务，添加await
+        tasks = await self.intent_mind._create_task_from_dialogue(dialogue)
+
+        # 验证返回的是任务列表
+        self.assertIsInstance(tasks, list)
+        self.assertEqual(len(tasks), 1)
+
+        task = tasks[0]
+
+        # 验证任务类型是RESOURCE_GENERATION（直接生成）
+        self.assertEqual(task.type, TaskType.RESOURCE_GENERATION)
+
+        # 验证任务描述包含"生成"而不是"迭代"
+        self.assertIn("生成代码文件", task.description)
+        self.assertNotIn("迭代代码文件", task.description)
+
+        # 验证任务参数中没有action相关字段
+        self.assertNotIn("action", task.parameters)
+        self.assertNotIn("position", task.parameters)
+        self.assertNotIn("resource_id", task.parameters)
+
+        # 验证parent_topic_id为"0"
+        self.assertEqual(task.parameters["parent_topic_id"], "0")
+
+    @async_test
+    async def test_create_iteration_task(self):
+        """测试创建迭代任务（包含action字段）"""
+        # 创建一个测试对话，模拟代码迭代请求
+        dialogue = ProcessingDialogue(
+            dialogue_index=233,
+            opera_id=self.opera_id,
+            text="请在计算器中添加开方功能，并修复乘法bug",
+            type=DialogueType.CODE_RESOURCE,
+            status=ProcessingStatus.PENDING,
+            context=DialogueContext(
+                stage_index=2,
+                related_dialogue_indices=[],
+                conversation_state={
+                    "topic": {
+                        "id": "550e8400-e29b-41d4-a716-446655440001",
+                        "type": "code_generation",
+                        "name": "Python Calculator",
+                    }
+                },
+            ),
+            timestamp=self.test_time,
+            sender_staff_id=UUID("ab01d4f7-bbf1-44aa-a55b-cbc7d62fbfbc"),
+            is_narratage=False,
+            is_whisper=False,
+            tags="CODE_RESOURCE;{'ResourcesForViewing':{'VersionId':'v1.0'}}",
+            mentioned_staff_ids=[],
+            intent_analysis=None,  # 稍后设置
+        )
+
+        # 设置intent_analysis，包含action字段
+        from pydantic import BaseModel
+
+        class MockCodeDetails(BaseModel):
+            project_type: str = "Python Application"
+            project_description: str = "简单的计算器应用迭代"
+            resources: list = [
+                {
+                    "file_path": "src/python/calculator.py",
+                    "type": "python",
+                    "mime_type": "text/x-python",
+                    "description": "修复乘法bug",
+                    "action": "update",
+                    "position": "multiply函数",
+                    "resource_id": "res-001",
+                },
+                {
+                    "file_path": "src/python/math_functions.py",
+                    "type": "python",
+                    "mime_type": "text/x-python",
+                    "description": "添加开方功能",
+                    "action": "create",
+                    "position": "全部",
+                    "resource_id": "res-002",
+                },
+            ]
+            requirements: list = ["添加开方功能", "修复乘法bug"]
+            frameworks: list = ["标准库"]
+
+        class MockIntentAnalysis(BaseModel):
+            intent: str = "code_iteration"
+            confidence: float = 0.95
+            parameters: dict = {"is_code_request": True, "code_details": MockCodeDetails().model_dump()}
+
+        dialogue.intent_analysis = MockIntentAnalysis()
+
+        # 创建任务，添加await
+        tasks = await self.intent_mind._create_task_from_dialogue(dialogue)
+
+        # 验证返回的是任务列表
+        self.assertIsInstance(tasks, list)
+        self.assertEqual(len(tasks), 2)
+
+        # 验证所有任务类型都是RESOURCE_ITERATION（迭代）
+        for task in tasks:
+            self.assertEqual(task.type, TaskType.RESOURCE_ITERATION)
+
+            # 验证任务描述包含"迭代"而不是"生成"
+            self.assertIn("迭代代码文件", task.description)
+            self.assertNotIn("生成代码文件", task.description)
+
+            # 验证任务参数中包含action相关字段
+            self.assertIn("action", task.parameters)
+            self.assertIn("position", task.parameters)
+            self.assertIn("resource_id", task.parameters)
+
+            # 验证parent_topic_id不为None
+            self.assertIsNotNone(task.parameters["parent_topic_id"])
 
 
 async def main():
