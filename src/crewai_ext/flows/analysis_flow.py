@@ -1,4 +1,4 @@
-from crewai.flow.flow import Flow, listen, start, router, or_
+from crewai.flow.flow import Flow, listen, start, router, or_, and_  # noqa
 from typing import Dict, Set
 from pydantic import BaseModel
 from src.core.dialogue.enums import DialogueType
@@ -11,15 +11,18 @@ from src.crewai_ext.crew_bases.analyzers_crewbase import (
     IntentAnalysisInputs,
     ContextAnalysisInputs,
 )
+from src.crewai_ext.crew_bases.resource_iteration_crewbase import IterationAnalyzerCrew, IterationAnalysisInputs
 from src.core.logger_config import get_logger, get_logger_with_trace_id
 
 logger = get_logger(__name__, log_file="logs/analysis_flow.log")
+
 
 # 在AnalysisFlow类之前添加状态模型
 class AnalysisState(BaseModel):
     intent_flag: bool = False
     intent_analysis: IntentAnalysis = None
     related_indices: Set[int] = set()
+    iteration_flag: bool = False
 
 
 class AnalysisFlow(Flow[AnalysisState]):
@@ -44,6 +47,7 @@ class AnalysisFlow(Flow[AnalysisState]):
         # 初始化分析器
         self.intent_crew = IntentAnalyzerCrew()
         self.context_crew = ContextAnalyzerCrew()
+        self.iteration_crew = IterationAnalyzerCrew()
         self.log = get_logger_with_trace_id()
 
     @start()
@@ -59,21 +63,35 @@ class AnalysisFlow(Flow[AnalysisState]):
         Returns:
             IntentAnalysis: 意图分析结果
         """
-        # 准备意图分析输入
-        intent_inputs = IntentAnalysisInputs(
-            text=self.dialogue.text,
-            type=self.dialogue.type.name,
-            is_narratage=self.dialogue.is_narratage,
-            is_whisper=self.dialogue.is_whisper,
-            tags=self.dialogue.tags,
-            mentioned_staff_bools=bool(self.dialogue.mentioned_staff_ids),
-            opera_id=str(self.dialogue.opera_id) if self.dialogue.opera_id else None,
-            dialogue_index=self.dialogue.dialogue_index,
-            stage_index=self.dialogue.context.stage_index if self.dialogue.context else None,
-        )
-        self.log.info(f"意图分析输入: {intent_inputs.model_dump()}")
-        # 执行意图分析
-        result = await self.intent_crew.crew().kickoff_async(inputs=intent_inputs.model_dump())
+        # 判断对话类型决定使用哪个分析器
+        if self.dialogue.type == DialogueType.ITERATION:
+            # 使用迭代分析器
+            self.state.iteration_flag = True
+            # 准备迭代分析输入
+            iteration_inputs = IterationAnalysisInputs(
+                iteration_requirement=self.dialogue.text,
+                resource_list=self.dialogue.mentioned_staff_ids,
+            )
+            self.log.info(f"迭代分析输入: {iteration_inputs.model_dump()}")
+            # 执行迭代分析
+            result = await self.iteration_crew.crew().kickoff_async(inputs=iteration_inputs.model_dump())
+        else:
+            # 使用标准意图分析器
+            # 准备意图分析输入
+            intent_inputs = IntentAnalysisInputs(
+                text=self.dialogue.text,
+                type=self.dialogue.type.name,
+                is_narratage=self.dialogue.is_narratage,
+                is_whisper=self.dialogue.is_whisper,
+                tags=self.dialogue.tags,
+                mentioned_staff_bools=bool(self.dialogue.mentioned_staff_ids),
+                opera_id=str(self.dialogue.opera_id) if self.dialogue.opera_id else None,
+                dialogue_index=self.dialogue.dialogue_index,
+                stage_index=self.dialogue.context.stage_index if self.dialogue.context else None,
+            )
+            self.log.info(f"意图分析输入: {intent_inputs.model_dump()}")
+            # 执行意图分析
+            result = await self.intent_crew.crew().kickoff_async(inputs=intent_inputs.model_dump())
 
         # 解析结果并更新对话的意图分析
         intent_analysis = self._parse_intent_result(result.raw)

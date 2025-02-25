@@ -491,8 +491,8 @@ class IntentMind:
 
         return task
 
-    async def _process_single_message(self, message: MessageReceivedArgs) -> Optional[int]:
-        """处理单个对话
+    async def _preprocess_message(self, message: MessageReceivedArgs) -> Optional[int]:
+        """处理单个对话, 这一步步骤主要是确定对话的优先级和类型, 并创建ProcessingDialogue对象加入对话池。
 
         Args:
             message: MessageReceivedArgs对象
@@ -508,7 +508,7 @@ class IntentMind:
         processing_dialogue = ProcessingDialogue.from_message_args(message, priority=priority, dialogue_type=dialogue_type)
 
         # 如果是DIRECT_CREATION类型，直接返回None，不添加到对话池
-        if dialogue_type == DialogueType.DIRECT_CREATION or dialogue_type == DialogueType.ITERATION:
+        if dialogue_type == DialogueType.DIRECT_CREATION:
             return None
 
         # 添加到对话池
@@ -524,9 +524,10 @@ class IntentMind:
 
     async def process_message(self, message: MessageReceivedArgs) -> None:
         """处理单个MessageReceivedArgs消息"""
-        dialogue_index = await self._process_single_message(message)
+        # 1. 预处理对话
+        dialogue_index = await self._preprocess_message(message)
 
-        # 特定的对话类型没有加入对话池的返回值，直接创建任务并添加到队列
+        # 捷径：特定的对话类型没有加入对话池的返回值，直接创建任务并添加到队列
         if dialogue_index is None:
             # 创建临时ProcessingDialogue用于任务创建
             priority = self._determine_dialogue_priority(message)
@@ -536,10 +537,10 @@ class IntentMind:
             await self.task_queue.add_task(task)
             return
 
-        # 分析对话 - 使用DialoguePool的分析器
+        # 2. 分析对话 - analysis flow
         await self.dialogue_pool.analyze_dialogues()
 
-        # 从对话池中获取已分析的对话来创建任务
+        # 3. 创建任务, 从对话池中获取对话来创建任务
         analyzed_dialogue = self.dialogue_pool.get_dialogue(dialogue_index)
         if analyzed_dialogue and analyzed_dialogue.status == ProcessingStatus.PENDING:
             task = await self._create_task_from_dialogue(analyzed_dialogue)

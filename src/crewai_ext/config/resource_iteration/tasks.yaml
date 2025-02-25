@@ -7,16 +7,27 @@ task_decomposition_task:
     4. 保持文件完整性（返回完整文件内容）
 
   expected_output: |
-    {
-        "tasks": [
-            {
-                "file_path": "文件路径（如src/utils/helper.py）",
-                "action": "create|update|delete",
-                "resource_id": "资源ID",
-                "position": "如果是修改，指出有问题的修改位置。如果是新增或者删除则为全部",
-                "task_description": "针对任务需求，要对这个资源进行怎样的操作和改动的描述",
-            },
-            // ... 其他任务
-        ]
-    }
+    {{
+        "intent": "resource_iteration", 
+        "reason": "基于迭代需求的资源修改任务",
+        "is_code_request": true/false,
+        "code_details": {{
+            "project_type": "迭代项目",
+            "project_description": "基于迭代需求对多个资源进行修改",
+            "resources": [
+                {{
+                    "file_path": "文件路径（如/src/html/index.html）",
+                    "type": "根据文件扩展名确定类型如html",
+                    "mime_type": "根据文件类型确定（如text/html）",
+                    "description": "针对任务需求，要对这个资源进行怎样的操作和改动的描述",
+                    "action": "create|update|delete",
+                    "resource_id": "资源ID",
+                    "position": "如果是修改，指出有问题的修改位置。如果是新增或者删除则为全部"
+                }},
+                // ... 其他资源
+            ],
+            "requirements": ["从迭代需求中提取的核心要求1", "核心要求2"],
+            "frameworks": ["涉及到的框架"]
+        }}
+    }}
   agent: task_decomposer

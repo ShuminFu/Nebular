@@ -130,15 +130,15 @@ class DialoguePool(CamelBaseModel):
         """分析对话关联性并附加上下文
 
         使用CrewAI实现的对话分析器来：
-        1. 识别对话意图 summary:str
-        2. 分析上下文关联 related_indices:List[int]
+        1. 识别对话意图
+        2. 分析上下文关联
         3. 确保Opera隔离
 
         Args:
             target_opera_id: 可选的目标Opera ID。如果指定，只分析该Opera的对话。
         """
         now = datetime.now(timezone(timedelta(hours=8)))
-        from src.core.dialogue.analysis_flow import AnalysisFlow
+        from src.crewai_ext.flows.analysis_flow import AnalysisFlow
 
         # 按Opera分组处理对话
         opera_groups: Dict[UUID, List[ProcessingDialogue]] = {}
