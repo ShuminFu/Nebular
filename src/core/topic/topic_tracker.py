@@ -97,7 +97,7 @@ class TopicTracker:
         if topic.tasks == self._completed_tasks[topic_id]:
             # 通知所有回调
             for callback in self._completion_callbacks:
-                await callback(topic_id, topic.type, topic.opera_id)
+                await callback(topic_id, topic.opera_id)
 
             # 更新主题状态
             topic.status = 'completed'

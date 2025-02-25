@@ -524,6 +524,10 @@ class CrewManager(BaseCrewProcess):
             # 构建任务描述消息
             task_description = f"{task_state}"
 
+            # 添加迭代标记
+            iteration_tag = ";RESOURCE_ITERATION" if task.type == TaskType.RESOURCE_ITERATION else ""
+            task_tags = f"TASK_ASSIGNMENT;TASK_ID:{task.id}{iteration_tag}"
+
             # 创建对话消息
             dialogue_data = DialogueForCreation(
                 is_stage_index_null=False,
@@ -531,7 +535,7 @@ class CrewManager(BaseCrewProcess):
                 is_narratage=False,
                 is_whisper=True,  # 设置为私聊
                 text=task_description,
-                tags=f"TASK_ASSIGNMENT;TASK_ID:{task.id}",
+                tags=task_tags,
                 mentioned_staff_ids=[str(cr_staff_id)],  # 提及CR的staff
             )
 
@@ -613,7 +617,7 @@ class CrewManager(BaseCrewProcess):
             self.log.error(f"处理任务回调时发生错误: {str(e)}")
             raise
 
-    async def _handle_topic_completed(self, topic_id: str, topic_type: str, opera_id: str):
+    async def _handle_topic_completed(self, topic_id: str,opera_id: str):
         """处理主题完成回调
 
         当一个主题的所有任务都完成时，发送一个包含所有资源信息的对话。
