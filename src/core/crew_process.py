@@ -577,7 +577,9 @@ class CrewManager(BaseCrewProcess):
                 return True
 
             # 并发执行两个操作
-            update_success, dialogue_success = await asyncio.gather(update_default_tags(), send_dialogue())
+            update_success, dialogue_success = await asyncio.gather(send_dialogue(),
+                                                                    # update_default_tags(), 暂时不做持久化
+                                                                    )
 
             # 检查两个操作是否都成功
             if update_success and dialogue_success:
@@ -958,12 +960,12 @@ class CrewRunner(BaseCrewProcess):
                 task = BotTask(
                     id=UUID(task_id),
                     priority=task_data.get("Priority", TaskPriority.NORMAL),
-                    type=task_data.get("Type", TaskType.CONVERSATION),
+                    type=task_data.get("Type", TaskType.RESOURCE_GENERATION),
                     status=TaskStatus.PENDING,  # 任务初始状态始终为PENDING
                     description=task_data.get("Description", ""),
                     parameters=task_data.get("Parameters", {}),
                     source_dialogue_index=task_data.get("SourceDialogueIndex"),
-                    source_staff_id=task_data.get("SourceStaffId"),
+                    source_staff_id=str(message.sender_staff_id),  # 使用消息发送者的staff_id作为source_staff_id
                     response_staff_id=task_data.get("ResponseStaffId"),
                     topic_id=task_data.get("TopicId"),
                     topic_type=task_data.get("TopicType"),
