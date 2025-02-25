@@ -37,6 +37,10 @@ class IntentMind:
         self.task_queue = task_queue  # 使用外部传入的任务队列
         self.crew_processes = crew_processes
         self.staff_dialogues: Dict[UUID, Set[int]] = {}  # 记录每个Staff的对话索引
+        # 添加logger
+        from src.core.logger_config import get_logger
+
+        self.log = get_logger(__name__)
 
     def _determine_dialogue_priority(self, message: MessageReceivedArgs) -> DialoguePriority:
         """确定对话的优先级
@@ -250,11 +254,15 @@ class IntentMind:
             "tags": dialogue.tags,
             "mentioned_staff_ids": [str(id) for id in (dialogue.mentioned_staff_ids or [])],
             "dialogue_type": dialogue.type.name,
-            "intent": dialogue.intent_analysis.model_dump() if dialogue.intent_analysis else None,
+            "intent": dialogue.intent_analysis.intent if dialogue.intent_analysis else None,
             "context": {
                 "stage_index": dialogue.context.stage_index,
                 "related_dialogue_indices": list(dialogue.context.related_dialogue_indices),
-                "conversation_state": dialogue.context.conversation_state,
+                "conversation_state": {
+                    k: v
+                    for k, v in dialogue.context.conversation_state.items()
+                    if k not in ["flow", "code_context", "decision_points"]
+                },
                 "flow": dialogue.context.conversation_state.get("flow", {}),
                 "code_context": dialogue.context.conversation_state.get("code_context", {}),
                 "decision_points": dialogue.context.conversation_state.get("decision_points", []),
@@ -370,6 +378,9 @@ class IntentMind:
                     related_dialogues = []
                     if dialogue.context and dialogue.context.related_dialogue_indices:
                         for idx in dialogue.context.related_dialogue_indices:
+                            # 排除当前对话自身
+                            if idx == dialogue.dialogue_index:
+                                continue
                             related_dialogue = self.dialogue_pool.get_dialogue(idx)
                             if related_dialogue:
                                 related_dialogues.append({
@@ -403,10 +414,14 @@ class IntentMind:
                             "text": dialogue.text,
                             "type": dialogue.type.name,
                             "tags": dialogue.tags,
-                            "intent": dialogue.intent_analysis.model_dump() if dialogue.intent_analysis else None,
+                            "intent": dialogue.intent_analysis.intent if dialogue.intent_analysis else None,
                             "stage_index": dialogue.context.stage_index,
                             "related_dialogue_indices": list(dialogue.context.related_dialogue_indices),
-                            "conversation_state": dialogue.context.conversation_state,
+                            "conversation_state": {
+                                k: v
+                                for k, v in dialogue.context.conversation_state.items()
+                                if k not in ["flow", "code_context", "decision_points"]
+                            },
                             "flow": dialogue.context.conversation_state.get("flow", {}),
                             "code_context": dialogue.context.conversation_state.get("code_context", {}),
                             "decision_points": dialogue.context.conversation_state.get("decision_points", []),

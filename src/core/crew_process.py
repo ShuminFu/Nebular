@@ -522,7 +522,7 @@ class CrewManager(BaseCrewProcess):
                 return
 
             # 构建任务描述消息
-            task_description = f"请根据描述完成代码生成任务: {task_state}"
+            task_description = f"{task_state}"
 
             # 创建对话消息
             dialogue_data = DialogueForCreation(
@@ -854,6 +854,7 @@ class CrewRunner(BaseCrewProcess):
         只处理以下情况的消息：
         1. 发送者是父Bot的staff
         2. 消息是非提及对话或者提及了当前Bot
+        3. 特殊处理TASK_ASSIGNMENT标签的消息
         """
         try:
             # 获取消息的opera_id
@@ -882,19 +883,32 @@ class CrewRunner(BaseCrewProcess):
                 self.log.error(f"无法获取当前Bot在Opera {opera_id} 中的staff_id")
                 return
 
+            # 变量标记是否是私聊或提及消息
+            is_whisper_to_me = False
+            is_mentioned_me = False
+
             # 检查消息是否是私聊(whisper)
             if message.is_whisper:
                 # 如果是私聊且当前Bot在receiver_staff_ids中
                 receiver_ids = [str(id) for id in (message.receiver_staff_ids or [])]
                 if str(current_bot_staff_id) in receiver_ids:
                     self.log.info("收到父Bot发送的私聊消息，处理中...")
-                    await super()._handle_message(message)
-                    return
+                    is_whisper_to_me = True
 
             # 检查消息是否提及了当前Bot
             mentioned_staff_ids = [str(id) for id in (message.mentioned_staff_ids or [])]
             if str(current_bot_staff_id) in mentioned_staff_ids:
                 self.log.info("收到提及当前Bot的消息，处理中...")
+                is_mentioned_me = True
+
+            # 如果是私聊给我的或提及我的消息，再检查是否需要特殊处理
+            if is_whisper_to_me or is_mentioned_me:
+                # 特殊处理：检查是否是任务分配消息
+                if message.tags and "TASK_ASSIGNMENT" in message.tags:
+                    self.log.info("收到任务分配消息，直接处理...")
+                    await self._handle_task_assignment_message(message)
+                    return
+                # 正常处理私聊或提及消息
                 await super()._handle_message(message)
                 return
 
@@ -906,3 +920,104 @@ class CrewRunner(BaseCrewProcess):
             self.log.debug("消息不满足处理条件，跳过处理")
         except Exception as e:
             self.log.error(f"处理消息时发生错误: {str(e)}")
+
+    async def _handle_task_assignment_message(self, message: MessageReceivedArgs):
+        """处理任务分配消息，直接从消息中重构任务并加入任务队列
+
+        Args:
+            message: 包含TASK_ASSIGNMENT标签的消息
+        """
+        try:
+            # 从消息文本中提取任务信息
+            try:
+                # 解析任务数据
+                task_data = self._parse_task_str(message.text)
+
+                # 提取任务ID
+                task_id = None
+                if message.tags:
+                    # 从标签中提取task_id
+                    for tag in message.tags.split(";"):
+                        if tag.startswith("TASK_ID:"):
+                            task_id = tag.replace("TASK_ID:", "").strip()
+                            break
+
+                # 确保有任务ID
+                if not task_id and "Id" in task_data:
+                    task_id = task_data["Id"]
+
+                if not task_id:
+                    self.log.error("无法从消息中获取任务ID")
+                    return
+
+                # 创建BotTask对象
+                from uuid import UUID
+                from src.core.task_utils import BotTask, TaskType, TaskPriority, TaskStatus
+
+                # 使用任务信息创建BotTask - 状态始终设为PENDING
+                task = BotTask(
+                    id=UUID(task_id),
+                    priority=task_data.get("Priority", TaskPriority.NORMAL),
+                    type=task_data.get("Type", TaskType.CONVERSATION),
+                    status=TaskStatus.PENDING,  # 任务初始状态始终为PENDING
+                    description=task_data.get("Description", ""),
+                    parameters=task_data.get("Parameters", {}),
+                    source_dialogue_index=task_data.get("SourceDialogueIndex"),
+                    source_staff_id=task_data.get("SourceStaffId"),
+                    response_staff_id=task_data.get("ResponseStaffId"),
+                    topic_id=task_data.get("TopicId"),
+                    topic_type=task_data.get("TopicType"),
+                )
+
+                # 直接添加到任务队列
+                await self.task_queue.add_task(task)
+                self.log.info(f"已成功将任务 {task_id} 直接添加到任务队列")
+
+            except Exception as e:
+                self.log.error(f"解析任务数据失败: {str(e)}")
+                # 如果解析失败，让IntentMind尝试处理
+                await super()._handle_message(message)
+
+        except Exception as e:
+            self.log.error(f"处理任务分配消息时发生错误: {str(e)}")
+
+    def _parse_task_str(self, task_str: str) -> dict:
+        """安全地解析任务字符串为任务字典，处理枚举类型
+
+        Args:
+            task_str: 包含任务信息的字符串
+
+        Returns:
+            dict: 解析后的任务数据字典
+        """
+        from src.core.task_utils import TaskType, TaskPriority, TaskStatus
+        import re
+        import ast
+
+        try:
+            # 替换枚举值为字符串形式，以便ast.literal_eval可以解析
+            # 例如: <TaskPriority.HIGH: 3> -> "TaskPriority.HIGH"
+            enum_pattern = r"<(TaskPriority|TaskType|TaskStatus)\.([A-Z_]+): \d+>"
+            task_str_safe = re.sub(enum_pattern, r'"\1.\2"', task_str)
+
+            # 使用ast.literal_eval安全地解析字符串为字典
+            task_dict = ast.literal_eval(task_str_safe)
+
+            # 将字符串形式的枚举值转换回实际枚举
+            for key, value in task_dict.items():
+                if isinstance(value, str):
+                    if value.startswith("TaskPriority."):
+                        enum_name = value.split(".")[1]
+                        task_dict[key] = getattr(TaskPriority, enum_name)
+                    elif value.startswith("TaskType."):
+                        enum_name = value.split(".")[1]
+                        task_dict[key] = getattr(TaskType, enum_name)
+                    elif value.startswith("TaskStatus."):
+                        enum_name = value.split(".")[1]
+                        task_dict[key] = getattr(TaskStatus, enum_name)
+
+            return task_dict
+        except Exception as e:
+            self.log.error(f"解析任务字符串失败: {str(e)}")
+            # 如果解析失败，返回一个空字典
+            return {}
