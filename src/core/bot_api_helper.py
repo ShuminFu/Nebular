@@ -12,6 +12,16 @@ async def fetch_bot_data(bot_tool: BotTool, bot_id: str, log) -> dict:
     bot_info = bot_tool.run(action="get", bot_id=bot_id)
     parser = ApiResponseParser()
     _, bot_data = parser.parse_response(bot_info)
+
+    # 先解析default_tags再移除TaskStates
+    if "defaultTags" in bot_data:
+        try:
+            tags = json.loads(bot_data["defaultTags"])
+            tags.pop("TaskStates", None)  # 安全移除
+            bot_data["defaultTags"] = json.dumps(tags)
+        except json.JSONDecodeError:
+            log.warning(f"Bot {bot_id} 的defaultTags解析失败")
+
     log.info(f"获取Bot {bot_id} 信息: {bot_data}")
     return bot_data
 

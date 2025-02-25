@@ -1,6 +1,5 @@
 import unittest
 from unittest import mock
-import asyncio
 import json
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
@@ -442,9 +441,29 @@ class TestCrewManagerProcessTask(unittest.TestCase):
         # 模拟_get_cm_staff_id方法
         self.cm._get_cm_staff_id = mock.AsyncMock(return_value=UUID("cm-staff-id"))
 
-        # 模拟_SHARED_BOT_TOOL
-        with mock.patch("src.core.crew_process._SHARED_BOT_TOOL") as mock_bot_tool:
+        # 创建一个模拟的CR进程信息
+        opera_id = "99a51bfa-0b95-46e5-96b3-e3cfc021a6b2"
+        staff_id = UUID("c1541b83-4ce5-4a68-b492-596982adf71d")
+        cr_process = CrewProcessInfo(
+            process=mock.MagicMock(),
+            bot_id=cr_bot_id,
+            crew_config={},
+            opera_ids=[UUID(opera_id)],
+            roles={opera_id: [[""]]},
+            staff_ids={opera_id: [staff_id]},
+        )
+        self.cm.crew_processes = {cr_bot_id: cr_process}
+
+        # 模拟_SHARED_BOT_TOOL和_SHARED_DIALOGUE_TOOL
+        with (
+            mock.patch("src.core.crew_process._SHARED_BOT_TOOL") as mock_bot_tool,
+            mock.patch("src.core.crew_process._SHARED_DIALOGUE_TOOL") as mock_dialogue_tool,
+            mock.patch("src.core.crew_process.asyncio.gather") as mock_gather,
+        ):
+            # 设置模拟返回值
             mock_bot_tool.run.return_value = {"status": 200}
+            mock_dialogue_tool.run.return_value = {"status": 200}
+            mock_gather.side_effect = lambda *args: [True, True]  # 模拟两个操作都成功
 
             # 模拟ApiResponseParser
             with mock.patch("src.core.crew_process.ApiResponseParser") as mock_parser:
@@ -456,11 +475,84 @@ class TestCrewManagerProcessTask(unittest.TestCase):
                 # 验证_get_cm_staff_id被调用
                 self.cm._get_cm_staff_id.assert_called_once_with(task.parameters.get("opera_id"))
 
-                # 验证_SHARED_BOT_TOOL.run被调用并传入正确参数
+                # 验证asyncio.gather被调用
+                mock_gather.assert_called_once()
+
+                # 验证gather的参数是两个异步函数的调用结果
+                self.assertEqual(len(mock_gather.call_args[0]), 2)
+
+                # 验证_SHARED_BOT_TOOL.run和_SHARED_DIALOGUE_TOOL.run都被调用
                 mock_bot_tool.run.assert_called_once()
-                args = mock_bot_tool.run.call_args[1]
-                self.assertEqual(args["action"], "update")
-                self.assertEqual(args["bot_id"], cr_bot_id)
+                mock_dialogue_tool.run.assert_called_once()
+
+                # 验证_SHARED_BOT_TOOL.run的参数
+                bot_args = mock_bot_tool.run.call_args[1]
+                self.assertEqual(bot_args["action"], "update")
+                self.assertEqual(bot_args["bot_id"], cr_bot_id)
+
+                # 验证_SHARED_DIALOGUE_TOOL.run的参数
+                dialogue_args = mock_dialogue_tool.run.call_args[1]
+                self.assertEqual(dialogue_args["action"], "create")
+                self.assertEqual(dialogue_args["opera_id"], task.parameters.get("opera_id"))
+
+                # 验证日志记录
+                self.cm.log.info.assert_called_with(f"已成功将任务 {task.id} 分配给CrewRunner {cr_bot_id}")
+
+    async def test_update_cr_task_queue_partial_failure(self):
+        """测试_update_cr_task_queue方法处理部分失败的情况"""
+        # 模拟需要的方法和对象
+        cr_bot_id = UUID("test-cr-bot-id")
+        task = self.task1
+
+        # 模拟_get_cm_staff_id方法
+        self.cm._get_cm_staff_id = mock.AsyncMock(return_value=UUID("cm-staff-id"))
+
+        # 创建一个模拟的CR进程信息
+        opera_id = "99a51bfa-0b95-46e5-96b3-e3cfc021a6b2"
+        staff_id = UUID("c1541b83-4ce5-4a68-b492-596982adf71d")
+        cr_process = CrewProcessInfo(
+            process=mock.MagicMock(),
+            bot_id=cr_bot_id,
+            crew_config={},
+            opera_ids=[UUID(opera_id)],
+            roles={opera_id: [[""]]},
+            staff_ids={opera_id: [staff_id]},
+        )
+        self.cm.crew_processes = {cr_bot_id: cr_process}
+
+        # 模拟_SHARED_BOT_TOOL和_SHARED_DIALOGUE_TOOL
+        with (
+            mock.patch("src.core.crew_process._SHARED_BOT_TOOL") as mock_bot_tool,
+            mock.patch("src.core.crew_process._SHARED_DIALOGUE_TOOL") as mock_dialogue_tool,
+            mock.patch("src.core.crew_process.asyncio.gather") as mock_gather,
+        ):
+            # 设置模拟返回值
+            mock_bot_tool.run.return_value = {"status": 200}
+            mock_dialogue_tool.run.return_value = {"status": 200}
+            mock_gather.side_effect = lambda *args: [True, False]  # 模拟一个操作成功，一个失败
+
+            # 模拟ApiResponseParser
+            with mock.patch("src.core.crew_process.ApiResponseParser") as mock_parser:
+                mock_parser.parse_response.return_value = (200, {})
+
+                # 执行测试
+                await self.cm._update_cr_task_queue(cr_bot_id, task)
+
+                # 验证_get_cm_staff_id被调用
+                self.cm._get_cm_staff_id.assert_called_once_with(task.parameters.get("opera_id"))
+
+                # 验证asyncio.gather被调用
+                mock_gather.assert_called_once()
+
+                # 验证gather的参数是两个异步函数的调用结果
+                self.assertEqual(len(mock_gather.call_args[0]), 2)
+
+                # 验证_SHARED_BOT_TOOL.run和_SHARED_DIALOGUE_TOOL.run都被调用
+                mock_bot_tool.run.assert_called_once()
+                mock_dialogue_tool.run.assert_called_once()
+
+                # 验证日志记录
+                self.cm.log.warning.assert_called_with(f"任务 {task.id} 分配给CrewRunner {cr_bot_id} 部分失败")
 
 
 # 在加载文件时运行测试

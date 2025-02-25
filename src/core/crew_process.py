@@ -510,29 +510,81 @@ class CrewManager(BaseCrewProcess):
                 # 添加新任务状态
                 current_default_tags["TaskStates"].append(task_state)
 
-            # 使用Bot API更新CR的DefaultTags
-            result = _SHARED_BOT_TOOL.run(
-                action="update",
-                bot_id=cr_bot_id,
-                data=BotForUpdate(
-                    name=None,
-                    is_description_updated=False,
-                    description=None,
-                    is_call_shell_on_opera_started_updated=False,
-                    call_shell_on_opera_started=None,
-                    is_default_tags_updated=True,
-                    default_tags=json.dumps(current_default_tags),
-                    is_default_roles_updated=False,
-                    default_roles=None,
-                    is_default_permissions_updated=False,
-                    default_permissions=None,
-                ),
+            # 获取CR在当前opera中的staff_id
+            cr_staff_id = None
+            for opera_id_str, staff_ids in self.crew_processes[cr_bot_id].staff_ids.items():
+                if str(opera_id_str) == str(opera_id) and staff_ids:
+                    cr_staff_id = staff_ids[0]  # 获取第一个staff_id
+                    break
+
+            if not cr_staff_id:
+                self.log.error(f"无法获取CrewRunner {cr_bot_id} 在Opera {opera_id} 中的staff_id")
+                return
+
+            # 构建任务描述消息
+            task_description = f"请根据描述完成代码生成任务: {task_state}"
+
+            # 创建对话消息
+            dialogue_data = DialogueForCreation(
+                is_stage_index_null=False,
+                staff_id=str(cm_staff_id),
+                is_narratage=False,
+                is_whisper=True,  # 设置为私聊
+                text=task_description,
+                tags=f"TASK_ASSIGNMENT;TASK_ID:{task.id}",
+                mentioned_staff_ids=[str(cr_staff_id)],  # 提及CR的staff
             )
 
-            # 检查更新结果
-            status_code, _ = ApiResponseParser.parse_response(result)
-            if status_code not in [200, 204]:
-                self.log.error(f"更新CrewRunner {cr_bot_id} 的任务队列失败")
+            # 并发执行更新defaultTags和发送对话两个操作
+            async def update_default_tags():
+                # 使用Bot API更新CR的DefaultTags
+                result = _SHARED_BOT_TOOL.run(
+                    action="update",
+                    bot_id=cr_bot_id,
+                    data=BotForUpdate(
+                        name=None,
+                        is_description_updated=False,
+                        description=None,
+                        is_call_shell_on_opera_started_updated=False,
+                        call_shell_on_opera_started=None,
+                        is_default_tags_updated=True,
+                        default_tags=json.dumps(current_default_tags),
+                        is_default_roles_updated=False,
+                        default_roles=None,
+                        is_default_permissions_updated=False,
+                        default_permissions=None,
+                    ),
+                )
+                # 检查更新结果
+                status_code, _ = ApiResponseParser.parse_response(result)
+                if status_code not in [200, 204]:
+                    self.log.error(f"更新CrewRunner {cr_bot_id} 的任务队列失败")
+                    return False
+                return True
+
+            async def send_dialogue():
+                # 发送对话
+                dialogue_result = _SHARED_DIALOGUE_TOOL.run(
+                    action="create",
+                    opera_id=opera_id,
+                    data=dialogue_data,
+                )
+                # 检查对话发送结果
+                status_code, _ = ApiResponseParser.parse_response(dialogue_result)
+                if status_code not in [200, 201, 204]:
+                    self.log.error(f"发送任务分配对话失败: {dialogue_result}")
+                    return False
+                return True
+
+            # 并发执行两个操作
+            update_success, dialogue_success = await asyncio.gather(update_default_tags(), send_dialogue())
+
+            # 检查两个操作是否都成功
+            if update_success and dialogue_success:
+                self.log.info(f"已成功将任务 {task.id} 分配给CrewRunner {cr_bot_id}")
+            else:
+                self.log.warning(f"任务 {task.id} 分配给CrewRunner {cr_bot_id} 部分失败")
+
         except Exception as e:
             self.log.error(f"更新CrewRunner任务队列时发生错误: {str(e)}")
 
@@ -821,18 +873,36 @@ class CrewRunner(BaseCrewProcess):
                 self.log.debug(f"消息发送者 {message.sender_staff_id} 不是父Bot的staff {parent_staff_id}，跳过消息处理")
                 return
             elif not message.tags:
-                self.log.debug("消息没有包含任何tag，跳过处理")
+                self.log.debug("消息没有包含任何tag，已忽略...")
                 return
 
-            # 检查消息是否是非提及对话或者提及了当前Bot
-            mentioned_staff_ids = message.mentioned_staff_ids or []
-            is_mentioned = any(str(staff_id) == str(message.receiver_staff_ids) for staff_id in mentioned_staff_ids)
-
-            if not (len(mentioned_staff_ids) == 0 or is_mentioned):
-                self.log.debug("消息既不是非提及对话也没有提及当前Bot，跳过消息处理")
+            # 获取当前Bot的staff_id
+            current_bot_staff_id = await self._get_bot_staff_id(self.bot_id, opera_id)
+            if not current_bot_staff_id:
+                self.log.error(f"无法获取当前Bot在Opera {opera_id} 中的staff_id")
                 return
 
-            # 消息验证通过，使用与基类相同的异步处理方式
-            super()._handle_message(message)
+            # 检查消息是否是私聊(whisper)
+            if message.is_whisper:
+                # 如果是私聊且当前Bot在receiver_staff_ids中
+                receiver_ids = [str(id) for id in (message.receiver_staff_ids or [])]
+                if str(current_bot_staff_id) in receiver_ids:
+                    self.log.info("收到父Bot发送的私聊消息，处理中...")
+                    await super()._handle_message(message)
+                    return
+
+            # 检查消息是否提及了当前Bot
+            mentioned_staff_ids = [str(id) for id in (message.mentioned_staff_ids or [])]
+            if str(current_bot_staff_id) in mentioned_staff_ids:
+                self.log.info("收到提及当前Bot的消息，处理中...")
+                await super()._handle_message(message)
+                return
+
+            # 检查是否是非提及对话(公开消息)
+            if not message.mentioned_staff_ids:
+                self.log.info("收到非提及的公开消息，已忽略...")
+                return
+
+            self.log.debug("消息不满足处理条件，跳过处理")
         except Exception as e:
             self.log.error(f"处理消息时发生错误: {str(e)}")
