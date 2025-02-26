@@ -663,21 +663,7 @@ class CrewManager(BaseCrewProcess):
                     latest_tasks[file_path] = task
 
             # 构建资源列表
-            resources = []
-            html_files = []  # 存储所有HTML文件路径
-            for task in latest_tasks.values():
-                if task.result and isinstance(task.result, dict):
-                    file_path = task.parameters.get("file_path", "")
-                    resource_info = {
-                        "Url": file_path,
-                        "ResourceId": task.result.get("resource_id", ""),
-                        "ResourceCacheable": True,
-                    }
-                    resources.append(resource_info)
-
-                    # 收集HTML文件路径用于导航判断
-                    if file_path.lower().endswith(".html"):
-                        html_files.append(file_path)
+            resources, html_files = self._build_resource_list_from_tasks(latest_tasks.values())
 
             topic_info = self.topic_tracker.get_topic_info(topic_id)
 
@@ -718,13 +704,8 @@ class CrewManager(BaseCrewProcess):
                 "RemovingAllResources": True,
             }
 
-            # 只有在找到index.html时才添加NavigateIndex字段
-            if html_files:
-                # 查找index.html（精确匹配）
-                index_html = next((i for i, p in enumerate(html_files) if p.lower().endswith("/index.html") or p == "index.html"), None)
-                if index_html is not None:
-                    # 找到index.html，添加NavigateIndex字段
-                    resources_tag["ResourcesForViewing"]["NavigateIndex"] = html_files.index(html_files[index_html])
+            # 处理HTML文件导航逻辑
+            self._add_navigation_index_if_needed(resources_tag, html_files)
 
             # 创建对话消息
             dialogue_data = DialogueForCreation(
@@ -749,6 +730,55 @@ class CrewManager(BaseCrewProcess):
 
         except Exception as e:
             self.log.error(f"处理主题完成回调时发生错误: {str(e)}")
+
+    def _build_resource_list_from_tasks(self, tasks):
+        """从任务列表构建资源列表和HTML文件列表
+
+        Args:
+            tasks: 任务列表
+
+        Returns:
+            tuple: (resources列表, html_files列表)
+        """
+        resources = []
+        html_files = []  # 存储所有HTML文件路径
+
+        for task in tasks:
+            if task.result and isinstance(task.result, dict):
+                file_path = task.parameters.get("file_path", "")
+                resource_info = {
+                    "Url": file_path,
+                    "ResourceId": task.result.get("resource_id", ""),
+                    "ResourceCacheable": True,
+                }
+                resources.append(resource_info)
+
+                # 收集HTML文件路径用于导航判断
+                if file_path.lower().endswith(".html"):
+                    html_files.append(file_path)
+
+        return resources, html_files
+
+    def _add_navigation_index_if_needed(self, resources_tag, html_files):
+        """如果存在index.html文件，添加导航索引
+
+        Args:
+            resources_tag: 资源标签字典
+            html_files: HTML文件路径列表
+        """
+        if not html_files:
+            return
+
+        # 查找index.html（精确匹配）
+        index_html_position = None
+        for i, path in enumerate(html_files):
+            if path.lower().endswith("/index.html") or path.lower() == "index.html":
+                index_html_position = i
+                break
+
+        if index_html_position is not None:
+            # 找到index.html，添加NavigateIndex字段
+            resources_tag["ResourcesForViewing"]["NavigateIndex"] = index_html_position
 
 
 class CrewRunner(BaseCrewProcess):
