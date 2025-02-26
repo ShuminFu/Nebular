@@ -372,7 +372,7 @@ class IntentMind:
                 tasks = []
                 for resource in resources:
                     # 选择合适的CR来处理代码生成任务
-                    selected_cr = self._select_code_resource_handler(dialogue, code_details)
+                    selected_cr = self._select_code_resource_handler(dialogue, resource)
 
                     # 获取相关对话的内容
                     related_dialogues = []
@@ -541,7 +541,7 @@ class IntentMind:
             message: MessageReceivedArgs对象
 
         Returns:
-            Optional[int]: 对话索引，如果是DIRECT_CREATION类型则返回None
+            Optional[int]: 对话索引，如果是DIRECT_CREATION类型或task_callback标签的消息则返回None
         """
         # 确定优先级和类型
         priority = self._determine_dialogue_priority(message)
@@ -552,6 +552,11 @@ class IntentMind:
 
         # 如果是DIRECT_CREATION类型，直接返回None，不添加到对话池
         if dialogue_type == DialogueType.DIRECT_CREATION:
+            return None
+
+        # 如果消息带有task_callback标签，也直接返回None，不加入对话池，让它走快速处理路径
+        if message.tags and "task_callback" in message.tags.lower():
+            self.log.info(f"检测到task_callback标签消息 {message.index}，不加入对话池")
             return None
 
         # 添加到对话池

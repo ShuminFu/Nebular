@@ -54,6 +54,8 @@ def get_logger(name: str = None, log_file: Optional[str] = None):
             filter=lambda record: record["name"] == name
         )
 
+    # 确保总是返回一个配置好的logger实例
+    return logger.bind(trace_id=None)
 
 
 def get_logger_with_trace_id():

@@ -338,7 +338,7 @@ class BotTaskQueue(CamelBaseModel):
             self.status_counter[task.status.name.lower()] += 1
 
         # 添加任务后持久化
-        await self._persist_to_api()
+        # await self._persist_to_api()
 
     async def update_task_status(self, task_id: UUID, new_status: TaskStatus) -> None:
         """更新任务状态并维护计数器"""
@@ -365,7 +365,7 @@ class BotTaskQueue(CamelBaseModel):
                         print(f"Status callback error: {str(e)}")
 
                 # 状态更新后持久化
-                await self._persist_to_api()
+                # await self._persist_to_api()
                 break
 
     async def get_next_task(self) -> Optional[BotTask]:

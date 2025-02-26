@@ -20,7 +20,7 @@ from src.crewai_ext.crew_bases.manager_crewbase import ManagerCrew, ManagerChatC
 from src.crewai_ext.crew_bases.resource_iteration_crewbase import IterationAnalyzerCrew
 import json
 import litellm
-
+import time
 
 @dataclass
 class CrewProcessInfo:
@@ -79,6 +79,7 @@ class BaseCrewProcess(ABC):
         """运行Crew的主循环"""
         try:
             await self.setup()
+            time.sleep(3)
             while self.is_running:
                 # 并行处理连接检查和任务处理
                 await asyncio.gather(
@@ -124,7 +125,7 @@ class BaseCrewProcess(ABC):
 
     async def _handle_message(self, message: MessageReceivedArgs):
         """处理接收到的消息"""
-        self.log.info(f"收到消息: {message.text}")
+        self.log.info(f"收到消息: {message.index}")
         try:
             # 获取消息的opera_id
             opera_id = message.opera_id
@@ -142,6 +143,8 @@ class BaseCrewProcess(ABC):
             if str(message.sender_staff_id) == str(current_staff_id):
                 self.log.info("忽略自己发送的消息，避免循环")
                 return
+
+            self.log.info(f"正在处理消息: {message.text}")
 
             asyncio.create_task(self.intent_processor.process_message(message))
         except Exception as e:
@@ -377,20 +380,21 @@ class CrewManager(BaseCrewProcess):
     async def _process_task(self, task: BotTask):
         """处理任务，包括主题任务跟踪"""
         # 1. 处理需要转发的任务
-        cr_for_task = None
-        for cr_bot_id, cr_info in self.crew_processes.items():
-            # 遍历每个CR的所有opera中的staff_ids
-            for opera_id, staff_ids in cr_info.staff_ids.items():
-                if task.response_staff_id in staff_ids:
-                    cr_for_task = cr_info
+        if task.type == TaskType.RESOURCE_GENERATION:
+            cr_for_task = None
+            for cr_bot_id, cr_info in self.crew_processes.items():
+                # 遍历每个CR的所有opera中的staff_ids
+                for opera_id, staff_ids in cr_info.staff_ids.items():
+                    if task.response_staff_id in staff_ids:
+                        cr_for_task = cr_info
+                        break
+                if cr_for_task:
                     break
-            if cr_for_task:
-                break
 
-        # 找到CR后转发任务
-        if cr_for_task:
-            await self._update_cr_task_queue(cr_for_task.bot_id, task)
-            return
+            # 找到CR后转发任务
+            if cr_for_task:
+                await self._update_cr_task_queue(cr_for_task.bot_id, task)
+                return
 
         # 2. 处理资源创建任务
         if task.type == TaskType.RESOURCE_CREATION:
@@ -452,8 +456,7 @@ class CrewManager(BaseCrewProcess):
                     "resource_list": unique_resources
                 }
             )
-            
-            # TODO select CR然后分发子任务
+
             pass
 
         if task.type == TaskType.CHAT_PLANNING:
@@ -832,14 +835,18 @@ class CrewRunner(BaseCrewProcess):
                 opera_id=task.parameters.get("opera_id"),
                 data=DialogueForCreation(
                     is_stage_index_null=False,
-                    staff_id=str(task.source_staff_id),
+                    staff_id=str(task.response_staff_id),
                     is_narratage=False,
                     is_whisper=True,
                     text=json.dumps({
                         "type": TaskType.CALLBACK.value,
                         "priority": TaskPriority.URGENT.value,
                         "description": f"Callback for task {task.id}",
-                        "parameters": {"callback_task_id": str(task.id), "result": json.loads(result), "opera_id": task.parameters.get("opera_id")},
+                        "parameters": {
+                            "callback_task_id": str(task.id),
+                            "result": json.loads(result),
+                            "opera_id": task.parameters.get("opera_id"),
+                        },
                     }),
                     tags="task_callback",
                     mentioned_staff_ids=[str(task.source_staff_id)],
@@ -908,7 +915,7 @@ class CrewRunner(BaseCrewProcess):
                 is_mentioned_me = True
 
             # 如果是私聊给我的或提及我的消息，再检查是否需要特殊处理
-            if is_whisper_to_me or is_mentioned_me:
+            if is_whisper_to_me and is_mentioned_me:
                 # 特殊处理：检查是否是任务分配消息
                 if message.tags and "TASK_ASSIGNMENT" in message.tags:
                     self.log.info("收到任务分配消息，直接处理...")

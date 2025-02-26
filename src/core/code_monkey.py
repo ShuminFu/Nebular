@@ -41,11 +41,6 @@ class CodeMonkey:
         if illegal_chars.search(file_path):
             raise ValueError("文件路径包含非法字符")
 
-        # 检查目录穿越
-        normalized_path = os.path.normpath(file_path)
-        if normalized_path.startswith("..") or normalized_path.startswith("/"):
-            raise ValueError("不允许目录穿越")
-
         return True
 
     def _validate_mime_type(self, mime_type: str, file_path: str) -> bool:
