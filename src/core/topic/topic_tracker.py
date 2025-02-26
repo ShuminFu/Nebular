@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Dict, Set, Optional, List, Callable, Awaitable
 from uuid import UUID
 
-from src.core.task_utils import BotTask, TaskStatus
+from src.core.task_utils import BotTask, TaskStatus, TaskType
 
 @dataclass
 class VersionMeta:
@@ -35,6 +35,7 @@ class TopicTracker:
         self.topics: Dict[str, TopicInfo] = {}
         self._completion_callbacks: List[TopicCompletionCallback] = []
         self._completed_tasks: Dict[str, Set[UUID]] = {}  # topic_id -> completed task ids
+        self._pending_resource_tasks: Dict[UUID, str] = {}  # task_id -> file_path，存储等待resource_id的任务
 
     def on_completion(self, callback: TopicCompletionCallback):
         """注册主题完成回调"""
@@ -61,17 +62,53 @@ class TopicTracker:
         topic.tasks.add(task.id)
 
         # 处理文件路径更新
-        if (file_path := task.parameters.get("file_path")) and (resource_id := task.parameters.get("resource_id")):
-            file_entry = {"file_path": file_path, "resource_id": resource_id}
-            
-            # 更新当前版本
-            if not any(f["file_path"] == file_path for f in topic.current_version.modified_files):
-                topic.current_version.modified_files.append(file_entry)
-            if not any(f["file_path"] == file_path for f in topic.current_version.current_files):
-                topic.current_version.current_files.append(file_entry)
+        file_path = task.parameters.get("file_path")
+        resource_id = task.parameters.get("resource_id")
 
-    async def update_task_status(self, task_id: UUID, status: TaskStatus):
-        """更新任务状态并检查主题完成情况"""
+        # 对于资源创建任务，先记录file_path，等任务完成后再更新resource_id
+        if task.type == TaskType.RESOURCE_CREATION and file_path:
+            self._pending_resource_tasks[task.id] = file_path
+            # 如果已有resource_id，直接更新；否则等待任务完成后更新
+            if resource_id:
+                self._update_file_mapping(topic, file_path, resource_id)
+        # 对于非资源创建任务，直接更新file_path和resource_id的映射
+        elif file_path and resource_id:
+            self._update_file_mapping(topic, file_path, resource_id)
+
+    def _update_file_mapping(self, topic: TopicInfo, file_path: str, resource_id: str):
+        """更新文件路径与资源ID的映射关系"""
+        file_entry = {"file_path": file_path, "resource_id": resource_id}
+
+        # 更新当前版本，添加空值检查
+        if topic.current_version is not None:
+            # 检查是否已存在相同file_path的条目
+            for files_list in [topic.current_version.modified_files, topic.current_version.current_files]:
+                for i, entry in enumerate(files_list):
+                    if entry["file_path"] == file_path:
+                        # 如果存在，更新resource_id
+                        files_list[i]["resource_id"] = resource_id
+                        break
+                else:
+                    # 如果不存在，添加新条目
+                    files_list.append(file_entry)
+        else:
+            # 如果current_version为None，则初始化一个默认版本
+            topic.current_version = VersionMeta(
+                parent_version=None,
+                modified_files=[file_entry],
+                description="Auto-initialized version",
+                current_files=[file_entry],
+            )
+
+    async def update_task_status(self, task_id: UUID, status: TaskStatus, task: Optional[BotTask] = None):
+        """
+        更新任务状态并检查主题完成情况
+
+        Args:
+            task_id: 任务ID
+            status: 新状态
+            task: 可选的完整任务对象，用于获取任务结果
+        """
         # 查找任务所属的主题
         topic_id = None
         for tid, topic in self.topics.items():
@@ -81,6 +118,20 @@ class TopicTracker:
 
         if not topic_id:
             return
+
+        # 如果是资源创建任务且已完成，处理resource_id更新
+        if status == TaskStatus.COMPLETED and task_id in self._pending_resource_tasks:
+            # 通过topic_id找到任务所属的主题
+            topic = self.topics[topic_id]
+
+            # 如果传入了任务对象，直接使用
+            if task is not None:
+                if (result := task.result) and isinstance(result, dict) and (resource_id := result.get("resource_id")):
+                    file_path = self._pending_resource_tasks[task_id]
+                    # 更新文件映射
+                    self._update_file_mapping(topic, file_path, resource_id)
+                    # 从待处理列表中移除
+                    self._pending_resource_tasks.pop(task_id)
 
         # 如果任务完成，记录并检查主题是否全部完成
         if status == TaskStatus.COMPLETED:
@@ -97,7 +148,7 @@ class TopicTracker:
         if topic.tasks == self._completed_tasks[topic_id]:
             # 通知所有回调
             for callback in self._completion_callbacks:
-                await callback(topic_id, topic.opera_id)
+                await callback(topic_id, topic.type, topic.opera_id)
 
             # 更新主题状态
             topic.status = 'completed'

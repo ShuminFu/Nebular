@@ -14,7 +14,7 @@ from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TO
 from src.core.intent_mind import IntentMind
 from src.core.task_utils import BotTaskQueue, TaskType, TaskStatus, BotTask, PersistentTaskState, TaskPriority
 from src.core.code_monkey import CodeMonkey
-from src.core.topic.topic_tracker import TopicTracker
+from src.core.topic.topic_tracker import TopicTracker, VersionMeta
 from src.crewai_ext.crew_bases.runner_crewbase import RunnerCodeGenerationCrew, GenerationInputs, RunnerChatCrew
 from src.crewai_ext.crew_bases.manager_crewbase import ManagerCrew, ManagerChatCrew
 from src.crewai_ext.crew_bases.resource_iteration_crewbase import IterationAnalyzerCrew
@@ -343,8 +343,10 @@ class CrewManager(BaseCrewProcess):
 
     async def _handle_task_status_changed(self, task_id: UUID, new_status: TaskStatus):
         """处理任务状态变更"""
+        # 查找完整的任务对象
+        task = next((t for t in self.task_queue.tasks if t.id == task_id), None)
         # 更新主题追踪器
-        await self.topic_tracker.update_task_status(task_id, new_status)
+        await self.topic_tracker.update_task_status(task_id, new_status, task)
 
     async def _get_cm_staff_id(self, opera_id: str) -> Optional[UUID]:
         """获取CrewManager在指定Opera中的staff_id
@@ -430,13 +432,16 @@ class CrewManager(BaseCrewProcess):
                 try:
                     # 从主题追踪器获取版本对应资源
                     topic_info = self.topic_tracker.get_topic_info(version_id)
-                    if topic_info:
+                    if topic_info and topic_info.current_version:
                         resource_list = [
                             {
                                 "file_path": res["file_path"],
                                 "resource_id": res["resource_id"]
                             } for res in topic_info.current_version.current_files
                         ]
+                    elif topic_info:
+                        # 如果current_version为空，记录警告
+                        self.log.warning(f"主题 {version_id} 的current_version为空")
                 except Exception as e:
                     self.log.error(f"获取版本资源失败: {str(e)}")
                     await self.task_queue.update_task_status(task.id, TaskStatus.FAILED)
@@ -674,7 +679,22 @@ class CrewManager(BaseCrewProcess):
                         html_files.append(file_path)
 
             topic_info = self.topic_tracker.get_topic_info(topic_id)
-            current_version = topic_info.current_version
+
+            # 添加空值检查
+            if topic_info is None or topic_info.current_version is None:
+                # 如果current_version为空，创建一个基本版本
+                self.log.warning(f"主题 {topic_id} 的current_version为空，创建基本版本")
+                if topic_info is not None:
+                    topic_info.current_version = VersionMeta(
+                        parent_version=None, modified_files=[], description="Auto-initialized on completion", current_files=[]
+                    )
+                    current_version = topic_info.current_version
+                else:
+                    self.log.error(f"找不到主题 {topic_id} 的信息")
+                    return
+            else:
+                current_version = topic_info.current_version
+
             if len(current_version.current_files) != len(current_version.modified_files):
                 # TODO: Removing, adding or updating flag here. Hashing the files to check if there are any changes.
                 pass
