@@ -589,12 +589,13 @@ class CrewManager(BaseCrewProcess):
                 return True
 
             # 并发执行两个操作
-            update_success, dialogue_success = await asyncio.gather(send_dialogue(),
-                                                                    # update_default_tags(), 暂时不做持久化
-                                                                    )
+            # update_success, dialogue_success = await asyncio.gather(send_dialogue(),
+            #                                                         # update_default_tags(), 暂时不做持久化
+            #                                                         )
+            dialogue_success = await send_dialogue()
 
             # 检查两个操作是否都成功
-            if update_success and dialogue_success:
+            if dialogue_success:
                 self.log.info(f"已成功将任务 {task.id} 分配给CrewRunner {cr_bot_id}")
             else:
                 self.log.warning(f"任务 {task.id} 分配给CrewRunner {cr_bot_id} 部分失败")
@@ -699,12 +700,20 @@ class CrewManager(BaseCrewProcess):
                 # TODO: Removing, adding or updating flag here. Hashing the files to check if there are any changes.
                 pass
 
+            # 将VersionMeta对象转换为可序列化的字典
+            current_version_dict = {
+                "parent_version": current_version.parent_version,
+                "modified_files": current_version.modified_files,
+                "description": current_version.description,
+                "current_files": current_version.current_files,
+            }
+
             # 构建ResourcesForViewing标签的基本结构
             resources_tag = {
                 "ResourcesForViewing": {
                     "VersionId": topic_id,
                     "Resources": resources,
-                    "CurrentVersion": current_version,
+                    "CurrentVersion": current_version_dict,  # 使用字典而不是VersionMeta对象
                 },
                 "RemovingAllResources": True,
             }

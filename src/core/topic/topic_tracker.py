@@ -25,7 +25,7 @@ class TopicInfo:
 
 
 # 定义回调类型
-TopicCompletionCallback = Callable[[str, str, str], Awaitable[None]]  # topic_id, type, opera_id
+TopicCompletionCallback = Callable[[str, str], Awaitable[None]]  # topic_id, opera_id
 
 
 class TopicTracker:
@@ -148,7 +148,7 @@ class TopicTracker:
         if topic.tasks == self._completed_tasks[topic_id]:
             # 通知所有回调
             for callback in self._completion_callbacks:
-                await callback(topic_id, topic.type, topic.opera_id)
+                await callback(topic_id, topic.opera_id)
 
             # 更新主题状态
             topic.status = 'completed'
