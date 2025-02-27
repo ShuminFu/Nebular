@@ -26,7 +26,7 @@ def setup_logger(name: str = None, log_file: str = None):
     )
 
     # 设置默认trace_id
-    return logger.bind(trace_id=None)
+    return logger.bind(trace_id=str(uuid4()))
 
 
 def get_logger(name: str = None, log_file: Optional[str] = None):

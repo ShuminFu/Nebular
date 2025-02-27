@@ -22,6 +22,9 @@ class TopicInfo:
     status: str  # 主题状态
     opera_id: str  # Opera ID
     current_version: Optional[VersionMeta] = None  # 当前版本
+    expected_creation_count: int = 0  # 由generation任务预报的预期创建任务数量
+    actual_creation_count: int = 0  # 实际添加到tracker的创建任务数量
+    completed_creation_count: int = 0  # 已完成的创建任务数量
 
 
 # 定义回调类型
@@ -60,6 +63,16 @@ class TopicTracker:
 
         topic = self.topics[task.topic_id]
         topic.tasks.add(task.id)
+
+        # 更新任务计数：根据任务类型更新对应的计数器
+        if task.type == TaskType.RESOURCE_GENERATION:
+            # 对于RESOURCE_GENERATION任务，增加预期创建任务数量
+            # 可以从task.parameters中获取预期创建的文件数量，如果没有就默认加1
+            expected_files_count = task.parameters.get("expected_files_count", 1)
+            topic.expected_creation_count += expected_files_count
+        elif task.type == TaskType.RESOURCE_CREATION:
+            # 对于RESOURCE_CREATION任务，增加实际创建任务数量
+            topic.actual_creation_count += 1
 
         # 处理文件路径更新
         file_path = task.parameters.get("file_path")
@@ -119,6 +132,11 @@ class TopicTracker:
         if not topic_id:
             return
 
+        # 获取任务类型
+        task_type = None
+        if task is not None:
+            task_type = task.type
+
         # 如果是资源创建任务且已完成，处理resource_id更新
         if status == TaskStatus.COMPLETED and task_id in self._pending_resource_tasks:
             # 通过topic_id找到任务所属的主题
@@ -133,10 +151,17 @@ class TopicTracker:
                     # 从待处理列表中移除
                     self._pending_resource_tasks.pop(task_id)
 
-        # 如果任务完成，记录并检查主题是否全部完成
+        # 如果任务完成，记录并更新计数
         if status == TaskStatus.COMPLETED:
+            topic = self.topics[topic_id]
             self._completed_tasks[topic_id].add(task_id)
-            await self._check_topic_completion(topic_id)
+
+            # 如果是RESOURCE_CREATION任务，增加已完成创建任务计数并检查完成情况
+            if task_type == TaskType.RESOURCE_CREATION:
+                topic.completed_creation_count += 1
+                # 只有CREATION类任务完成才会触发主题完成检查
+                await self._check_topic_completion(topic_id)
+            # 对于其他类型的任务（如RESOURCE_GENERATION），只记录完成但不检查主题完成情况
 
     async def _check_topic_completion(self, topic_id: str):
         """检查主题是否全部完成"""
@@ -144,14 +169,30 @@ class TopicTracker:
         if not topic or topic.status != 'active':
             return
 
-        # 检查所有任务是否都已完成
-        if topic.tasks == self._completed_tasks[topic_id]:
-            # 通知所有回调
-            for callback in self._completion_callbacks:
-                await callback(topic_id, topic.opera_id)
+        # 新的完成逻辑：检查已完成的创建任务数量是否达到预期数量
+        # 首先检查是否有预期数量
+        if topic.expected_creation_count > 0:
+            # 如果有预期数量，检查已完成的创建任务是否达到预期数量
+            if topic.completed_creation_count >= topic.expected_creation_count:
+                # 达到预期数量，标记为完成
+                await self._complete_topic(topic_id, topic)
+        # 如果没有预期数量或预期数量为0，检查是否所有实际添加的创建任务都已完成
+        elif topic.actual_creation_count > 0 and topic.completed_creation_count >= topic.actual_creation_count:
+            # 所有实际添加的创建任务都已完成，标记为完成
+            await self._complete_topic(topic_id, topic)
+        # 保留原有的检查逻辑作为兼容性后备
+        elif topic.tasks == self._completed_tasks[topic_id]:
+            # 所有任务都已完成，标记为完成
+            await self._complete_topic(topic_id, topic)
 
-            # 更新主题状态
-            topic.status = 'completed'
+    async def _complete_topic(self, topic_id: str, topic: TopicInfo):
+        """将主题标记为完成并触发回调"""
+        # 通知所有回调
+        for callback in self._completion_callbacks:
+            await callback(topic_id, topic.opera_id)
+
+        # 更新主题状态
+        topic.status = "completed"
 
     def get_topic_info(self, topic_id: str) -> Optional[TopicInfo]:
         """获取主题信息"""

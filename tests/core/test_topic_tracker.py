@@ -27,9 +27,9 @@ def completion_callback_called():
     """用于追踪回调是否被调用的fixture"""
     called = {"count": 0, "args": None}
 
-    async def callback(topic_id: str, topic_type: str, opera_id: str):
+    async def callback(topic_id: str, opera_id: str):
         called["count"] += 1
-        called["args"] = (topic_id, topic_type, opera_id)
+        called["args"] = (topic_id, opera_id)
 
     return callback, called
 
@@ -79,7 +79,7 @@ async def test_update_task_status(topic_tracker: TopicTracker, sample_task: BotT
     assert called["count"] == 1  # 回调应该被触发一次
 
     # 验证回调参数
-    assert called["args"] == ("test-topic-1", "code_generation", "test-opera-1")
+    assert called["args"] == ("test-topic-1", "test-opera-1")
 
     # 验证主题状态
     topic_info = topic_tracker.get_topic_info("test-topic-1")
@@ -131,10 +131,10 @@ async def test_multiple_callbacks(topic_tracker: TopicTracker, sample_task: BotT
     """测试多个回调的情况"""
     callback_results = []
 
-    async def callback1(topic_id: str, topic_type: str, opera_id: str):
+    async def callback1(topic_id: str, opera_id: str):
         callback_results.append(("callback1", topic_id))
 
-    async def callback2(topic_id: str, topic_type: str, opera_id: str):
+    async def callback2(topic_id: str, opera_id: str):
         callback_results.append(("callback2", topic_id))
 
     # 注册多个回调
@@ -331,3 +331,211 @@ async def test_update_task_without_result(topic_tracker: TopicTracker):
     if topic_info.current_version:
         file_entries = [entry for entry in topic_info.current_version.current_files if entry["file_path"] == "src/app.js"]
         assert len(file_entries) == 0
+
+
+@pytest.mark.asyncio
+async def test_task_counter_update(topic_tracker: TopicTracker):
+    """测试任务计数器的更新"""
+    # 创建一个RESOURCE_GENERATION任务
+    gen_task = BotTask(
+        type=TaskType.RESOURCE_GENERATION,
+        description="生成任务",
+        topic_id="test-topic-counter",
+        topic_type="code_generation",
+        parameters={
+            "opera_id": "test-opera-counter",
+            "expected_files_count": 3,  # 预期生成3个文件
+        },
+    )
+
+    # 添加生成任务
+    topic_tracker.add_task(gen_task)
+
+    # 验证预期创建任务数量
+    topic_info = topic_tracker.get_topic_info("test-topic-counter")
+    assert topic_info.expected_creation_count == 3
+    assert topic_info.actual_creation_count == 0
+    assert topic_info.completed_creation_count == 0
+
+    # 创建一个RESOURCE_CREATION任务
+    create_task = BotTask(
+        type=TaskType.RESOURCE_CREATION,
+        description="创建任务1",
+        topic_id="test-topic-counter",
+        topic_type="code_generation",
+        parameters={
+            "opera_id": "test-opera-counter",
+            "file_path": "src/file1.py",
+        },
+    )
+
+    # 添加创建任务
+    topic_tracker.add_task(create_task)
+
+    # 验证实际创建任务数量
+    topic_info = topic_tracker.get_topic_info("test-topic-counter")
+    assert topic_info.expected_creation_count == 3
+    assert topic_info.actual_creation_count == 1
+    assert topic_info.completed_creation_count == 0
+
+    # 模拟创建任务完成
+    create_task.result = {"resource_id": "res-file1", "status": "success"}
+    await topic_tracker.update_task_status(create_task.id, TaskStatus.COMPLETED, create_task)
+
+    # 验证已完成创建任务数量
+    topic_info = topic_tracker.get_topic_info("test-topic-counter")
+    assert topic_info.completed_creation_count == 1
+    assert topic_info.status == "active"  # 还没有达到预期数量，所以状态保持active
+
+
+@pytest.mark.asyncio
+async def test_topic_completion_based_on_expected_count(topic_tracker: TopicTracker, completion_callback_called):
+    """测试基于预期数量的主题完成逻辑"""
+    callback, called = completion_callback_called
+    topic_tracker.on_completion(callback)
+
+    # 创建一个RESOURCE_GENERATION任务
+    gen_task = BotTask(
+        type=TaskType.RESOURCE_GENERATION,
+        description="生成任务",
+        topic_id="test-topic-expected",
+        topic_type="code_generation",
+        parameters={
+            "opera_id": "test-opera-expected",
+            "expected_files_count": 2,  # 预期生成2个文件
+        },
+    )
+
+    # 添加生成任务
+    topic_tracker.add_task(gen_task)
+
+    # 创建2个RESOURCE_CREATION任务
+    create_tasks = []
+    for i in range(2):
+        task = BotTask(
+            type=TaskType.RESOURCE_CREATION,
+            description=f"创建任务{i + 1}",
+            topic_id="test-topic-expected",
+            topic_type="code_generation",
+            parameters={
+                "opera_id": "test-opera-expected",
+                "file_path": f"src/file{i + 1}.py",
+            },
+        )
+        create_tasks.append(task)
+        topic_tracker.add_task(task)
+
+    # 完成第一个创建任务
+    create_tasks[0].result = {"resource_id": "res-file1", "status": "success"}
+    await topic_tracker.update_task_status(create_tasks[0].id, TaskStatus.COMPLETED, create_tasks[0])
+    assert called["count"] == 0  # 回调不应该被触发，因为只完成了一个任务
+
+    # 完成第二个创建任务
+    create_tasks[1].result = {"resource_id": "res-file2", "status": "success"}
+    await topic_tracker.update_task_status(create_tasks[1].id, TaskStatus.COMPLETED, create_tasks[1])
+    assert called["count"] == 1  # 回调应该被触发，因为已完成的创建任务数量达到预期
+
+    # 验证主题状态
+    topic_info = topic_tracker.get_topic_info("test-topic-expected")
+    assert topic_info.status == "completed"
+
+    # 即使生成任务还未完成，主题也应该被标记为完成
+    assert gen_task.id not in topic_tracker._completed_tasks["test-topic-expected"]
+
+
+@pytest.mark.asyncio
+async def test_topic_completion_based_on_actual_count(topic_tracker: TopicTracker, completion_callback_called):
+    """测试基于实际创建任务数量的主题完成逻辑"""
+    callback, called = completion_callback_called
+    topic_tracker.on_completion(callback)
+
+    # 创建主题，但不设置预期数量
+    # 直接创建3个RESOURCE_CREATION任务
+    create_tasks = []
+    for i in range(3):
+        task = BotTask(
+            type=TaskType.RESOURCE_CREATION,
+            description=f"创建任务{i + 1}",
+            topic_id="test-topic-actual",
+            topic_type="code_generation",
+            parameters={
+                "opera_id": "test-opera-actual",
+                "file_path": f"src/file{i + 1}.py",
+            },
+        )
+        create_tasks.append(task)
+        topic_tracker.add_task(task)
+
+    # 验证计数
+    topic_info = topic_tracker.get_topic_info("test-topic-actual")
+    assert topic_info.expected_creation_count == 0  # 没有设置预期数量
+    assert topic_info.actual_creation_count == 3  # 有3个实际创建任务
+
+    # 完成两个创建任务
+    for i in range(2):
+        create_tasks[i].result = {"resource_id": f"res-file{i + 1}", "status": "success"}
+        await topic_tracker.update_task_status(create_tasks[i].id, TaskStatus.COMPLETED, create_tasks[i])
+
+    assert called["count"] == 0  # 回调不应该被触发，因为还有一个任务未完成
+
+    # 完成最后一个创建任务
+    create_tasks[2].result = {"resource_id": "res-file3", "status": "success"}
+    await topic_tracker.update_task_status(create_tasks[2].id, TaskStatus.COMPLETED, create_tasks[2])
+    assert called["count"] == 1  # 回调应该被触发，因为所有创建任务都已完成
+
+    # 验证主题状态
+    topic_info = topic_tracker.get_topic_info("test-topic-actual")
+    assert topic_info.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_generation_task_completion_no_check(topic_tracker: TopicTracker, completion_callback_called):
+    """测试RESOURCE_GENERATION任务完成不会触发主题完成检查"""
+    callback, called = completion_callback_called
+    topic_tracker.on_completion(callback)
+
+    # 创建一个RESOURCE_GENERATION任务
+    gen_task = BotTask(
+        type=TaskType.RESOURCE_GENERATION,
+        description="生成任务",
+        topic_id="test-topic-gen",
+        topic_type="code_generation",
+        parameters={
+            "opera_id": "test-opera-gen",
+            "expected_files_count": 1,
+        },
+    )
+
+    # 添加生成任务
+    topic_tracker.add_task(gen_task)
+
+    # 模拟生成任务完成
+    await topic_tracker.update_task_status(gen_task.id, TaskStatus.COMPLETED, gen_task)
+    assert called["count"] == 0  # 回调不应该被触发，即使任务完成
+
+    # 验证主题状态
+    topic_info = topic_tracker.get_topic_info("test-topic-gen")
+    assert topic_info.status == "active"  # 主题应该仍然是活动状态
+
+    # 创建一个RESOURCE_CREATION任务
+    create_task = BotTask(
+        type=TaskType.RESOURCE_CREATION,
+        description="创建任务",
+        topic_id="test-topic-gen",
+        topic_type="code_generation",
+        parameters={
+            "opera_id": "test-opera-gen",
+            "file_path": "src/file.py",
+        },
+    )
+
+    # 添加并完成创建任务
+    topic_tracker.add_task(create_task)
+    create_task.result = {"resource_id": "res-file", "status": "success"}
+    await topic_tracker.update_task_status(create_task.id, TaskStatus.COMPLETED, create_task)
+
+    assert called["count"] == 1  # 现在回调应该被触发
+
+    # 验证主题状态
+    topic_info = topic_tracker.get_topic_info("test-topic-gen")
+    assert topic_info.status == "completed"  # 主题现在应该完成

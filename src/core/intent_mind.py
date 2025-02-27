@@ -38,9 +38,9 @@ class IntentMind:
         self.crew_processes = crew_processes
         self.staff_dialogues: Dict[UUID, Set[int]] = {}  # 记录每个Staff的对话索引
         # 添加logger
-        from src.core.logger_config import get_logger
+        from src.core.logger_config import get_logger_with_trace_id
 
-        self.log = get_logger(__name__)
+        self.log = get_logger_with_trace_id()
 
     def _determine_dialogue_priority(self, message: MessageReceivedArgs) -> DialoguePriority:
         """确定对话的优先级

@@ -395,6 +395,8 @@ class CrewManager(BaseCrewProcess):
 
             # 找到CR后转发任务
             if cr_for_task:
+                if task.topic_id:
+                    self.topic_tracker.add_task(task)
                 await self._update_cr_task_queue(cr_for_task.bot_id, task)
                 return
 
@@ -643,29 +645,52 @@ class CrewManager(BaseCrewProcess):
                 self.log.error(f"无法为主题 {topic_id} 创建总结任务：无法获取CM的staff_id")
                 return
 
-            # 获取该主题的所有已完成任务
-            completed_tasks = [
-                task
-                for task in self.task_queue.tasks
-                if task.topic_id == topic_id and task.status == TaskStatus.COMPLETED and task.type == TaskType.RESOURCE_CREATION
-            ]
-
-            # 使用字典保留每个文件路径的最新任务
-            latest_tasks = {}
-            for task in completed_tasks:
-                file_path = task.parameters.get("file_path")
-                if not file_path:
-                    continue
-
-                # 比较创建时间，保留最新版本
-                existing_task = latest_tasks.get(file_path)
-                if not existing_task or task.completed_at > existing_task.completed_at:
-                    latest_tasks[file_path] = task
-
-            # 构建资源列表
-            resources, html_files = self._build_resource_list_from_tasks(latest_tasks.values())
-
+            # 尝试使用TopicTracker获取该主题的已完成任务
             topic_info = self.topic_tracker.get_topic_info(topic_id)
+            completed_tasks = []
+
+            # 直接使用TopicTracker中的current_files
+            if topic_info and topic_info.current_version and topic_info.current_version.current_files:
+                # 资源列表已经是最新的，直接使用
+                resources, html_files = self._build_resource_list_from_version(topic_info.current_version)
+            else:
+                # 仅在current_files为空时才回退到遍历任务的方式
+                self.log.warning(f"主题 {topic_id} 的current_files为空，回退到遍历方式")
+
+                if topic_id in self.topic_tracker._completed_tasks:
+                    # 如果TopicTracker中有已完成任务的ID集合，通过ID查找完整任务对象
+                    self.log.info(f"从TopicTracker缓存中获取主题 {topic_id} 的已完成任务ID")
+                    completed_task_ids = self.topic_tracker._completed_tasks[topic_id]
+                    completed_tasks = [
+                        task
+                        for task in self.task_queue.tasks
+                        if task.id in completed_task_ids and task.type == TaskType.RESOURCE_CREATION
+                    ]
+                else:
+                    # 回退到原有的遍历方式
+                    self.log.info(f"TopicTracker缓存中不存在主题 {topic_id} 的已完成任务ID，回退到遍历方式")
+                    completed_tasks = [
+                        task
+                        for task in self.task_queue.tasks
+                        if task.topic_id == topic_id
+                        and task.status == TaskStatus.COMPLETED
+                        and task.type == TaskType.RESOURCE_CREATION
+                    ]
+
+                # 使用字典保留每个文件路径的最新任务
+                latest_tasks = {}
+                for task in completed_tasks:
+                    file_path = task.parameters.get("file_path")
+                    if not file_path:
+                        continue
+
+                    # 比较创建时间，保留最新版本
+                    existing_task = latest_tasks.get(file_path)
+                    if not existing_task or task.completed_at > existing_task.completed_at:
+                        latest_tasks[file_path] = task
+
+                # 从最新任务构建资源列表
+                resources, html_files = self._build_resource_list_from_tasks(latest_tasks.values())
 
             # 添加空值检查
             if topic_info is None or topic_info.current_version is None:
@@ -699,7 +724,7 @@ class CrewManager(BaseCrewProcess):
                 "ResourcesForViewing": {
                     "VersionId": topic_id,
                     "Resources": resources,
-                    "CurrentVersion": current_version_dict,  # 使用字典而不是VersionMeta对象
+                    "CurrentVersion": current_version_dict,
                 },
                 "RemovingAllResources": True,
             }
@@ -731,31 +756,24 @@ class CrewManager(BaseCrewProcess):
         except Exception as e:
             self.log.error(f"处理主题完成回调时发生错误: {str(e)}")
 
-    def _build_resource_list_from_tasks(self, tasks):
-        """从任务列表构建资源列表和HTML文件列表
-
-        Args:
-            tasks: 任务列表
-
-        Returns:
-            tuple: (resources列表, html_files列表)
-        """
+    def _build_resource_list_from_version(self, version: VersionMeta):
+        """从版本元数据构建资源列表和HTML文件列表"""
         resources = []
-        html_files = []  # 存储所有HTML文件路径
+        html_files = []
 
-        for task in tasks:
-            if task.result and isinstance(task.result, dict):
-                file_path = task.parameters.get("file_path", "")
-                resource_info = {
-                    "Url": file_path,
-                    "ResourceId": task.result.get("resource_id", ""),
-                    "ResourceCacheable": True,
-                }
-                resources.append(resource_info)
+        for file_entry in version.current_files:
+            file_path = file_entry["file_path"]
+            resource_id = file_entry["resource_id"]
 
-                # 收集HTML文件路径用于导航判断
-                if file_path.lower().endswith(".html"):
-                    html_files.append(file_path)
+            resource_info = {
+                "Url": file_path,
+                "ResourceId": resource_id,
+                "ResourceCacheable": True,
+            }
+            resources.append(resource_info)
+
+            if file_path.lower().endswith(".html"):
+                html_files.append(file_path)
 
         return resources, html_files
 
@@ -779,6 +797,39 @@ class CrewManager(BaseCrewProcess):
         if index_html_position is not None:
             # 找到index.html，添加NavigateIndex字段
             resources_tag["ResourcesForViewing"]["NavigateIndex"] = index_html_position
+
+    def _build_resource_list_from_tasks(self, tasks):
+        """从任务列表构建资源列表和HTML文件列表
+
+        Args:
+            tasks: 任务列表
+
+        Returns:
+            tuple: (resources列表, html_files列表)
+        """
+        resources = []
+        html_files = []  # 存储所有HTML文件路径
+
+        for task in tasks:
+            if task.result and isinstance(task.result, dict):
+                file_path = task.parameters.get("file_path", "")
+                resource_id = task.result.get("resource_id", "")
+
+                if not file_path or not resource_id:
+                    continue
+
+                resource_info = {
+                    "Url": file_path,
+                    "ResourceId": resource_id,
+                    "ResourceCacheable": True,
+                }
+                resources.append(resource_info)
+
+                # 收集HTML文件路径用于导航判断
+                if file_path.lower().endswith(".html"):
+                    html_files.append(file_path)
+
+        return resources, html_files
 
 
 class CrewRunner(BaseCrewProcess):
