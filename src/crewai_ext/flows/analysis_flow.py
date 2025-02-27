@@ -67,10 +67,14 @@ class AnalysisFlow(Flow[AnalysisState]):
         if self.dialogue.type == DialogueType.ITERATION:
             # 使用迭代分析器
             self.state.iteration_flag = True
+
+            # 解析tags中的资源信息
+            resource_list = self._extract_resources_from_tags(self.dialogue.tags)
+
             # 准备迭代分析输入
             iteration_inputs = IterationAnalysisInputs(
                 iteration_requirement=self.dialogue.text,
-                resource_list=self.dialogue.mentioned_staff_ids,
+                resource_list=resource_list,
             )
             self.log.info(f"迭代分析输入: {iteration_inputs.model_dump()}")
             # 执行迭代分析
@@ -105,6 +109,50 @@ class AnalysisFlow(Flow[AnalysisState]):
         self.state.intent_analysis = intent_analysis
 
         self.state.intent_flag = True
+
+    def _extract_resources_from_tags(self, tags_str: str) -> list:
+        """从tags字符串中提取资源信息
+
+        Args:
+            tags_str: tags字符串，可能是JSON格式
+
+        Returns:
+            list: 资源列表，格式为[{'file_path': 'path', 'resource_id': 'id'}]
+        """
+        import json
+
+        try:
+            # 尝试解析JSON
+            tags_data = json.loads(tags_str)
+            resources = []
+
+            # 处理第一种格式: ResourcesForViewing
+            if "ResourcesForViewing" in tags_data:
+                viewing_data = tags_data["ResourcesForViewing"]
+                if "Resources" in viewing_data and isinstance(viewing_data["Resources"], list):
+                    for resource in viewing_data["Resources"]:
+                        if "Url" in resource and "ResourceId" in resource:
+                            resources.append({"file_path": resource["Url"], "resource_id": resource["ResourceId"]})
+
+            # 处理第二种格式: ResourcesMentionedFromViewer
+            elif "ResourcesMentionedFromViewer" in tags_data and isinstance(tags_data["ResourcesMentionedFromViewer"], list):
+                for resource_id in tags_data["ResourcesMentionedFromViewer"]:
+                    resources.append({
+                        "file_path": "",  # 空文件路径
+                        "resource_id": resource_id,
+                    })
+
+            # 如果没有找到资源，或者解析失败，回退到mentioned_staff_ids
+            if not resources and self.dialogue.mentioned_staff_ids:
+                self.log.warning("从tags中提取资源失败，使用mentioned_staff_ids作为替代")
+                resources = self.dialogue.mentioned_staff_ids
+
+            return resources
+
+        except json.JSONDecodeError:
+            self.log.warning(f"解析tags JSON失败: {tags_str}")
+            # 如果解析失败，回退到mentioned_staff_ids
+            return self.dialogue.mentioned_staff_ids
 
     @router(or_(start_method, analyze_intent))
     def check_intent_analysis(self):

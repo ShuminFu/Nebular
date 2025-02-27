@@ -3,7 +3,7 @@
 from typing import Type, Optional, Dict, Any, Union
 from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, ValidationError
-from src.opera_service.api.models import DialogueForCreation, DialogueForFilter
+from src.opera_service.api.models import DialogueForCreation, DialogueForFilter, PathAndValueWithType
 from .base_api_tool import BaseApiTool
 
 
@@ -16,8 +16,20 @@ class DialogueToolSchema(BaseModel):
         None,
         description="""对话的数据，根据action类型使用不同的数据模型:
         - create: 使用DialogueForCreation模型
-        - get_filtered: 使用DialogueForFilter模型
-        """
+        - get_filtered: 使用DialogueForFilter模型，支持以下过滤选项:
+          - index_not_before: 仅包含索引不早于指定值的对话
+          - index_not_after: 仅包含索引不晚于指定值的对话
+          - top_limit: 返回结果的最大数量，默认100
+          - stage_index: 筛选特定场景索引的对话
+          - includes_stage_index_null: 是否包含没有场景索引的对话
+          - includes_narratage: 是否包含旁白
+          - includes_for_staff_id_only: 仅包含指定职员ID的对话
+          - includes_staff_id_null: 是否包含没有职员ID的对话
+          - tag_node_paths: 标签节点路径列表，用于筛选包含特定节点的对话
+          - tag_node_paths_all_mode: 当为true时，需要同时包含所有路径，否则仅需包含至少一个
+          - tag_node_values: 标签节点路径和值的列表，用于按节点值筛选
+          - tag_node_values_and_mode: 当为true时，需要同时满足所有条件，否则仅需满足至少一个
+        """,
     )
 
     @field_validator('data')
@@ -31,6 +43,12 @@ class DialogueToolSchema(BaseModel):
             if action == 'create':
                 return DialogueForCreation(**v)
             elif action == 'get_filtered':
+                # 对tag_node_values特殊处理
+                if "tag_node_values" in v and v["tag_node_values"]:
+                    tag_node_values = []
+                    for value_item in v["tag_node_values"]:
+                        tag_node_values.append(PathAndValueWithType(**value_item))
+                    v["tag_node_values"] = tag_node_values
                 return DialogueForFilter.model_validate(v)
             return v
         except ValidationError as e:
@@ -75,7 +93,14 @@ class DialogueTool(BaseApiTool):
             'includes_stage_index_null': true,
             'includes_narratage': true,
             'includes_for_staff_id_only': 'uuid',
-            'includes_staff_id_null': true
+            'includes_staff_id_null': true,
+            'tag_node_paths': ['$.path1', 'path2'], 
+            'tag_node_paths_all_mode': true,
+            'tag_node_values': [
+                {'path': '$.path1', 'value': 'value1', 'type': 'String'},
+                {'path': 'path2', 'value': '10', 'type': 'Number'}
+            ],
+            'tag_node_values_and_mode': false
         }
     }
     5. 获取最新对话索引: {
@@ -117,6 +142,14 @@ class DialogueTool(BaseApiTool):
                 if not data:
                     raise ValueError("过滤查询对话需要提供filter数据")
                 if not isinstance(data, DialogueForFilter):
+                    # 处理需要特殊处理的字段
+                    if "tag_node_values" in data and data["tag_node_values"]:
+                        # 将tag_node_values从dict转为PathAndValueWithType对象
+                        tag_node_values = []
+                        for value_item in data["tag_node_values"]:
+                            tag_node_values.append(PathAndValueWithType(**value_item))
+                        data["tag_node_values"] = tag_node_values
+
                     data = DialogueForFilter.model_validate(data)
                 result = self._make_request("POST", f"{base_url}/Get", json=data.model_dump(by_alias=True))
                 return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"

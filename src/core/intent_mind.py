@@ -93,7 +93,15 @@ class IntentMind:
             # 检查代码相关标签
             if any(tag in message.tags.lower() for tag in ["code_resource", "code", "script", "function"]):
                 return DialogueType.CODE_RESOURCE
-            if any(tag in message.tags.lower() for tag in ["ResourcesMentionedFromViewer", "ResourcesForIncarnating", "ResourcesForViewing", "SelectedTextsFromViewer"]):
+            if any(
+                tag in message.tags
+                for tag in [
+                    "ResourcesMentionedFromViewer",
+                    "ResourcesForIncarnating",
+                    "ResourcesForViewing",
+                    "SelectedTextsFromViewer",
+                ]
+            ):
                 return DialogueType.ITERATION
 
         # 如果消息内容看起来像代码，将其标记为代码资源
