@@ -1,10 +1,13 @@
 task_decomposition_task:
   description: |
     请你首先理解并且分析整体资源的架构和作用，其次将迭代需求:{iteration_requirement}, 分解为针对每个resource文件的修改任务。涉及到的资源在{resource_list}中（每个资源包含file_path和resource_id）。要求：
-    1. 每个任务对应一个文件的修改
-    2. 明确修改类型（create/update/delete）
-    3. 标注修改位置（行号或代码块标识）
-    4. 保持文件完整性（返回完整文件内容）
+    1. 分解出来的每个任务在resources字段中对应一个文件的修改
+    2. 明确修改类型（create/update/delete/unchange）
+    - 如果是需要新增的文件则在resource中表明action是create并且用filepath要不同于已有的文件名；
+    - 如果是觉得某个resource文件可以删除则在resource中表明action是delete；
+    - 如果某个resource需要修改则表明action是update，并且用position指出修改的位置特征或者内容
+    - 如果某个resource不需要变动则表明action是unchange
+    3. 保持文件完整性（返回完整文件内容）
 
   expected_output: |
     {{

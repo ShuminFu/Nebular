@@ -335,7 +335,7 @@ class IntentMind:
                 "code_content": code_content.strip(),  # 确保去除首尾空白字符
             })
 
-        elif dialogue.type == DialogueType.CODE_RESOURCE:
+        elif dialogue.type == DialogueType.CODE_RESOURCE or dialogue.type == DialogueType.ITERATION:
             # 从intent_analysis中获取代码生成相关信息
             if dialogue.intent_analysis and dialogue.intent_analysis.parameters.get("is_code_request"):
                 code_details = dialogue.intent_analysis.parameters.get("code_details", {})

@@ -53,7 +53,7 @@ class TopicTracker:
             self.topics[task.topic_id] = TopicInfo(
                 tasks=set(), type=task.topic_type, status="active", opera_id=task.parameters.get("opera_id"), current_version=None
             )
-            # 初始化版本（当parent_topic_id为0时）
+            # 初始化当前版本
             if parent_topic_id := task.parameters.get("parent_topic_id"):
                 parent_version = None if parent_topic_id == "0" else parent_topic_id
                 self.topics[task.topic_id].current_version = VersionMeta(
@@ -67,7 +67,6 @@ class TopicTracker:
         # 更新任务计数：根据任务类型更新对应的计数器
         if task.type == TaskType.RESOURCE_GENERATION:
             # 对于RESOURCE_GENERATION任务，增加预期创建任务数量
-            # 可以从task.parameters中获取预期创建的文件数量，如果没有就默认加1
             expected_files_count = task.parameters.get("expected_files_count", 1)
             topic.expected_creation_count += expected_files_count
         elif task.type == TaskType.RESOURCE_CREATION:
