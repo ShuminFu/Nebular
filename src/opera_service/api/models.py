@@ -251,6 +251,14 @@ class DialogueForCreation(CamelBaseModel):
     mentioned_staff_ids: Optional[List[UUID]] = None
 
 
+class PathAndValueWithType(CamelBaseModel):
+    """标签节点路径和值过滤器"""
+
+    path: str
+    value: str
+    type: str = "String"
+
+
 class DialogueForFilter(CamelBaseModel):
     index_not_before: Optional[int] = None
     index_not_after: Optional[int] = None
@@ -260,6 +268,10 @@ class DialogueForFilter(CamelBaseModel):
     includes_narratage: bool
     includes_for_staff_id_only: Optional[UUID] = None
     includes_staff_id_null: bool
+    tag_node_paths: Optional[List[str]] = None
+    tag_node_paths_all_mode: Optional[bool] = None
+    tag_node_values: Optional[List[PathAndValueWithType]] = None
+    tag_node_values_and_mode: Optional[bool] = None
 
 
 class DialogueContext(CamelBaseModel):
