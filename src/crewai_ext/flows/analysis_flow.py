@@ -73,7 +73,7 @@ class AnalysisFlow(Flow[AnalysisState]):
 
             # 准备迭代分析输入
             iteration_inputs = IterationAnalysisInputs(
-                iteration_requirement=self.dialogue.text,
+                iteration_requirement=self.dialogue.text + f" opera id: {self.dialogue.opera_id}",
                 resource_list=resource_list,
             )
             self.log.info(f"迭代分析输入: {iteration_inputs.model_dump()}")
