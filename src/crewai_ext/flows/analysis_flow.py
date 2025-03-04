@@ -142,6 +142,17 @@ class AnalysisFlow(Flow[AnalysisState]):
                         "resource_id": resource_id,
                     })
 
+            # 处理第三种格式: SelectedTextsFromViewer
+            elif "SelectedTextsFromViewer" in tags_data and isinstance(tags_data["SelectedTextsFromViewer"], list):
+                version_ids = []
+                for selected_text in tags_data["SelectedTextsFromViewer"]:
+                    if "VersionId" in selected_text:
+                        version_ids.append(selected_text["VersionId"])
+
+                # 如果找到了VersionId，则通过占位函数获取资源
+                if version_ids:
+                    resources = self._get_resources_by_version_ids(version_ids)
+
             # 如果没有找到资源，或者解析失败，回退到mentioned_staff_ids
             if not resources and self.dialogue.mentioned_staff_ids:
                 self.log.warning("从tags中提取资源失败，使用mentioned_staff_ids作为替代")
@@ -153,6 +164,29 @@ class AnalysisFlow(Flow[AnalysisState]):
             self.log.warning(f"解析tags JSON失败: {tags_str}")
             # 如果解析失败，回退到mentioned_staff_ids
             return self.dialogue.mentioned_staff_ids
+
+    def _get_resources_by_version_ids(self, version_ids: list) -> list:
+        """根据版本ID获取资源信息的占位函数
+
+        TODO: 实现根据version_id获取资源的实际逻辑
+
+        Args:
+            version_ids: 版本ID列表
+
+        Returns:
+            list: 资源列表，格式为[{'file_path': 'path', 'resource_id': 'id'}]
+        """
+        self.log.info(f"根据版本ID获取资源: {version_ids}")
+
+        # 这是一个占位实现，实际场景中需要替换为从数据库或API获取资源的逻辑
+        resources = []
+        for version_id in version_ids:
+            resources.append({
+                "file_path": "",  # 实际场景中应该获取真实的文件路径
+                "resource_id": version_id,
+            })
+
+        return resources
 
     @router(or_(start_method, analyze_intent))
     def check_intent_analysis(self):
