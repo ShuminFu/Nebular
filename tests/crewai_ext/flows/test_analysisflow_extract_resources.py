@@ -3,6 +3,7 @@ import json
 from unittest.mock import MagicMock, patch
 from src.crewai_ext.flows.analysis_flow import AnalysisFlow
 from src.core.dialogue.models import ProcessingDialogue
+import sys
 
 
 class TestExtractResourcesFromTags(unittest.TestCase):
@@ -72,19 +73,6 @@ class TestExtractResourcesFromTags(unittest.TestCase):
         self.assertEqual(result[1]["file_path"], "")
         self.assertEqual(result[1]["resource_id"], "5a1c2b3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d")
 
-    def test_extract_resources_invalid_json(self):
-        """测试处理无效的 JSON 字符串"""
-        # 准备测试数据
-        tags_str = "这不是一个有效的JSON字符串"
-
-        # 执行测试
-        result = self.flow._extract_resources_from_tags(tags_str)
-
-        # 验证结果 - 应该回退到 mentioned_staff_ids
-        self.assertEqual(result, self.mock_dialogue.mentioned_staff_ids)
-        # 验证记录了警告日志
-        self.mock_logger.warning.assert_called_once()
-
     def test_extract_resources_empty_resources(self):
         """测试处理没有资源的情况"""
         # 准备测试数据 - 空的 ResourcesForViewing
@@ -96,8 +84,19 @@ class TestExtractResourcesFromTags(unittest.TestCase):
         # 执行测试
         result = self.flow._extract_resources_from_tags(tags_str)
 
-        # 验证结果 - 应该回退到 mentioned_staff_ids
-        self.assertEqual(result, self.mock_dialogue.mentioned_staff_ids)
+        # 验证结果 - 应该返回空列表
+        self.assertEqual(result, [])
+
+    def test_extract_resources_invalid_json(self):
+        """测试处理无效的 JSON 字符串"""
+        # 准备测试数据
+        tags_str = "这不是一个有效的JSON字符串"
+
+        # 执行测试
+        result = self.flow._extract_resources_from_tags(tags_str)
+
+        # 验证结果 - 应该返回空列表
+        self.assertEqual(result, [])
 
     def test_extract_resources_no_relevant_fields(self):
         """测试处理没有相关字段的 JSON"""
@@ -108,8 +107,8 @@ class TestExtractResourcesFromTags(unittest.TestCase):
         # 执行测试
         result = self.flow._extract_resources_from_tags(tags_str)
 
-        # 验证结果 - 应该回退到 mentioned_staff_ids
-        self.assertEqual(result, self.mock_dialogue.mentioned_staff_ids)
+        # 验证结果 - 应该返回空列表
+        self.assertEqual(result, [])
 
     def test_extract_resources_malformed_viewing_structure(self):
         """测试处理结构不完整的 ResourcesForViewing"""
@@ -126,8 +125,8 @@ class TestExtractResourcesFromTags(unittest.TestCase):
         # 执行测试
         result = self.flow._extract_resources_from_tags(tags_str)
 
-        # 验证结果 - 应该回退到 mentioned_staff_ids
-        self.assertEqual(result, self.mock_dialogue.mentioned_staff_ids)
+        # 验证结果 - 应该返回空列表
+        self.assertEqual(result, [])
 
     def test_extract_resources_malformed_resource_items(self):
         """测试处理资源条目结构不完整的情况"""
@@ -155,8 +154,8 @@ class TestExtractResourcesFromTags(unittest.TestCase):
         # 执行测试
         result = self.flow._extract_resources_from_tags(tags_str)
 
-        # 验证结果 - 应该回退到 mentioned_staff_ids，因为没有可提取的完整资源
-        self.assertEqual(result, self.mock_dialogue.mentioned_staff_ids)
+        # 验证结果 - 应该返回空列表，因为没有可提取的完整资源
+        self.assertEqual(result, [])
 
     @patch("src.crewai_ext.flows.analysis_flow.AnalysisFlow._get_resources_by_version_ids")
     def test_extract_resources_selected_texts_format(self, mock_get_resources):
@@ -206,10 +205,8 @@ class TestExtractResourcesFromTags(unittest.TestCase):
         # 执行测试
         result = self.flow._extract_resources_from_tags(tags_str)
 
-        # 验证结果 - 应该回退到 mentioned_staff_ids，因为没有可提取的版本ID
-        self.assertEqual(result, self.mock_dialogue.mentioned_staff_ids)
-        # 验证没有调用_get_resources_by_version_ids方法
-        mock_get_resources.assert_not_called()
+        # 验证结果 - 应该返回空列表，因为没有可提取的版本ID
+        self.assertEqual(result, [])
 
     def test_extract_resources_mixed_valid_invalid(self):
         """测试处理混合有效和无效资源条目的情况"""
@@ -255,6 +252,211 @@ class TestExtractResourcesFromTags(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["file_path"], "/src/js/main.js")
         self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")
+
+
+class TestGetResourcesByVersionIds(unittest.TestCase):
+    """测试 AnalysisFlow._get_resources_by_version_ids 方法"""
+
+    def setUp(self):
+        """设置测试环境"""
+        # 创建对话模拟对象
+        self.mock_dialogue = MagicMock(spec=ProcessingDialogue)
+        self.mock_dialogue.opera_id = "test-opera-id"
+        self.mock_dialogue.mentioned_staff_ids = [{"file_path": "fallback.js", "resource_id": "fallback-id"}]
+
+        # 创建临时对话池模拟对象
+        self.mock_pool = MagicMock()
+
+        # 模拟日志对象
+        self.mock_logger = MagicMock()
+
+        # 创建 AnalysisFlow 实例
+        self.flow = AnalysisFlow(self.mock_dialogue, self.mock_pool)
+        # 替换日志对象
+        self.flow.log = self.mock_logger
+
+    def test_get_resources_by_version_id(self):
+        """测试通过版本ID获取资源"""
+        # 设置版本ID
+        version_id = "6a737f18-4d82-496f-8f63-5367e897c583"
+
+        # 模拟对话数据
+        mock_dialogue_data = [
+            {
+                "id": "test-dialogue-id",
+                "tags": json.dumps({
+                    "ResourcesForViewing": {
+                        "VersionId": version_id,
+                        "CurrentVersion": {
+                            "current_files": [
+                                {"file_path": "/src/js/main.js", "resource_id": "1679d89d-40d3-4db2-b7f5-a48881d3aa31"},
+                                {"file_path": "/src/css/style.css", "resource_id": "368e4fd9-e40b-4b18-a48b-1003e71c4aac"},
+                                {"file_path": "/src/html/index.html", "resource_id": "18c91231-af74-4704-9960-eff96164428b"},
+                            ]
+                        },
+                    }
+                }),
+            }
+        ]
+
+        # 模拟DialogueTool类
+        mock_dialogue_tool = MagicMock()
+        mock_dialogue_tool._run = MagicMock(return_value=json.dumps(mock_dialogue_data))
+
+        # 创建模拟模块
+        mock_dialogue_api_tool_module = MagicMock()
+        mock_dialogue_api_tool_module.DialogueTool = MagicMock(return_value=mock_dialogue_tool)
+
+        # 将模拟模块临时添加到sys.modules
+        with patch.dict(sys.modules, {"crewai_ext.tools.opera_api.dialogue_api_tool": mock_dialogue_api_tool_module}):
+            # 执行测试
+            result = self.flow._get_resources_by_version_ids([version_id])
+
+        # 验证DialogueTool创建和调用
+        mock_dialogue_api_tool_module.DialogueTool.assert_called_once()
+        mock_dialogue_tool._run.assert_called_once()
+
+        # 验证结果
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0]["file_path"], "/src/js/main.js")
+        self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")
+        self.assertEqual(result[1]["file_path"], "/src/css/style.css")
+        self.assertEqual(result[1]["resource_id"], "368e4fd9-e40b-4b18-a48b-1003e71c4aac")
+        self.assertEqual(result[2]["file_path"], "/src/html/index.html")
+        self.assertEqual(result[2]["resource_id"], "18c91231-af74-4704-9960-eff96164428b")
+
+    def test_get_resources_by_version_id_modified_files(self):
+        """测试通过版本ID获取资源 - 使用modified_files"""
+        # 设置版本ID
+        version_id = "6a737f18-4d82-496f-8f63-5367e897c583"
+
+        # 模拟API返回的对话数据 - 使用modified_files而非current_files
+        mock_dialogue_data = [
+            {
+                "id": "test-dialogue-id",
+                "tags": json.dumps({
+                    "ResourcesForViewing": {
+                        "VersionId": version_id,
+                        "CurrentVersion": {
+                            "modified_files": [
+                                {"file_path": "/src/js/main.js", "resource_id": "1679d89d-40d3-4db2-b7f5-a48881d3aa31"},
+                                {"file_path": "/src/css/style.css", "resource_id": "368e4fd9-e40b-4b18-a48b-1003e71c4aac"},
+                            ]
+                        },
+                    }
+                }),
+            }
+        ]
+
+        # 模拟DialogueTool类
+        mock_dialogue_tool = MagicMock()
+        mock_dialogue_tool._run = MagicMock(return_value=json.dumps(mock_dialogue_data))
+
+        # 创建模拟模块
+        mock_dialogue_api_tool_module = MagicMock()
+        mock_dialogue_api_tool_module.DialogueTool = MagicMock(return_value=mock_dialogue_tool)
+
+        # 将模拟模块临时添加到sys.modules
+        with patch.dict(sys.modules, {"crewai_ext.tools.opera_api.dialogue_api_tool": mock_dialogue_api_tool_module}):
+            # 执行测试
+            result = self.flow._get_resources_by_version_ids([version_id])
+
+        # 验证结果
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["file_path"], "/src/js/main.js")
+        self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")
+        self.assertEqual(result[1]["file_path"], "/src/css/style.css")
+        self.assertEqual(result[1]["resource_id"], "368e4fd9-e40b-4b18-a48b-1003e71c4aac")
+
+    def test_get_resources_by_version_id_error_handling(self):
+        """测试从版本ID获取资源时的错误处理"""
+        # 设置版本ID
+        version_id = "6a737f18-4d82-496f-8f63-5367e897c583"
+
+        # 模拟DialogueTool类
+        mock_dialogue_tool = MagicMock()
+        mock_dialogue_tool._run = MagicMock(side_effect=Exception("API调用失败"))
+
+        # 创建模拟模块
+        mock_dialogue_api_tool_module = MagicMock()
+        mock_dialogue_api_tool_module.DialogueTool = MagicMock(return_value=mock_dialogue_tool)
+
+        # 将模拟模块临时添加到sys.modules
+        with patch.dict(sys.modules, {"crewai_ext.tools.opera_api.dialogue_api_tool": mock_dialogue_api_tool_module}):
+            # 执行测试
+            result = self.flow._get_resources_by_version_ids([version_id])
+
+        # 验证结果 - 应该返回空列表
+        self.assertEqual(result, [])
+        self.mock_logger.error.assert_called_once()
+
+    def test_get_resources_by_version_id_multiple_versions(self):
+        """测试获取多个版本ID的资源并去重"""
+        # 设置版本ID
+        version_id1 = "6a737f18-4d82-496f-8f63-5367e897c583"
+        version_id2 = "7b848f29-5e93-5a83-9f74-6478fa908d94"
+
+        # 模拟API返回的对话数据
+        mock_dialogue_data1 = [
+            {
+                "id": "test-dialogue-id-1",
+                "tags": json.dumps({
+                    "ResourcesForViewing": {
+                        "VersionId": version_id1,
+                        "CurrentVersion": {
+                            "current_files": [
+                                {"file_path": "/src/js/main.js", "resource_id": "1679d89d-40d3-4db2-b7f5-a48881d3aa31"},
+                                {"file_path": "/src/css/style.css", "resource_id": "368e4fd9-e40b-4b18-a48b-1003e71c4aac"},
+                            ]
+                        },
+                    }
+                }),
+            }
+        ]
+
+        mock_dialogue_data2 = [
+            {
+                "id": "test-dialogue-id-2",
+                "tags": json.dumps({
+                    "ResourcesForViewing": {
+                        "VersionId": version_id2,
+                        "CurrentVersion": {
+                            "current_files": [
+                                {
+                                    "file_path": "/src/js/main.js",
+                                    "resource_id": "1679d89d-40d3-4db2-b7f5-a48881d3aa31",
+                                },  # 重复资源
+                                {
+                                    "file_path": "/src/html/index.html",
+                                    "resource_id": "18c91231-af74-4704-9960-eff96164428b",
+                                },  # 新资源
+                            ]
+                        },
+                    }
+                }),
+            }
+        ]
+
+        # 模拟DialogueTool类
+        mock_dialogue_tool = MagicMock()
+        mock_dialogue_tool._run = MagicMock(side_effect=[json.dumps(mock_dialogue_data1), json.dumps(mock_dialogue_data2)])
+
+        # 创建模拟模块
+        mock_dialogue_api_tool_module = MagicMock()
+        mock_dialogue_api_tool_module.DialogueTool = MagicMock(return_value=mock_dialogue_tool)
+
+        # 将模拟模块临时添加到sys.modules
+        with patch.dict(sys.modules, {"crewai_ext.tools.opera_api.dialogue_api_tool": mock_dialogue_api_tool_module}):
+            # 执行测试
+            result = self.flow._get_resources_by_version_ids([version_id1, version_id2])
+
+        # 验证结果 - 应该有3个不重复的资源
+        self.assertEqual(len(result), 3)
+        # 验证资源ID是否正确
+        resource_ids = [r["resource_id"] for r in result]
+        self.assertIn("1679d89d-40d3-4db2-b7f5-a48881d3aa31", resource_ids)
+        self.assertIn("368e4fd9-e40b-4b18-a48b-1003e71c4aac", resource_ids)
+        self.assertIn("18c91231-af74-4704-9960-eff96164428b", resource_ids)
 
 
 if __name__ == "__main__":
