@@ -13,6 +13,8 @@ from src.crewai_ext.crew_bases.analyzers_crewbase import (
 )
 from src.crewai_ext.crew_bases.resource_iteration_crewbase import IterationAnalyzerCrew, IterationAnalysisInputs
 from src.core.logger_config import get_logger, get_logger_with_trace_id
+import json
+from datetime import datetime, timezone, timedelta
 
 logger = get_logger(__name__, log_file="logs/analysis_flow.log")
 
@@ -119,8 +121,6 @@ class AnalysisFlow(Flow[AnalysisState]):
         Returns:
             list: 资源列表，格式为[{'file_path': 'path', 'resource_id': 'id'}]
         """
-        import json
-
         try:
             # 尝试解析JSON
             tags_data = json.loads(tags_str)
@@ -153,22 +153,22 @@ class AnalysisFlow(Flow[AnalysisState]):
                 if version_ids:
                     resources = self._get_resources_by_version_ids(version_ids)
 
-            # 如果没有找到资源，或者解析失败，回退到mentioned_staff_ids
+            # 如果没有找到资源，或者解析失败，返回空列表
             if not resources and self.dialogue.mentioned_staff_ids:
-                self.log.warning("从tags中提取资源失败，使用mentioned_staff_ids作为替代")
-                resources = self.dialogue.mentioned_staff_ids
+                self.log.warning("从tags中提取资源失败，返回空列表")
+                resources = []
 
             return resources
 
         except json.JSONDecodeError:
             self.log.warning(f"解析tags JSON失败: {tags_str}")
-            # 如果解析失败，回退到mentioned_staff_ids
-            return self.dialogue.mentioned_staff_ids
+            return []
 
     def _get_resources_by_version_ids(self, version_ids: list) -> list:
-        """根据版本ID获取资源信息的占位函数
+        """根据版本ID获取资源信息
 
-        TODO: 实现根据version_id获取资源的实际逻辑
+        通过Dialog API工具查找包含指定版本ID的对话，
+        并从对话的ResourcesForViewing和CurrentVersion标签中提取资源信息
 
         Args:
             version_ids: 版本ID列表
@@ -177,16 +177,63 @@ class AnalysisFlow(Flow[AnalysisState]):
             list: 资源列表，格式为[{'file_path': 'path', 'resource_id': 'id'}]
         """
         self.log.info(f"根据版本ID获取资源: {version_ids}")
-
-        # 这是一个占位实现，实际场景中需要替换为从数据库或API获取资源的逻辑
         resources = []
-        for version_id in version_ids:
-            resources.append({
-                "file_path": "",  # 实际场景中应该获取真实的文件路径
-                "resource_id": version_id,
-            })
 
-        return resources
+        # 遍历每个版本ID查找相关对话
+        for version_id in version_ids:
+            # 构建查询条件，寻找包含指定VersionId的对话
+            filter_data = {
+                "action": "get_filtered",
+                "opera_id": str(self.dialogue.opera_id),
+                "data": {
+                    "tag_node_paths": ["$.ResourcesForViewing.VersionId"],
+                    "tag_node_values": [{"path": "$.ResourcesForViewing.VersionId", "value": version_id, "type": "String"}],
+                },
+            }
+
+            try:
+                # 调用DialogueTool查询对话
+                from crewai_ext.tools.opera_api.dialogue_api_tool import DialogueTool
+
+                dialogue_tool = DialogueTool()
+                result = dialogue_tool._run(**filter_data)
+
+                # 解析返回结果
+                if result:
+                    dialogues = json.loads(result)
+                    for dialogue in dialogues:
+                        if "tags" in dialogue:
+                            try:
+                                # 解析tags字段
+                                tags_data = json.loads(dialogue["tags"])
+
+                                # 检查是否包含ResourcesForViewing和CurrentVersion
+                                if "ResourcesForViewing" in tags_data and "CurrentVersion" in tags_data["ResourcesForViewing"]:
+                                    current_version = tags_data["ResourcesForViewing"]["CurrentVersion"]
+
+                                    # 提取current_files信息
+                                    if "current_files" in current_version:
+                                        resources.extend(current_version["current_files"])
+                                    # 如果没有current_files，尝试提取modified_files
+                                    elif "modified_files" in current_version:
+                                        resources.extend(current_version["modified_files"])
+                            except json.JSONDecodeError:
+                                self.log.warning(f"解析对话tags失败: {dialogue['tags']}")
+                                continue
+            except Exception as e:
+                self.log.error(f"查询版本ID为{version_id}的对话时出错: {str(e)}")
+                continue
+
+        # 去重，避免重复资源
+        unique_resources = []
+        resource_ids = set()
+
+        for resource in resources:
+            if resource.get("resource_id") and resource.get("resource_id") not in resource_ids:
+                resource_ids.add(resource.get("resource_id"))
+                unique_resources.append(resource)
+
+        return unique_resources
 
     @router(or_(start_method, analyze_intent))
     def check_intent_analysis(self):
@@ -259,8 +306,6 @@ class AnalysisFlow(Flow[AnalysisState]):
         Returns:
             IntentAnalysis: 解析后的意图分析结果
         """
-        import json
-
         try:
             # 移除可能的Markdown代码块标记
             if result_str.startswith("```json\n"):
@@ -322,9 +367,6 @@ class AnalysisFlow(Flow[AnalysisState]):
         Returns:
             Set[int]: 相关对话的索引集合
         """
-        import json
-        from datetime import datetime, timezone, timedelta
-
         try:
             if result_str.startswith("```json\n"):
                 result_str = result_str[8:]
