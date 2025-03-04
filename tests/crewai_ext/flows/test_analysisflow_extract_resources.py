@@ -158,6 +158,59 @@ class TestExtractResourcesFromTags(unittest.TestCase):
         # 验证结果 - 应该回退到 mentioned_staff_ids，因为没有可提取的完整资源
         self.assertEqual(result, self.mock_dialogue.mentioned_staff_ids)
 
+    @patch("src.crewai_ext.flows.analysis_flow.AnalysisFlow._get_resources_by_version_ids")
+    def test_extract_resources_selected_texts_format(self, mock_get_resources):
+        """测试从 SelectedTextsFromViewer 格式提取资源"""
+        # 准备测试数据
+        tags_data = {
+            "SelectedTextsFromViewer": [
+                {"Index": "#1", "SelectedText": "Product Showcase", "VersionId": "96028f82-9f76-4372-976c-f0c5a054db79"},
+                {"Index": "#2", "SelectedText": "API Documentation", "VersionId": "a7c52e31-b8d9-4f60-8e15-3d27f9b61c42"},
+            ]
+        }
+        tags_str = json.dumps(tags_data)
+
+        # 设置mock返回值
+        expected_resources = [
+            {"file_path": "/path/to/showcase.md", "resource_id": "96028f82-9f76-4372-976c-f0c5a054db79"},
+            {"file_path": "/path/to/api_docs.md", "resource_id": "a7c52e31-b8d9-4f60-8e15-3d27f9b61c42"},
+        ]
+        mock_get_resources.return_value = expected_resources
+
+        # 执行测试
+        result = self.flow._extract_resources_from_tags(tags_str)
+
+        # 验证结果
+        self.assertEqual(result, expected_resources)
+        # 验证调用了_get_resources_by_version_ids方法，并传递了正确的参数
+        mock_get_resources.assert_called_once_with([
+            "96028f82-9f76-4372-976c-f0c5a054db79",
+            "a7c52e31-b8d9-4f60-8e15-3d27f9b61c42",
+        ])
+
+    @patch("src.crewai_ext.flows.analysis_flow.AnalysisFlow._get_resources_by_version_ids")
+    def test_extract_resources_selected_texts_empty_version_id(self, mock_get_resources):
+        """测试处理 SelectedTextsFromViewer 中没有 VersionId 的情况"""
+        # 准备测试数据 - 缺少 VersionId
+        tags_data = {
+            "SelectedTextsFromViewer": [
+                {
+                    "Index": "#1",
+                    "SelectedText": "Product Showcase",
+                    # 缺少 VersionId
+                }
+            ]
+        }
+        tags_str = json.dumps(tags_data)
+
+        # 执行测试
+        result = self.flow._extract_resources_from_tags(tags_str)
+
+        # 验证结果 - 应该回退到 mentioned_staff_ids，因为没有可提取的版本ID
+        self.assertEqual(result, self.mock_dialogue.mentioned_staff_ids)
+        # 验证没有调用_get_resources_by_version_ids方法
+        mock_get_resources.assert_not_called()
+
     def test_extract_resources_mixed_valid_invalid(self):
         """测试处理混合有效和无效资源条目的情况"""
         # 准备测试数据 - 部分资源条目有效，部分无效
