@@ -15,6 +15,7 @@ from src.crewai_ext.crew_bases.resource_iteration_crewbase import IterationAnaly
 from src.core.logger_config import get_logger, get_logger_with_trace_id
 import json
 from datetime import datetime, timezone, timedelta
+import re
 
 logger = get_logger(__name__, log_file="logs/analysis_flow.log")
 
@@ -159,9 +160,17 @@ class AnalysisFlow(Flow[AnalysisState]):
                     if "VersionId" in selected_text:
                         version_ids.append(selected_text["VersionId"])
 
-                # 如果找到了VersionId，则通过占位函数获取资源
-                if version_ids:
-                    resources = self._get_resources_by_version_ids(version_ids)
+                # 添加递归保护机制
+                if not getattr(self, "_processing_version_ids", None):
+                    self._processing_version_ids = set()
+
+                new_version_ids = [vid for vid in version_ids if vid not in self._processing_version_ids]
+                if new_version_ids:
+                    self._processing_version_ids.update(new_version_ids)
+                    resources = self._get_resources_by_version_ids(new_version_ids)
+                    self._processing_version_ids.difference_update(new_version_ids)
+                else:
+                    resources = []
 
             # 如果没有找到资源，或者解析失败，返回空列表
             if not resources and self.dialogue.mentioned_staff_ids:
@@ -191,6 +200,10 @@ class AnalysisFlow(Flow[AnalysisState]):
 
         # 遍历每个版本ID查找相关对话
         for version_id in version_ids:
+            if version_id in getattr(self, "_processing_version_ids", set()):
+                self.log.warning(f"检测到递归循环，跳过版本ID {version_id}")
+                continue
+
             # 构建查询条件，寻找包含指定VersionId的对话
             filter_data = {
                 "action": "get_filtered",
@@ -217,7 +230,7 @@ class AnalysisFlow(Flow[AnalysisState]):
                     for dialogue in dialogues:
                         if "tags" in dialogue:
                             try:
-                                # 使用增强后的_extract_resources_from_tags方法解析tags
+                                # 使用_extract_resources_from_tags方法解析tags
                                 extracted_resources = self._extract_resources_from_tags(dialogue["tags"])
                                 if extracted_resources:
                                     resources.extend(extracted_resources)
@@ -372,13 +385,86 @@ class AnalysisFlow(Flow[AnalysisState]):
             Set[int]: 相关对话的索引集合
         """
         try:
+            # 清理和标准化输入字符串
             if result_str.startswith("```json\n"):
                 result_str = result_str[8:]
             if result_str.endswith("\n```"):
                 result_str = result_str[:-4]
-            result_str = result_str.replace("'", '"')  # 替换单引号为双引号
 
-            context_data = json.loads(result_str, strict=False)
+            # 替换单引号为双引号，这可能导致JSON解析问题
+            result_str = result_str.replace("'", '"')
+
+            # 处理嵌套引号问题 - 非转义双引号替换为单引号
+            # 找到未被转义的双引号（不是在字符串开始/结束处的）
+            result_str = re.sub(r'([^\\])"([^"\\]*)"', r'\1"\2"', result_str)
+
+            # 修复常见的JSON格式错误
+            # 1. 移除多余的逗号（如数组或对象的末尾）
+            result_str = re.sub(r",\s*([}\]])", r"\1", result_str)
+            # 2. 确保所有属性名都有双引号
+            result_str = re.sub(r"([{,])\s*([a-zA-Z0-9_]+)\s*:", r'\1"\2":', result_str)
+
+            try:
+                context_data = json.loads(result_str, strict=False)
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON解析错误: {str(e)}, 尝试使用替代方法解析")
+
+                # 尝试更全面的清理
+                try:
+                    # 处理嵌套JSON中的引号问题
+                    cleaned_str = result_str
+                    # 替换所有非转义双引号的引号对，这通常是内部嵌套内容
+                    cleaned_str = re.sub(r'(:\s*"[^"]*)"([^"]*)"([^"]*")', r"\1\'\2\'\3", cleaned_str)
+                    context_data = json.loads(cleaned_str, strict=False)
+                except json.JSONDecodeError:
+                    logger.warning("第二次JSON解析尝试失败，使用ast.literal_eval")
+
+                    try:
+                        # 使用更宽松的解析方式，将单引号转回来以便ast.literal_eval处理
+                        py_compatible_str = result_str.replace('"', "'")
+                        # 修复Python字典键的引号
+                        py_compatible_str = re.sub(r"([{,]\s*)([a-zA-Z0-9_]+)(\s*:)", r"\1'\2'\3", py_compatible_str)
+
+                        import ast
+
+                        context_data = ast.literal_eval(py_compatible_str)
+                    except (SyntaxError, ValueError) as ast_error:
+                        logger.error(f"ast.literal_eval解析失败: {str(ast_error)}")
+                        # 最后尝试
+                        try:
+                            # 提取并修复所有可能的字段
+                            pattern = r'"conversation_flow"\s*:\s*({[^}]+})'
+                            flow_match = re.search(pattern, result_str)
+                            flow_data = (
+                                json.loads(flow_match.group(1))
+                                if flow_match
+                                else {"topic_id": "", "topic_type": "", "current_topic": ""}
+                            )
+
+                            # 尝试提取decision_points
+                            pattern = r'"decision_points"\s*:\s*(\[[^\]]+\])'
+                            decisions_match = re.search(pattern, result_str)
+                            decision_points = []
+
+                            if decisions_match:
+                                try:
+                                    decision_points = json.loads(decisions_match.group(1))
+                                except (json.JSONDecodeError, ValueError, TypeError):
+                                    # 手动提取每个对话索引
+                                    index_pattern = r'"dialogue_index"\s*:\s*"(\d+)"'
+                                    indices = re.findall(index_pattern, result_str)
+                                    topic_id = flow_data.get("topic_id", "")
+                                    decision_points = [{"dialogue_index": idx, "topic_id": topic_id} for idx in indices]
+
+                            # 构建最少需要的数据结构
+                            context_data = {
+                                "conversation_flow": flow_data,
+                                "code_context": {"requirements": [], "frameworks": [], "file_structure": []},
+                                "decision_points": decision_points,
+                            }
+                        except Exception as final_error:
+                            logger.error(f"所有解析方法都失败: {str(final_error)}")
+                            raise ValueError("无法解析上下文数据")
 
             # 验证必要的字段
             required_fields = ["conversation_flow", "code_context", "decision_points"]
@@ -405,21 +491,29 @@ class AnalysisFlow(Flow[AnalysisState]):
             })
 
             # 从decision_points中提取相关的对话索引
-            related_indices = {
-                int(point["dialogue_index"])
-                for point in context_data["decision_points"]
-                if "dialogue_index" in point
-                and str(point["dialogue_index"]).isdigit()
-                and point.get("topic_id") == flow["topic_id"]  # 确保只关联同一主题的对话
-            }
+            related_indices = set()
+            for point in context_data["decision_points"]:
+                if "dialogue_index" in point:
+                    try:
+                        # 尝试转换为整数
+                        idx = int(point["dialogue_index"])
+                        if point.get("topic_id") == flow["topic_id"]:  # 确保只关联同一主题的对话
+                            related_indices.add(idx)
+                    except (ValueError, TypeError):
+                        logger.warning(f"无法解析对话索引: {point['dialogue_index']}")
 
             # 更新对话的相关索引
             self.dialogue.context.related_dialogue_indices = list(related_indices)
 
             return related_indices
 
-        except (ValueError, KeyError, AttributeError, json.JSONDecodeError) as e:
-            print(f"解析上下文数据结构失败: {str(e)}, result_str: {result_str}")
+        except (ValueError, KeyError, AttributeError, TypeError) as e:
+            logger.error(f"解析上下文数据结构失败: {str(e)}")
+            logger.debug(f"原始结果字符串: {result_str}")
+            return set()
+        except Exception as e:
+            logger.error(f"解析过程中发生未预期的错误: {str(e)}")
+            logger.debug(f"原始结果字符串: {result_str}")
             return set()
 
     def _handle_code_request(self, analysis_result: Dict) -> None:

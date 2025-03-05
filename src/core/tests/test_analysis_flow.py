@@ -567,6 +567,184 @@ class TestAnalysisFlow:
         assert len(state["decision_points"]) == 2
 
     @pytest.mark.asyncio
+    async def test_parse_malformed_context_result(self, mock_dialogue, mock_dialogue_pool):
+        """测试处理格式错误的上下文分析结果"""
+        # 创建AnalysisFlow实例
+        flow = AnalysisFlow(dialogue=mock_dialogue, temp_pool=mock_dialogue_pool)
+
+        # 测试1: 带有多余逗号的JSON
+        result_str_extra_comma = """{
+  "conversation_flow": {
+    "current_topic": "优化网站代码",
+    "topic_id": "44b9979b-d3c0-4ddc-910d-35e997667e0a",
+    "topic_type": "resource_iteration",
+    "status": "active",
+    "derived_from": null,
+    "change_reason": null,
+    "evolution_chain": ["6a737f18-4d82-496f-8f63-5367e897c583"],
+    "previous_topics": []
+  },
+  "code_context": {
+    "requirements": [
+      "优化网站代码",
+      "维护资源可缓存性"
+    ],
+    "frameworks": [
+      "jQuery",
+      "Bootstrap"
+    ],
+    "file_structure": [
+      "/src/js/main.js",
+      "/src/css/style.css",
+      "/src/html/index.html"
+    ],
+    "api_choices": []
+  },
+  "decision_points": [
+    {
+      "decision": "创建新主题用于资源优化",
+      "reason": "当前对话标明资源版本为VersionId\"6a737f18-4d82-496f-8f63-5367e897c583\"，需要独立追踪优化路径",
+      "dialogue_index": "280",
+      "topic_id": "44b9979b-d3c0-4ddc-910d-35e997667e0a"
+    },
+  ]
+}"""
+
+        related_indices = flow._parse_context_result(result_str_extra_comma)
+        assert isinstance(related_indices, set)
+        assert len(related_indices) == 1
+        assert 280 in related_indices
+
+        # 测试2: 属性名没有引号的JSON
+        result_str_no_quotes = """{
+  conversation_flow: {
+    "current_topic": "优化网站代码",
+    "topic_id": "44b9979b-d3c0-4ddc-910d-35e997667e0a",
+    "topic_type": "resource_iteration",
+    "status": "active",
+    "derived_from": null,
+    "change_reason": null,
+    "evolution_chain": ["6a737f18-4d82-496f-8f63-5367e897c583"],
+    "previous_topics": []
+  },
+  "code_context": {
+    requirements: [
+      "优化网站代码",
+      "维护资源可缓存性"
+    ],
+    "frameworks": [
+      "jQuery",
+      "Bootstrap"
+    ],
+    "file_structure": [
+      "/src/js/main.js",
+      "/src/css/style.css",
+      "/src/html/index.html"
+    ],
+    "api_choices": []
+  },
+  "decision_points": [
+    {
+      decision: "创建新主题用于资源优化",
+      "reason": "当前对话标明资源版本信息",
+      "dialogue_index": "280",
+      "topic_id": "44b9979b-d3c0-4ddc-910d-35e997667e0a"
+    }
+  ]
+}"""
+
+        related_indices = flow._parse_context_result(result_str_no_quotes)
+        assert isinstance(related_indices, set)
+        assert len(related_indices) == 1
+        assert 280 in related_indices
+
+        # 测试3: 使用单引号而非双引号的JSON
+        result_str_single_quotes = """{
+  'conversation_flow': {
+    'current_topic': '优化网站代码',
+    'topic_id': '44b9979b-d3c0-4ddc-910d-35e997667e0a',
+    'topic_type': 'resource_iteration',
+    'status': 'active',
+    'derived_from': null,
+    'change_reason': null,
+    'evolution_chain': ['6a737f18-4d82-496f-8f63-5367e897c583'],
+    'previous_topics': []
+  },
+  'code_context': {
+    'requirements': [
+      '优化网站代码',
+      '维护资源可缓存性'
+    ],
+    'frameworks': [
+      'jQuery',
+      'Bootstrap'
+    ],
+    'file_structure': [
+      '/src/js/main.js',
+      '/src/css/style.css',
+      '/src/html/index.html'
+    ],
+    'api_choices': []
+  },
+  'decision_points': [
+    {
+      'decision': '创建新主题用于资源优化',
+      'reason': '需要独立追踪优化路径',
+      'dialogue_index': '280',
+      'topic_id': '44b9979b-d3c0-4ddc-910d-35e997667e0a'
+    }
+  ]
+}"""
+
+        related_indices = flow._parse_context_result(result_str_single_quotes)
+        assert isinstance(related_indices, set)
+        assert len(related_indices) == 1
+        assert 280 in related_indices
+
+        # 测试4: 从错误信息中提取的真实案例 - 修复引号问题
+        real_error_case = """{
+  "conversation_flow": {
+    "current_topic": "优化网站代码",
+    "topic_id": "44b9979b-d3c0-4ddc-910d-35e997667e0a",
+    "topic_type": "resource_iteration",
+    "status": "active",
+    "derived_from": null,
+    "change_reason": null,
+    "evolution_chain": ["6a737f18-4d82-496f-8f63-5367e897c583"],
+    "previous_topics": []
+  },
+  "code_context": {
+    "requirements": [
+      "优化网站代码",
+      "维护资源可缓存性"
+    ],
+    "frameworks": [
+      "jQuery",
+      "Bootstrap"
+    ],
+    "file_structure": [
+      "/src/js/main.js",
+      "/src/css/style.css",
+      "/src/html/index.html"
+    ],
+    "api_choices": []
+  },
+  "decision_points": [
+    {
+      "decision": "创建新主题用于资源优化",
+      "reason": "当前对话标明资源版本为VersionId\\\"6a737f18-4d82-496f-8f63-5367e897c583\\\"，需要独立追踪优化路径",
+      "dialogue_index": "280",
+      "topic_id": "44b9979b-d3c0-4ddc-910d-35e997667e0a"
+    }
+  ]
+}"""
+
+        related_indices = flow._parse_context_result(real_error_case)
+        assert isinstance(related_indices, set)
+        assert len(related_indices) == 1
+        assert 280 in related_indices
+
+    @pytest.mark.asyncio
     async def test_handle_code_request(self, mock_dialogue, mock_dialogue_pool):
         """测试代码生成请求处理"""
         # 创建AnalysisFlow实例
