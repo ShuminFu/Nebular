@@ -1,6 +1,6 @@
 code_generation_task:
   description: >
-    根据以下信息生成代码：
+    根据以下信息生成代码, 如果是前端代码，所有div必须包含唯一的语义化或者uuid的id属性：
     1. 文件路径：{file_path}
     2. 文件类型：{file_type}
     3. 需求描述：{requirement}
