@@ -107,7 +107,7 @@ class AnalysisFlow(Flow[AnalysisState]):
         # 如果意图分析表明这是一个代码请求，更新对话类型
         if self.dialogue.intent_analysis and self.dialogue.intent_analysis.parameters.get("is_code_request"):
             self.dialogue.type = DialogueType.CODE_RESOURCE
-            self.log.info(f"更新对话类型为: {self.dialogue.type}")
+            self.log.info(f"更新对话类型为: {DialogueType(self.dialogue.type).name} ({self.dialogue.type})")
         # 将分析结果存储在Flow状态中
         self.state.intent_analysis = intent_analysis
 
