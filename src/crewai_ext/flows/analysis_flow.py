@@ -129,11 +129,21 @@ class AnalysisFlow(Flow[AnalysisState]):
             # 处理第一种格式: ResourcesForViewing
             if "ResourcesForViewing" in tags_data:
                 viewing_data = tags_data["ResourcesForViewing"]
+                # 处理Resources格式
                 if "Resources" in viewing_data and isinstance(viewing_data["Resources"], list):
                     for resource in viewing_data["Resources"]:
                         if "Url" in resource and "ResourceId" in resource:
                             resources.append({"file_path": resource["Url"], "resource_id": resource["ResourceId"]})
+                # 处理CurrentVersion格式 - 第四种格式
+                elif "CurrentVersion" in viewing_data:
+                    current_version = viewing_data["CurrentVersion"]
 
+                    # 提取current_files信息
+                    if "current_files" in current_version:
+                        resources.extend(current_version["current_files"])
+                    # 如果没有current_files，尝试提取modified_files
+                    elif "modified_files" in current_version:
+                        resources.extend(current_version["modified_files"])
             # 处理第二种格式: ResourcesMentionedFromViewer
             elif "ResourcesMentionedFromViewer" in tags_data and isinstance(tags_data["ResourcesMentionedFromViewer"], list):
                 for resource_id in tags_data["ResourcesMentionedFromViewer"]:
@@ -186,6 +196,9 @@ class AnalysisFlow(Flow[AnalysisState]):
                 "action": "get_filtered",
                 "opera_id": str(self.dialogue.opera_id),
                 "data": {
+                    "includes_staff_id_null": True,
+                    "includes_stage_index_null": True,
+                    "includes_narratage": True,
                     "tag_node_paths": ["$.ResourcesForViewing.VersionId"],
                     "tag_node_values": [{"path": "$.ResourcesForViewing.VersionId", "value": version_id, "type": "String"}],
                 },
@@ -196,7 +209,7 @@ class AnalysisFlow(Flow[AnalysisState]):
                 from crewai_ext.tools.opera_api.dialogue_api_tool import DialogueTool
 
                 dialogue_tool = DialogueTool()
-                result = dialogue_tool._run(**filter_data)
+                result = dialogue_tool.run(**filter_data)
 
                 # 解析返回结果
                 if result:
@@ -204,19 +217,10 @@ class AnalysisFlow(Flow[AnalysisState]):
                     for dialogue in dialogues:
                         if "tags" in dialogue:
                             try:
-                                # 解析tags字段
-                                tags_data = json.loads(dialogue["tags"])
-
-                                # 检查是否包含ResourcesForViewing和CurrentVersion
-                                if "ResourcesForViewing" in tags_data and "CurrentVersion" in tags_data["ResourcesForViewing"]:
-                                    current_version = tags_data["ResourcesForViewing"]["CurrentVersion"]
-
-                                    # 提取current_files信息
-                                    if "current_files" in current_version:
-                                        resources.extend(current_version["current_files"])
-                                    # 如果没有current_files，尝试提取modified_files
-                                    elif "modified_files" in current_version:
-                                        resources.extend(current_version["modified_files"])
+                                # 使用增强后的_extract_resources_from_tags方法解析tags
+                                extracted_resources = self._extract_resources_from_tags(dialogue["tags"])
+                                if extracted_resources:
+                                    resources.extend(extracted_resources)
                             except json.JSONDecodeError:
                                 self.log.warning(f"解析对话tags失败: {dialogue['tags']}")
                                 continue

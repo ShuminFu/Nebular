@@ -50,10 +50,10 @@ class TestExtractResourcesFromTags(unittest.TestCase):
 
         # 验证结果
         self.assertEqual(len(result), 2)
-        self.assertEqual(result[0]["file_path"], "/src/js/main.js")
-        self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")
-        self.assertEqual(result[1]["file_path"], "/src/css/style.css")
-        self.assertEqual(result[1]["resource_id"], "368e4fd9-e40b-4b18-a48b-1003e71c4aac")
+        self.assertEqual(result[0]["file_path"], "/src/js/main.js")  # type: ignore
+        self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")  # type: ignore
+        self.assertEqual(result[1]["file_path"], "/src/css/style.css")  # type: ignore
+        self.assertEqual(result[1]["resource_id"], "368e4fd9-e40b-4b18-a48b-1003e71c4aac")  # type: ignore
 
     def test_extract_resources_mentioned_format(self):
         """测试从 ResourcesMentionedFromViewer 格式提取资源"""
@@ -68,10 +68,10 @@ class TestExtractResourcesFromTags(unittest.TestCase):
 
         # 验证结果
         self.assertEqual(len(result), 2)
-        self.assertEqual(result[0]["file_path"], "")
-        self.assertEqual(result[0]["resource_id"], "473b0612-ee11-43a9-a214-670a3f8cbf4b")
-        self.assertEqual(result[1]["file_path"], "")
-        self.assertEqual(result[1]["resource_id"], "5a1c2b3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d")
+        self.assertEqual(result[0]["file_path"], "")  # type: ignore
+        self.assertEqual(result[0]["resource_id"], "473b0612-ee11-43a9-a214-670a3f8cbf4b")  # type: ignore
+        self.assertEqual(result[1]["file_path"], "")  # type: ignore
+        self.assertEqual(result[1]["resource_id"], "5a1c2b3d-4e5f-6a7b-8c9d-0e1f2a3b4c5d")  # type: ignore
 
     def test_extract_resources_empty_resources(self):
         """测试处理没有资源的情况"""
@@ -237,8 +237,8 @@ class TestExtractResourcesFromTags(unittest.TestCase):
 
         # 验证结果 - 应该只包含有效的资源条目
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["file_path"], "/src/js/main.js")
-        self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")
+        self.assertEqual(result[0]["file_path"], "/src/js/main.js")  # type: ignore
+        self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")  # type: ignore
 
     def test_extract_resources_carriage_return(self):
         """测试处理包含回车符的 JSON 字符串"""
@@ -250,8 +250,60 @@ class TestExtractResourcesFromTags(unittest.TestCase):
 
         # 验证结果
         self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]["file_path"], "/src/js/main.js")
-        self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")
+        self.assertEqual(result[0]["file_path"], "/src/js/main.js")  # type: ignore
+        self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")  # type: ignore
+
+    def test_extract_resources_current_version_format(self):
+        """测试从ResourcesForViewing的CurrentVersion格式提取资源"""
+        # 准备测试数据 - CurrentVersion格式
+        tags_data = {
+            "ResourcesForViewing": {
+                "VersionId": "6a737f18-4d82-496f-8f63-5367e897c583",
+                "CurrentVersion": {
+                    "current_files": [
+                        {"file_path": "/src/js/main.js", "resource_id": "1679d89d-40d3-4db2-b7f5-a48881d3aa31"},
+                        {"file_path": "/src/css/style.css", "resource_id": "368e4fd9-e40b-4b18-a48b-1003e71c4aac"},
+                    ]
+                },
+            }
+        }
+        tags_str = json.dumps(tags_data)
+
+        # 执行测试
+        result = self.flow._extract_resources_from_tags(tags_str)
+
+        # 验证结果
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["file_path"], "/src/js/main.js")  # type: ignore
+        self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")  # type: ignore
+        self.assertEqual(result[1]["file_path"], "/src/css/style.css")  # type: ignore
+        self.assertEqual(result[1]["resource_id"], "368e4fd9-e40b-4b18-a48b-1003e71c4aac")  # type: ignore
+
+    def test_extract_resources_current_version_modified_files(self):
+        """测试从ResourcesForViewing的CurrentVersion格式提取modified_files资源"""
+        # 准备测试数据 - CurrentVersion with modified_files格式
+        tags_data = {
+            "ResourcesForViewing": {
+                "VersionId": "6a737f18-4d82-496f-8f63-5367e897c583",
+                "CurrentVersion": {
+                    "modified_files": [
+                        {"file_path": "/src/html/index.html", "resource_id": "18c91231-af74-4704-9960-eff96164428b"},
+                        {"file_path": "/src/js/utils.js", "resource_id": "4582a2d7-90c5-4b1e-a7f9-6d21f9e85cb9"},
+                    ]
+                },
+            }
+        }
+        tags_str = json.dumps(tags_data)
+
+        # 执行测试
+        result = self.flow._extract_resources_from_tags(tags_str)
+
+        # 验证结果
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0]["file_path"], "/src/html/index.html")  # type: ignore
+        self.assertEqual(result[0]["resource_id"], "18c91231-af74-4704-9960-eff96164428b")  # type: ignore
+        self.assertEqual(result[1]["file_path"], "/src/js/utils.js")  # type: ignore
+        self.assertEqual(result[1]["resource_id"], "4582a2d7-90c5-4b1e-a7f9-6d21f9e85cb9")  # type: ignore
 
 
 class TestGetResourcesByVersionIds(unittest.TestCase):
@@ -275,7 +327,8 @@ class TestGetResourcesByVersionIds(unittest.TestCase):
         # 替换日志对象
         self.flow.log = self.mock_logger
 
-    def test_get_resources_by_version_id(self):
+    @patch("src.crewai_ext.flows.analysis_flow.AnalysisFlow._extract_resources_from_tags")
+    def test_get_resources_by_version_id(self, mock_extract_resources):
         """测试通过版本ID获取资源"""
         # 设置版本ID
         version_id = "6a737f18-4d82-496f-8f63-5367e897c583"
@@ -299,9 +352,17 @@ class TestGetResourcesByVersionIds(unittest.TestCase):
             }
         ]
 
+        # 模拟_extract_resources_from_tags方法的返回值
+        expected_resources = [
+            {"file_path": "/src/js/main.js", "resource_id": "1679d89d-40d3-4db2-b7f5-a48881d3aa31"},
+            {"file_path": "/src/css/style.css", "resource_id": "368e4fd9-e40b-4b18-a48b-1003e71c4aac"},
+            {"file_path": "/src/html/index.html", "resource_id": "18c91231-af74-4704-9960-eff96164428b"},
+        ]
+        mock_extract_resources.return_value = expected_resources
+
         # 模拟DialogueTool类
         mock_dialogue_tool = MagicMock()
-        mock_dialogue_tool._run = MagicMock(return_value=json.dumps(mock_dialogue_data))
+        mock_dialogue_tool.run = MagicMock(return_value=json.dumps(mock_dialogue_data))
 
         # 创建模拟模块
         mock_dialogue_api_tool_module = MagicMock()
@@ -314,18 +375,23 @@ class TestGetResourcesByVersionIds(unittest.TestCase):
 
         # 验证DialogueTool创建和调用
         mock_dialogue_api_tool_module.DialogueTool.assert_called_once()
-        mock_dialogue_tool._run.assert_called_once()
+        mock_dialogue_tool.run.assert_called_once()
+
+        # 验证_extract_resources_from_tags被调用
+        tags_json_str = mock_dialogue_data[0]["tags"]
+        mock_extract_resources.assert_called_once_with(tags_json_str)
 
         # 验证结果
         self.assertEqual(len(result), 3)
-        self.assertEqual(result[0]["file_path"], "/src/js/main.js")
-        self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")
-        self.assertEqual(result[1]["file_path"], "/src/css/style.css")
-        self.assertEqual(result[1]["resource_id"], "368e4fd9-e40b-4b18-a48b-1003e71c4aac")
-        self.assertEqual(result[2]["file_path"], "/src/html/index.html")
-        self.assertEqual(result[2]["resource_id"], "18c91231-af74-4704-9960-eff96164428b")
+        self.assertEqual(result[0]["file_path"], "/src/js/main.js")  # type: ignore
+        self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")  # type: ignore
+        self.assertEqual(result[1]["file_path"], "/src/css/style.css")  # type: ignore
+        self.assertEqual(result[1]["resource_id"], "368e4fd9-e40b-4b18-a48b-1003e71c4aac")  # type: ignore
+        self.assertEqual(result[2]["file_path"], "/src/html/index.html")  # type: ignore
+        self.assertEqual(result[2]["resource_id"], "18c91231-af74-4704-9960-eff96164428b")  # type: ignore
 
-    def test_get_resources_by_version_id_modified_files(self):
+    @patch("src.crewai_ext.flows.analysis_flow.AnalysisFlow._extract_resources_from_tags")
+    def test_get_resources_by_version_id_modified_files(self, mock_extract_resources):
         """测试通过版本ID获取资源 - 使用modified_files"""
         # 设置版本ID
         version_id = "6a737f18-4d82-496f-8f63-5367e897c583"
@@ -348,9 +414,16 @@ class TestGetResourcesByVersionIds(unittest.TestCase):
             }
         ]
 
+        # 模拟_extract_resources_from_tags方法的返回值
+        expected_resources = [
+            {"file_path": "/src/js/main.js", "resource_id": "1679d89d-40d3-4db2-b7f5-a48881d3aa31"},
+            {"file_path": "/src/css/style.css", "resource_id": "368e4fd9-e40b-4b18-a48b-1003e71c4aac"},
+        ]
+        mock_extract_resources.return_value = expected_resources
+
         # 模拟DialogueTool类
         mock_dialogue_tool = MagicMock()
-        mock_dialogue_tool._run = MagicMock(return_value=json.dumps(mock_dialogue_data))
+        mock_dialogue_tool.run = MagicMock(return_value=json.dumps(mock_dialogue_data))
 
         # 创建模拟模块
         mock_dialogue_api_tool_module = MagicMock()
@@ -361,12 +434,16 @@ class TestGetResourcesByVersionIds(unittest.TestCase):
             # 执行测试
             result = self.flow._get_resources_by_version_ids([version_id])
 
+        # 验证_extract_resources_from_tags被调用
+        tags_json_str = mock_dialogue_data[0]["tags"]
+        mock_extract_resources.assert_called_once_with(tags_json_str)
+
         # 验证结果
         self.assertEqual(len(result), 2)
-        self.assertEqual(result[0]["file_path"], "/src/js/main.js")
-        self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")
-        self.assertEqual(result[1]["file_path"], "/src/css/style.css")
-        self.assertEqual(result[1]["resource_id"], "368e4fd9-e40b-4b18-a48b-1003e71c4aac")
+        self.assertEqual(result[0]["file_path"], "/src/js/main.js")  # type: ignore
+        self.assertEqual(result[0]["resource_id"], "1679d89d-40d3-4db2-b7f5-a48881d3aa31")  # type: ignore
+        self.assertEqual(result[1]["file_path"], "/src/css/style.css")  # type: ignore
+        self.assertEqual(result[1]["resource_id"], "368e4fd9-e40b-4b18-a48b-1003e71c4aac")  # type: ignore
 
     def test_get_resources_by_version_id_error_handling(self):
         """测试从版本ID获取资源时的错误处理"""
@@ -375,7 +452,7 @@ class TestGetResourcesByVersionIds(unittest.TestCase):
 
         # 模拟DialogueTool类
         mock_dialogue_tool = MagicMock()
-        mock_dialogue_tool._run = MagicMock(side_effect=Exception("API调用失败"))
+        mock_dialogue_tool.run = MagicMock(side_effect=Exception("API调用失败"))
 
         # 创建模拟模块
         mock_dialogue_api_tool_module = MagicMock()
@@ -390,7 +467,8 @@ class TestGetResourcesByVersionIds(unittest.TestCase):
         self.assertEqual(result, [])
         self.mock_logger.error.assert_called_once()
 
-    def test_get_resources_by_version_id_multiple_versions(self):
+    @patch("src.crewai_ext.flows.analysis_flow.AnalysisFlow._extract_resources_from_tags")
+    def test_get_resources_by_version_id_multiple_versions(self, mock_extract_resources):
         """测试获取多个版本ID的资源并去重"""
         # 设置版本ID
         version_id1 = "6a737f18-4d82-496f-8f63-5367e897c583"
@@ -437,9 +515,21 @@ class TestGetResourcesByVersionIds(unittest.TestCase):
             }
         ]
 
+        # 模拟_extract_resources_from_tags方法的返回值
+        mock_extract_resources.side_effect = [
+            [  # 第一次调用的返回值
+                {"file_path": "/src/js/main.js", "resource_id": "1679d89d-40d3-4db2-b7f5-a48881d3aa31"},
+                {"file_path": "/src/css/style.css", "resource_id": "368e4fd9-e40b-4b18-a48b-1003e71c4aac"},
+            ],
+            [  # 第二次调用的返回值
+                {"file_path": "/src/js/main.js", "resource_id": "1679d89d-40d3-4db2-b7f5-a48881d3aa31"},  # 重复资源
+                {"file_path": "/src/html/index.html", "resource_id": "18c91231-af74-4704-9960-eff96164428b"},  # 新资源
+            ],
+        ]
+
         # 模拟DialogueTool类
         mock_dialogue_tool = MagicMock()
-        mock_dialogue_tool._run = MagicMock(side_effect=[json.dumps(mock_dialogue_data1), json.dumps(mock_dialogue_data2)])
+        mock_dialogue_tool.run = MagicMock(side_effect=[json.dumps(mock_dialogue_data1), json.dumps(mock_dialogue_data2)])
 
         # 创建模拟模块
         mock_dialogue_api_tool_module = MagicMock()
@@ -450,10 +540,17 @@ class TestGetResourcesByVersionIds(unittest.TestCase):
             # 执行测试
             result = self.flow._get_resources_by_version_ids([version_id1, version_id2])
 
+        # 验证_extract_resources_from_tags被调用了两次
+        self.assertEqual(mock_extract_resources.call_count, 2)
+        # 验证第一次调用的参数
+        mock_extract_resources.assert_any_call(mock_dialogue_data1[0]["tags"])
+        # 验证第二次调用的参数
+        mock_extract_resources.assert_any_call(mock_dialogue_data2[0]["tags"])
+
         # 验证结果 - 应该有3个不重复的资源
         self.assertEqual(len(result), 3)
         # 验证资源ID是否正确
-        resource_ids = [r["resource_id"] for r in result]
+        resource_ids = [r["resource_id"] for r in result]  # type: ignore
         self.assertIn("1679d89d-40d3-4db2-b7f5-a48881d3aa31", resource_ids)
         self.assertIn("368e4fd9-e40b-4b18-a48b-1003e71c4aac", resource_ids)
         self.assertIn("18c91231-af74-4704-9960-eff96164428b", resource_ids)
