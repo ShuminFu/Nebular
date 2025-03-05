@@ -383,22 +383,39 @@ class CrewManager(BaseCrewProcess):
         """处理任务，包括主题任务跟踪"""
         # 1. 处理需要转发的任务
         if task.type == TaskType.RESOURCE_GENERATION:
-            cr_for_task = None
-            for cr_bot_id, cr_info in self.crew_processes.items():
-                # 遍历每个CR的所有opera中的staff_ids
-                for opera_id, staff_ids in cr_info.staff_ids.items():
-                    if task.response_staff_id in staff_ids:
-                        cr_for_task = cr_info
-                        break
-                if cr_for_task:
-                    break
+            # 检查任务参数中是否包含action信息
+            need_forward_to_cr = False
 
-            # 找到CR后转发任务
-            if cr_for_task:
-                if task.topic_id:
-                    self.topic_tracker.add_task(task)
-                await self._update_cr_task_queue(cr_for_task.bot_id, task)
-                return
+            # 检查任务参数中的code_details
+            code_details = task.parameters.get("code_details", {})
+            resources = code_details.get("resources", [])
+
+            if resources:
+                for resource in resources:
+                    action = resource.get("action", "").lower()
+                    if not action or action in ["add", "create", "update"]:
+                        need_forward_to_cr = True
+                        break
+
+            # 无论如何都添加到topic tracker
+            if task.topic_id:
+                self.topic_tracker.add_task(task)
+
+            # 只有需要实际生成/修改代码时才转发给CR
+            if need_forward_to_cr:
+                # 查找处理该任务的CR
+                cr_for_task = None
+                for cr_bot_id, cr_info in self.crew_processes.items():
+                    for opera_id, staff_ids in cr_info.staff_ids.items():
+                        if task.response_staff_id in staff_ids:
+                            cr_for_task = cr_info
+                            break
+                    if cr_for_task:
+                        break
+
+                if cr_for_task:
+                    await self._update_cr_task_queue(cr_for_task.bot_id, task)
+            return
 
         # 2. 处理资源创建任务
         if task.type == TaskType.RESOURCE_CREATION:
@@ -411,24 +428,19 @@ class CrewManager(BaseCrewProcess):
             tags = json.loads(task.parameters.get("tags", "{}"))
             resource_list = []
             version_id = None
-            
+
             # 场景1：直接包含资源列表
             for tag_key in ["ResourcesForViewing", "ResourcesForIncarnating", "ResourcesMentionedFromViewer"]:
                 if tag_key in tags:
                     resources = tags[tag_key].get("Resources", [])
-                    resource_list.extend([
-                        {
-                            "file_path": res["Url"],
-                            "resource_id": res["ResourceId"]
-                        } for res in resources
-                    ])
-            
+                    resource_list.extend([{"file_path": res["Url"], "resource_id": res["ResourceId"]} for res in resources])
+
             # 场景2：通过SelectedTextsFromViewer获取version_id
             if not resource_list and "SelectedTextsFromViewer" in tags:
                 selected_items = tags["SelectedTextsFromViewer"]
                 if selected_items:
                     version_id = selected_items[0].get("VersionId")
-            
+
             # 场景3：从TopicTracker获取资源列表
             if version_id and not resource_list:
                 try:
