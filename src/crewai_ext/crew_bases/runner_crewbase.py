@@ -2,6 +2,7 @@ from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
 from pydantic import BaseModel, Field, StrictStr
 from src.crewai_ext.config.llm_setup import llm
+from src.crewai_ext.tools.opera_api.resource_api_tool import ResourceTool
 from typing import List, Optional, Type, Dict, Any
 
 class ChatReply(BaseModel):
@@ -61,7 +62,7 @@ class RunnerCodeGenerationCrew:
     @agent
     def code_generator(self) -> Agent:
         """Create a code generation agent with validation capabilities"""
-        return Agent(config=self.agents_config["code_generator"], llm=llm, verbose=True)
+        return Agent(config=self.agents_config["code_generator"], tools=[ResourceTool()], llm=llm, verbose=True)
 
     @task
     def generation_task(self) -> Task:

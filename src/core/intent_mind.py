@@ -216,15 +216,16 @@ class IntentMind:
             return random.choice(crs)
 
     def _parse_tags(self, tags_data: Union[str, List[str], None]) -> List[str]:
-        """解析tags数据，支持字符串和列表格式
+        """解析tags数据，支持字符串和列表格式，以及嵌入JSON结构
 
         Args:
             tags_data: 可以是字符串(如 "[tag1,tag2]" 或 "tag1,tag2")，
                       或者是字符串列表(如 ["tag1", "tag2"])，
                       或者是None
+                      也可以包含JSON对象如: '{"ResourcesForViewing":...},tag1,tag2'
 
         Returns:
-            List[str]: 处理后的tags列表
+            List[str]: 处理后的tags列表，保留完整的JSON结构
         """
         if not tags_data:
             return []
@@ -233,8 +234,43 @@ class IntentMind:
             return [str(tag).strip() for tag in tags_data if tag]
 
         if isinstance(tags_data, str):
+            # 检查是否包含JSON结构
+            tags_list = []
+            text = tags_data.strip()
+
+            # 如果以大括号开头，可能包含JSON对象
+            if text.startswith("{"):
+                # 处理JSON部分
+                json_end_index = 0
+                bracket_count = 0
+
+                for i, char in enumerate(text):
+                    if char == "{":
+                        bracket_count += 1
+                    elif char == "}":
+                        bracket_count -= 1
+                        if bracket_count == 0:
+                            json_end_index = i + 1
+                            break
+
+                if json_end_index > 0:
+                    # 提取JSON部分
+                    json_part = text[:json_end_index]
+                    tags_list.append(json_part)
+
+                    # 处理JSON后的逗号分隔标签
+                    remaining = text[json_end_index:].strip()
+                    if remaining:
+                        if remaining.startswith(","):
+                            remaining = remaining[1:]
+                        remaining_tags = [tag.strip() for tag in remaining.split(",") if tag.strip()]
+                        tags_list.extend(remaining_tags)
+
+                    return tags_list
+
+            # 如果没有检测到JSON结构或处理失败，回退到原来的处理方式
             # 移除可能存在的方括号
-            cleaned = tags_data.strip("[]")
+            cleaned = text.strip("[]")
             if not cleaned:
                 return []
             # 分割并清理每个tag
@@ -373,14 +409,18 @@ class IntentMind:
                         break
 
                 # 根据操作类型选择任务类型
-                task_type = TaskType.RESOURCE_ITERATION if has_iteration else TaskType.RESOURCE_GENERATION
+                task_type = TaskType.RESOURCE_GENERATION
                 task_priority = TaskPriority.HIGH
 
                 # 为每个文件创建独立的任务
                 tasks = []
                 for resource in resources:
-                    # 选择合适的CR来处理代码生成任务
-                    selected_cr = self._select_code_resource_handler(dialogue, resource)
+                    # 检查action是否为delete或unchange，这种情况下不需要选择CR
+                    if resource.get("action") in ["delete", "unchange"]:
+                        selected_cr = None
+                    else:
+                        # 选择合适的CR来处理代码生成任务
+                        selected_cr = self._select_code_resource_handler(dialogue, resource)
 
                     # 获取相关对话的内容
                     related_dialogues = []
