@@ -424,6 +424,7 @@ class CrewManager(BaseCrewProcess):
             await self.resource_handler.handle_resource_creation(task)
             return
         if task.type == TaskType.RESOURCE_ITERATION:
+            """currently deprecated"""
             # 解析Tags中的资源信息
             tags = json.loads(task.parameters.get("tags", "{}"))
             resource_list = []
@@ -502,6 +503,7 @@ class CrewManager(BaseCrewProcess):
             # 更新任务的source_staff_id
             task_data = task.model_dump(by_alias=True)
             task_data["sourceStaffId"] = str(cm_staff_id)
+            # task_data = self._create_task_dto_for_cr(task, cm_staff_id)
 
             # 首先获取CR的当前信息
             get_result = _SHARED_BOT_TOOL.run(
@@ -557,6 +559,7 @@ class CrewManager(BaseCrewProcess):
                 is_narratage=False,
                 is_whisper=True,  # 设置为私聊
                 text=task_description,
+                # text=json.dumps(task_data),  # 将task_data转换为JSON字符串, 还需要转驼峰。
                 tags=task_tags,
                 mentioned_staff_ids=[str(cr_staff_id)],  # 提及CR的staff
             )
@@ -616,6 +619,52 @@ class CrewManager(BaseCrewProcess):
 
         except Exception as e:
             self.log.error(f"更新CrewRunner任务队列时发生错误: {str(e)}")
+
+    def _create_task_dto_for_cr(self, task: BotTask, cm_staff_id: UUID) -> dict:
+        """创建发送给CrewRunner的轻量级任务数据传输对象
+
+        只包含CR执行任务所必需的字段，避免传输不必要的大量数据
+        """
+        # 基础必需字段
+        task_dto = {
+            "id": str(task.id),
+            "type": task.type.name,
+            "description": task.description,
+            "sourceStaffId": str(cm_staff_id),
+            "topicId": task.topic_id,
+            "topicType": task.topic_type,
+        }
+
+        # 针对不同任务类型添加必要的parameters字段
+        if task.parameters:
+            # 提取所有任务类型都需要的基本参数
+            essential_params = {
+                "opera_id": task.parameters.get("opera_id"),
+                "action": task.parameters.get("action"),
+                "resource_id": task.parameters.get("resource_id"),
+            }
+
+            # 根据任务类型添加特定参数
+            if task.type == TaskType.RESOURCE_GENERATION or task.type == TaskType.CODE_ITERATION:
+                essential_params.update({
+                    "file_path": task.parameters.get("file_path"),
+                    "file_type": task.parameters.get("file_type"),
+                    "description": task.parameters.get("description"),
+                    "position": task.parameters.get("position"),
+                })
+            elif task.type == TaskType.CONVERSATION:
+                # 对话类型任务可能需要的特定字段
+                if "dialogue_context" in task.parameters:
+                    dialogue_context = task.parameters.get("dialogue_context", {})
+                    essential_params["dialogue_context"] = {
+                        "text": dialogue_context.get("text"),
+                        "type": dialogue_context.get("type"),
+                        "intent": dialogue_context.get("intent"),
+                    }
+
+            task_dto["parameters"] = essential_params
+
+        return task_dto
 
     async def _handle_task_callback(self, task: BotTask):
         """处理来自CR的任务回调"""

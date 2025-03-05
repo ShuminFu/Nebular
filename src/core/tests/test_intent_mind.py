@@ -4,7 +4,7 @@ from uuid import UUID
 from datetime import datetime, timezone, timedelta
 import unittest
 
-from src.core.intent_mind import IntentMind
+from src.core.intent_mind import IntentMind, parse_version_id
 from src.core.task_utils import BotTaskQueue, TaskType
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
 from src.core.dialogue.models import ProcessingDialogue, DialogueContext
@@ -30,6 +30,25 @@ class TestIntentMind(unittest.TestCase):
         self.intent_mind = IntentMind(self.task_queue)
         self.opera_id = UUID('96028f82-9f76-4372-976c-f0c5a054db79')
         self.test_time = datetime.now(timezone(timedelta(hours=8)))
+
+    def test_parse_tags_with_json(self):
+        """测试解析带有JSON结构的标签并提取VersionId"""
+
+        # 测试带JSON的tags字符串
+        complex_tags = """{\r\n "ResourcesForViewing": {\r\n "VersionId": "6a737f18-4d82-496f-8f63-5367e897c583",\r\n "Resources": [\r\n {\r\n "Url": "/src/js/main.js",\r\n "ResourceId": "1679d89d-40d3-4db2-b7f5-a48881d3aa31",\r\n "ResourceCacheable": true\r\n },\r\n {\r\n "Url": "/src/css/style.css",\r\n "ResourceId": "368e4fd9-e40b-4b18-a48b-1003e71c4aac",\r\n "ResourceCacheable": true\r\n },\r\n {\r\n "Url": "/src/html/index.html",\r\n "ResourceId": "18c91231-af74-4704-9960-eff96164428b",\r\n "ResourceCacheable": true\r\n }\r\n ],\r\n "NavigateIndex": 0\r\n }\r\n},code_request,code_type_html,code_type_js,code_type_css,framework_jquery,framework_bootstrap"""
+
+        # 解析tags
+        parsed_tags = self.intent_mind._parse_tags(complex_tags)
+
+        # 测试是否成功解析出JSON部分和普通标签
+        self.assertTrue(len(parsed_tags) > 1, "应该解析出多个标签")
+        self.assertTrue(parsed_tags[0].startswith("{"), "第一个标签应该是JSON结构")
+        self.assertIn("code_request", parsed_tags, "应该包含普通标签")
+
+        # 测试version_id提取
+        version_id = parse_version_id(parsed_tags)
+        expected_version_id = "6a737f18-4d82-496f-8f63-5367e897c583"
+        self.assertEqual(version_id, expected_version_id, f"VersionId不匹配: 期望 {expected_version_id}, 得到 {version_id}")
 
     @async_test
     async def test_create_task_from_dialogue_with_context(self):
