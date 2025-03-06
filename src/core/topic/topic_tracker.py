@@ -232,11 +232,11 @@ class TopicTracker:
                             current_topic.current_version.current_files = []
 
                         # 创建现有文件路径的集合，用于快速查找
-                        existing_file_paths = {entry["file_path"] for entry in current_topic.current_version.current_files}
+                        existing_resources = {entry["resource_id"] for entry in current_topic.current_version.current_files}
 
                         # 添加从对话工具获取的文件，跳过已存在的
                         for resource in resources:
-                            if resource["file_path"] not in existing_file_paths:
+                            if resource["resource_id"] not in existing_resources:
                                 current_topic.current_version.current_files.append(resource.copy())
         finally:
             # 处理完成后移除标记
@@ -393,10 +393,10 @@ class TopicTracker:
                 topic.completed_creation_count += 1
                 # 只有CREATION类任务完成才会触发主题完成检查
                 await self._check_topic_completion(topic_id)
-            # 对于带有资源操作的任务，检查所有pending_updates是否处理完成
-            elif has_resource_actions:
-                if not topic.pending_updates or len(topic.pending_updates) == 0:
-                    await self._check_topic_completion(topic_id)
+            # 对于其他类型的任务（如RESOURCE_GENERATION），只记录完成但不检查主题完成情况
+            # elif has_resource_actions:
+            #     if not topic.pending_updates or len(topic.pending_updates) == 0:
+            #         await self._check_topic_completion(topic_id)
 
     async def _check_topic_completion(self, topic_id: str):
         """检查主题是否全部完成"""
