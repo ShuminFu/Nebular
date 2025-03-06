@@ -393,10 +393,10 @@ class TopicTracker:
                 topic.completed_creation_count += 1
                 # 只有CREATION类任务完成才会触发主题完成检查
                 await self._check_topic_completion(topic_id)
-            # 对于其他类型的任务（如RESOURCE_GENERATION），只记录完成但不检查主题完成情况
-            # elif has_resource_actions:
-            #     if not topic.pending_updates or len(topic.pending_updates) == 0:
-            #         await self._check_topic_completion(topic_id)
+            # 对于带有资源操作的任务，检查所有pending_updates是否处理完成
+            elif has_resource_actions:
+                if not topic.pending_updates or len(topic.pending_updates) == 0:
+                    await self._check_topic_completion(topic_id)
 
     async def _check_topic_completion(self, topic_id: str):
         """检查主题是否全部完成"""
