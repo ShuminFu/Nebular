@@ -62,29 +62,29 @@ class DialogueTool(BaseApiTool):
     示例输入:
     1. 创建对话: {
         'action': 'create',
-        'opera_id': 'uuid',
+        'opera_id': 'the UUID of the opera id',
         'data': {
             'is_stage_index_null': false,
-            'staff_id': 'uuid',
+            'staff_id': 'the UUID of the staff id',
             'is_narratage': false,
             'is_whisper': false,
             'text': '对话内容',
             'tags': 'tag1,tag2',
-            'mentioned_staff_ids': ['uuid1', 'uuid2']
+            'mentioned_staff_ids': ['the UUID of the mentioned staff id1', 'the UUID of the mentioned staff id2']
         }
     }
     2. 获取所有对话: {
         'action': 'get_all', 
-        'opera_id': 'uuid'
+        'opera_id': 'the UUID of the opera id'
     }
     3. 获取单个对话: {
         'action': 'get', 
-        'opera_id': 'uuid', 
+        'opera_id': 'the UUID of the opera id', 
         'dialogue_index': 1
     }
     4. 条件过滤查询对话: {
         'action': 'get_filtered',
-        'opera_id': 'uuid',
+        'opera_id': 'the UUID of the opera id',
         'data': {
             'index_not_before': 1,
             'index_not_after': 10,
@@ -92,7 +92,7 @@ class DialogueTool(BaseApiTool):
             'stage_index': 1,
             'includes_stage_index_null': true,
             'includes_narratage': true,
-            'includes_for_staff_id_only': 'uuid',
+            'includes_for_staff_id_only': 'the UUID for the staff id',
             'includes_staff_id_null': true,
             'tag_node_paths': ['$.path1', 'path2'], 
             'tag_node_paths_all_mode': true,
@@ -105,7 +105,7 @@ class DialogueTool(BaseApiTool):
     }
     5. 获取最新对话索引: {
         'action': 'get_latest_index',
-        'opera_id': 'uuid'
+        'opera_id': 'the UUID of the opera id'
     }
     """
     args_schema: Type[BaseModel] = DialogueToolSchema

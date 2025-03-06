@@ -50,27 +50,27 @@ class ResourceTool(BaseApiTool):
     示例输入:
     1. 创建资源: {
         'action': 'create',
-        'opera_id': 'uuid',
+        'opera_id': 'the UUID of the opera id',
         'data': {
             'name': '测试资源',
             'description': '这是一个测试资源文件',
             'mime_type': 'application/pdf',
             'last_update_staff_name': '张三',
-            'temp_file_id': 'uuid'  # 上传文件后得到的临时文件ID
+            'temp_file_id': 'the UUID of the temp file id'  # 上传文件后得到的临时文件ID
         }
     }
     2. 获取所有资源: {
         'action': 'get_all', 
-        'opera_id': 'uuid'
+        'opera_id': 'the UUID of the opera id'
     }
     3. 获取单个资源: {
         'action': 'get', 
-        'opera_id': 'uuid', 
-        'resource_id': 'uuid'
+        'opera_id': 'the UUID of the opera id', 
+        'resource_id': 'the UUID of the resource id'
     }
     4. 条件过滤查询资源: {
         'action': 'get_filtered',
-        'opera_id': 'uuid',
+        'opera_id': 'the UUID of the opera id',
         'data': {
             'name': '测试资源',  # 精确匹配名称
             'name_like': '测试',  # 模糊匹配名称
@@ -84,25 +84,25 @@ class ResourceTool(BaseApiTool):
     }
     5. 更新资源: {
         'action': 'update',
-        'opera_id': 'uuid',
-        'resource_id': 'uuid',
+        'opera_id': 'the UUID of the opera id',
+        'resource_id': 'the UUID of the resource id',
         'data': {
             'name': '新资源名称',  # 可选
             'description': '新的描述',  # 可选
             'mime_type': 'application/pdf',  # 可选
             'last_update_staff_name': '李四',  # 必填
-            'temp_file_id': 'uuid'  # 可选，如果需要更新文件内容
+            'temp_file_id': 'the UUID of the temp file id'  # 可选，如果需要更新文件内容
         }
     }
     6. 删除资源: {
         'action': 'delete',
-        'opera_id': 'uuid',
-        'resource_id': 'uuid'
+        'opera_id': 'the UUID of the opera id',
+        'resource_id': 'the UUID of the resource id'
     }
     7. 下载资源: {
         'action': 'download',
-        'opera_id': 'uuid',
-        'resource_id': 'uuid'
+        'opera_id': 'the UUID of the opera id',
+        'resource_id': 'the UUID of the resource id'
     }
     """
     args_schema: Type[BaseModel] = ResourceToolSchema
