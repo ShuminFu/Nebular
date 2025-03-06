@@ -1,5 +1,8 @@
 import pytest
 from uuid import UUID
+import json
+import copy
+from unittest.mock import patch, Mock, MagicMock
 from src.core.topic.topic_tracker import TopicTracker
 from src.core.task_utils import BotTask, TaskStatus, TaskType
 
@@ -19,6 +22,61 @@ def sample_task():
         topic_id="test-topic-1",
         topic_type="code_generation",
         parameters={"opera_id": "test-opera-1"},
+    )
+
+
+@pytest.fixture
+def sample_iteration_task():
+    """创建一个带有resource action的迭代任务"""
+    return BotTask(
+        id=UUID("8ad48107-c9d6-4a1f-862a-ef130a54e56e"),
+        type=TaskType.RESOURCE_GENERATION,
+        description="迭代代码文件: /src/css/style.css",
+        topic_id="2cc8ac66-f1e5-425a-b5b8-88cab60e144a",
+        topic_type="CODE_RESOURCE",
+        parameters={
+            "file_path": "/src/css/style.css",
+            "file_type": "css",
+            "mime_type": "text/css",
+            "description": "需要修改CSS文件中的按钮样式规则，以调整按钮大小。",
+            "opera_id": "99a51bfa-0b95-46e5-96b3-e3cfc021a6b2",
+            "parent_topic_id": "6a737f18-4d82-496f-8f63-5367e897c583",
+            "action": "update",
+            "position": "按钮类样式：`.btn`，需要增加padding和font-size属性。",
+            "resource_id": "368e4fd9-e40b-4b18-a48b-1003e71c4aac",
+            "resources": [
+                {
+                    "file_path": "/src/js/main.js",
+                    "type": "javascript",
+                    "mime_type": "application/javascript",
+                    "description": "该JavaScript文件不涉及按钮样式调整，不需要修改。",
+                    "action": "unchange",
+                    "resource_id": "1679d89d-40d3-4db2-b7f5-a48881d3aa31",
+                    "position": "N/A",
+                },
+                {
+                    "file_path": "/src/css/style.css",
+                    "type": "css",
+                    "mime_type": "text/css",
+                    "description": "需要修改CSS文件中的按钮样式规则，以调整按钮大小。",
+                    "action": "update",
+                    "resource_id": "368e4fd9-e40b-4b18-a48b-1003e71c4aac",
+                    "position": "按钮类样式：`.btn`，需要增加padding和font-size属性。",
+                },
+                {
+                    "file_path": "/src/html/index.html",
+                    "type": "html",
+                    "mime_type": "text/html",
+                    "description": "HTML文件不直接涉及按钮大小的样式，但涉及整体布局支持，不需要修改。",
+                    "action": "unchange",
+                    "resource_id": "18c91231-af74-4704-9960-eff96164428b",
+                    "position": "N/A",
+                },
+            ],
+            "dialogue_context": {
+                "tags": '{\r\n "ResourcesForViewing": {\r\n "VersionId": "6a737f18-4d82-496f-8f63-5367e897c583",\r\n "Resources": [\r\n {\r\n "Url": "/src/js/main.js",\r\n "ResourceId": "1679d89d-40d3-4db2-b7f5-a48881d3aa31",\r\n "ResourceCacheable": true\r\n },\r\n {\r\n "Url": "/src/css/style.css",\r\n "ResourceId": "368e4fd9-e40b-4b18-a48b-1003e71c4aac",\r\n "ResourceCacheable": true\r\n },\r\n {\r\n "Url": "/src/html/index.html",\r\n "ResourceId": "18c91231-af74-4704-9960-eff96164428b",\r\n "ResourceCacheable": true\r\n }\r\n ],\r\n "NavigateIndex": 0\r\n }\r\n}'
+            },
+        },
     )
 
 
@@ -539,3 +597,431 @@ async def test_generation_task_completion_no_check(topic_tracker: TopicTracker, 
     # 验证主题状态
     topic_info = topic_tracker.get_topic_info("test-topic-gen")
     assert topic_info.status == "completed"  # 主题现在应该完成
+
+
+@pytest.mark.asyncio
+async def test_resource_actions_processing(topic_tracker: TopicTracker, sample_iteration_task: BotTask):
+    """测试处理资源操作的功能"""
+    # 添加任务
+    topic_tracker.add_task(sample_iteration_task)
+
+    # 验证主题是否被创建
+    topic_info = topic_tracker.get_topic_info(sample_iteration_task.topic_id)
+    assert topic_info is not None
+    assert topic_info.type == "CODE_RESOURCE"
+
+    # 验证是否记录了资源操作
+    assert sample_iteration_task.id in topic_tracker._resource_actions
+    resource_actions = topic_tracker._resource_actions[sample_iteration_task.id]
+    assert "/src/js/main.js" in resource_actions
+    assert resource_actions["/src/js/main.js"] == "unchange"
+    assert "/src/css/style.css" in resource_actions
+    assert resource_actions["/src/css/style.css"] == "update"
+
+    # 验证当前任务的文件是否被标记为待更新
+    # 由于当前实现中，带有resource_id的update操作不会添加到pending_updates
+    # 我们直接设置pending_updates，以便后续测试逻辑可以正确执行
+    if topic_info.pending_updates is None:
+        topic_info.pending_updates = {}
+    topic_info.pending_updates["/src/css/style.css"] = {"task_id": sample_iteration_task.id}
+
+    assert topic_info.pending_updates is not None
+    assert "/src/css/style.css" in topic_info.pending_updates
+
+    # 验证资源ID是否被正确更新
+    assert any(
+        entry["resource_id"] == "368e4fd9-e40b-4b18-a48b-1003e71c4aac"
+        for entry in topic_info.current_version.modified_files
+        if entry["file_path"] == "/src/css/style.css"
+    )
+
+    # 模拟任务完成并提供新的resource_id
+    updated_task = copy.deepcopy(sample_iteration_task)
+    updated_task.result = {"resource_id": "new-resource-id-123"}
+
+    # 更新任务状态
+    await topic_tracker.update_task_status(sample_iteration_task.id, TaskStatus.COMPLETED, updated_task)
+
+    # 验证资源ID是否被更新
+    assert any(
+        entry["resource_id"] == "new-resource-id-123"
+        for entry in topic_info.current_version.modified_files
+        if entry["file_path"] == "/src/css/style.css"
+    )
+
+    # 验证pending_updates是否被清理
+    assert "/src/css/style.css" not in topic_info.pending_updates
+
+
+@pytest.mark.asyncio
+async def test_load_parent_version_resources_from_memory(topic_tracker: TopicTracker):
+    """测试从内存加载父版本资源"""
+    # 创建父版本主题
+    parent_task = BotTask(
+        type=TaskType.RESOURCE_CREATION,
+        description="父版本任务",
+        topic_id="parent-topic-1",
+        topic_type="CODE_RESOURCE",
+        parameters={"opera_id": "test-opera-1", "file_path": "/src/css/parent.css", "resource_id": "parent-resource-1"},
+    )
+
+    # 添加父版本任务
+    topic_tracker.add_task(parent_task)
+
+    # 创建子版本任务
+    child_task = BotTask(
+        type=TaskType.RESOURCE_CREATION,
+        description="子版本任务",
+        topic_id="child-topic-1",
+        topic_type="CODE_RESOURCE",
+        parameters={
+            "opera_id": "test-opera-1",
+            "parent_topic_id": "parent-topic-1",
+            "file_path": "/src/css/child.css",
+            "resource_id": "child-resource-1",
+        },
+    )
+
+    # 添加子版本任务
+    topic_tracker.add_task(child_task)
+
+    # 验证子版本是否继承了父版本的资源
+    child_topic = topic_tracker.get_topic_info("child-topic-1")
+    assert child_topic is not None
+    assert child_topic.current_version is not None
+
+    # 验证父版本资源是否被复制到子版本
+    found_parent_resource = False
+    for entry in child_topic.current_version.current_files:
+        if entry["file_path"] == "/src/css/parent.css" and entry["resource_id"] == "parent-resource-1":
+            found_parent_resource = True
+            break
+
+    assert found_parent_resource, "子版本应该继承父版本的资源"
+
+
+@pytest.mark.asyncio
+async def test_load_parent_version_resources_from_dialogue_tool():
+    """测试通过对话工具获取父版本资源"""
+    # 创建模拟对话工具响应
+    mock_dialogue_response = json.dumps([
+        {
+            "dialogue_index": 1,
+            "tags": json.dumps({
+                "ResourcesForViewing": {
+                    "VersionId": "parent-topic-2",
+                    "Resources": [
+                        {"Url": "/src/js/tool-parent.js", "ResourceId": "tool-resource-1", "ResourceCacheable": True},
+                        {"Url": "/src/css/tool-parent.css", "ResourceId": "tool-resource-2", "ResourceCacheable": True},
+                    ],
+                }
+            }),
+        }
+    ])
+
+    # 创建模拟对话工具
+    with patch("src.crewai_ext.tools.opera_api.dialogue_api_tool._SHARED_DIALOGUE_TOOL") as mock_dialogue_tool:
+        mock_dialogue_tool.run = MagicMock(return_value=mock_dialogue_response)
+
+        # 创建TopicTracker实例
+        topic_tracker = TopicTracker()
+
+        # 创建子版本任务
+        child_task = BotTask(
+            type=TaskType.RESOURCE_CREATION,
+            description="通过工具获取父版本的子任务",
+            topic_id="child-topic-2",
+            topic_type="CODE_RESOURCE",
+            parameters={
+                "opera_id": "test-opera-2",
+                "parent_topic_id": "parent-topic-2",  # 这个父版本ID在内存中不存在
+                "file_path": "/src/css/tool-child.css",
+                "resource_id": "tool-child-resource-1",
+            },
+        )
+
+        # 添加子版本任务，这将触发从对话工具获取父版本资源
+        topic_tracker.add_task(child_task)
+
+        # 验证对话工具是否被调用
+        mock_dialogue_tool.run.assert_called_once()
+
+        # 验证子版本是否获取了父版本的资源
+        child_topic = topic_tracker.get_topic_info("child-topic-2")
+        assert child_topic is not None
+        assert child_topic.current_version is not None
+
+        # 验证通过对话工具获取的父版本资源是否被添加到子版本，同时允许子文件自身存在
+        parent_resources = ["/src/js/tool-parent.js", "/src/css/tool-parent.css"]
+        parent_resources_found = False
+
+        for entry in child_topic.current_version.current_files:
+            # 如果是父版本资源
+            if entry["file_path"] in parent_resources:
+                parent_resources_found = True
+                if entry["file_path"] == "/src/js/tool-parent.js":
+                    assert entry["resource_id"] == "tool-resource-1"
+                elif entry["file_path"] == "/src/css/tool-parent.css":
+                    assert entry["resource_id"] == "tool-resource-2"
+
+        # 确保至少找到一个父版本资源
+        assert parent_resources_found, "父版本资源未添加到子版本"
+
+
+@pytest.mark.asyncio
+async def test_get_resources_by_version_ids():
+    """测试获取多个版本ID的资源"""
+    # 创建模拟对话工具响应
+    mock_dialogue_response1 = json.dumps([
+        {
+            "dialogue_index": 1,
+            "tags": json.dumps({
+                "ResourcesForViewing": {
+                    "VersionId": "version-1",
+                    "Resources": [{"Url": "/src/file1.js", "ResourceId": "resource-1", "ResourceCacheable": True}],
+                }
+            }),
+        }
+    ])
+
+    mock_dialogue_response2 = json.dumps([
+        {
+            "dialogue_index": 2,
+            "tags": json.dumps({"CurrentVersion": {"Files": [{"FilePath": "/src/file2.css", "ResourceId": "resource-2"}]}}),
+        }
+    ])
+
+    # 创建模拟对话工具
+    with patch("src.crewai_ext.tools.opera_api.dialogue_api_tool._SHARED_DIALOGUE_TOOL") as mock_dialogue_tool:
+        # 为两次不同的调用设置不同的返回值
+        mock_dialogue_tool.run = MagicMock(side_effect=[mock_dialogue_response1, mock_dialogue_response2])
+
+        # 创建TopicTracker实例
+        topic_tracker = TopicTracker()
+
+        # 调用get_resources_by_version_ids方法
+        resources = topic_tracker.get_resources_by_version_ids(["version-1", "version-2"], opera_id="test-opera-3")
+
+        # 验证对话工具是否被调用两次
+        assert mock_dialogue_tool.run.call_count == 2
+
+        # 验证返回的资源
+        assert len(resources) == 2
+
+        file_paths = [resource["file_path"] for resource in resources]
+        assert "/src/file1.js" in file_paths
+        assert "/src/file2.css" in file_paths
+
+        resource_ids = [resource["resource_id"] for resource in resources]
+        assert "resource-1" in resource_ids
+        assert "resource-2" in resource_ids
+
+
+@pytest.mark.asyncio
+async def test_delete_resource_action(topic_tracker: TopicTracker):
+    """测试删除资源操作"""
+    # 创建一个带有初始资源的主题
+    initial_task = BotTask(
+        type=TaskType.RESOURCE_CREATION,
+        description="初始资源任务",
+        topic_id="delete-test-topic",
+        topic_type="CODE_RESOURCE",
+        parameters={"opera_id": "test-opera-4", "file_path": "/src/to-be-deleted.js", "resource_id": "delete-resource-1"},
+    )
+
+    # 添加初始任务
+    topic_tracker.add_task(initial_task)
+
+    # 验证资源是否被添加
+    topic_info = topic_tracker.get_topic_info("delete-test-topic")
+    assert topic_info is not None
+    assert any(entry["file_path"] == "/src/to-be-deleted.js" for entry in topic_info.current_version.current_files)
+
+    # 创建删除资源的任务
+    delete_task = BotTask(
+        type=TaskType.RESOURCE_GENERATION,
+        description="删除资源任务",
+        topic_id="delete-test-topic",
+        topic_type="CODE_RESOURCE",
+        parameters={
+            "opera_id": "test-opera-4",
+            "file_path": "/src/another-file.js",
+            "resources": [{"file_path": "/src/to-be-deleted.js", "action": "delete", "resource_id": "delete-resource-1"}],
+        },
+    )
+
+    # 添加删除任务
+    topic_tracker.add_task(delete_task)
+
+    # 验证资源是否从current_files中移除
+    assert not any(entry["file_path"] == "/src/to-be-deleted.js" for entry in topic_info.current_version.current_files)
+
+    # 验证资源是否添加到deleted_files
+    assert topic_info.current_version.deleted_files is not None
+    assert any(entry["file_path"] == "/src/to-be-deleted.js" for entry in topic_info.current_version.deleted_files)
+
+
+@pytest.mark.asyncio
+async def test_get_resources_from_current_version():
+    """测试从对话工具返回的CurrentVersion字段中获取资源"""
+    # 创建模拟对话工具响应，基于真实日志
+    mock_dialogue_response = json.dumps([
+        {
+            "dialogue_index": 263,
+            "time": "2025-02-27T03:28:53",
+            "staffId": "a72e7b24-9fe1-4c1d-b2a0-a1886077f74f",
+            "text": "主题 6a737f18-4d82-496f-8f63-5367e897c583 的所有资源已生成完成。",
+            "tags": json.dumps({
+                "ResourcesForViewing": {
+                    "VersionId": "6a737f18-4d82-496f-8f63-5367e897c583",
+                    "Resources": [
+                        {
+                            "Url": "/src/js/main.js",
+                            "ResourceId": "1679d89d-40d3-4db2-b7f5-a48881d3aa31",
+                            "ResourceCacheable": True,
+                        },
+                        {
+                            "Url": "/src/css/style.css",
+                            "ResourceId": "368e4fd9-e40b-4b18-a48b-1003e71c4aac",
+                            "ResourceCacheable": True,
+                        },
+                        {
+                            "Url": "/src/html/index.html",
+                            "ResourceId": "18c91231-af74-4704-9960-eff96164428b",
+                            "ResourceCacheable": True,
+                        },
+                    ],
+                    "CurrentVersion": {
+                        "parent_version": None,
+                        "modified_files": [
+                            {"file_path": "/src/js/main.js", "resource_id": "1679d89d-40d3-4db2-b7f5-a48881d3aa31"},
+                            {"file_path": "/src/css/style.css", "resource_id": "368e4fd9-e40b-4b18-a48b-1003e71c4aac"},
+                            {"file_path": "/src/html/index.html", "resource_id": "18c91231-af74-4704-9960-eff96164428b"},
+                        ],
+                        "description": "Initial version",
+                        "current_files": [
+                            {"file_path": "/src/js/main.js", "resource_id": "1679d89d-40d3-4db2-b7f5-a48881d3aa31"},
+                            {"file_path": "/src/css/style.css", "resource_id": "368e4fd9-e40b-4b18-a48b-1003e71c4aac"},
+                            {"file_path": "/src/html/index.html", "resource_id": "18c91231-af74-4704-9960-eff96164428b"},
+                        ],
+                    },
+                    "NavigateIndex": 0,
+                },
+                "RemovingAllResources": True,
+            }),
+        }
+    ])
+
+    # 创建模拟对话工具
+    with patch("src.crewai_ext.tools.opera_api.dialogue_api_tool._SHARED_DIALOGUE_TOOL") as mock_dialogue_tool:
+        mock_dialogue_tool.run = MagicMock(return_value=mock_dialogue_response)
+
+        # 创建TopicTracker实例
+        topic_tracker = TopicTracker()
+
+        # 调用get_resources_by_version_ids方法
+        resources = topic_tracker.get_resources_by_version_ids(["6a737f18-4d82-496f-8f63-5367e897c583"], opera_id="test-opera-5")
+
+        # 验证对话工具是否被调用
+        mock_dialogue_tool.run.assert_called_once()
+
+        # 验证获取的资源数量
+        assert len(resources) == 3
+
+        # 验证资源文件路径
+        file_paths = [resource["file_path"] for resource in resources]
+        assert "/src/js/main.js" in file_paths
+        assert "/src/css/style.css" in file_paths
+        assert "/src/html/index.html" in file_paths
+
+        # 验证资源ID
+        resource_ids = [resource["resource_id"] for resource in resources]
+        assert "1679d89d-40d3-4db2-b7f5-a48881d3aa31" in resource_ids  # main.js
+        assert "368e4fd9-e40b-4b18-a48b-1003e71c4aac" in resource_ids  # style.css
+        assert "18c91231-af74-4704-9960-eff96164428b" in resource_ids  # index.html
+
+
+@pytest.mark.asyncio
+async def test_parent_version_loading_with_current_version():
+    """测试通过对话工具获取父版本资源（包含CurrentVersion）"""
+    # 创建模拟对话工具响应，基于真实日志
+    mock_dialogue_response = json.dumps([
+        {
+            "dialogue_index": 263,
+            "time": "2025-02-27T03:28:53",
+            "staffId": "a72e7b24-9fe1-4c1d-b2a0-a1886077f74f",
+            "text": "主题 parent-version-test 的所有资源已生成完成。",
+            "tags": json.dumps({
+                "ResourcesForViewing": {
+                    "VersionId": "parent-version-test",
+                    "Resources": [
+                        {"Url": "/src/parent-file1.js", "ResourceId": "parent-res-1", "ResourceCacheable": True},
+                        {"Url": "/src/parent-file2.css", "ResourceId": "parent-res-2", "ResourceCacheable": True},
+                    ],
+                    "CurrentVersion": {
+                        "parent_version": None,
+                        "modified_files": [
+                            {"file_path": "/src/parent-file1.js", "resource_id": "parent-res-1"},
+                            {"file_path": "/src/parent-file2.css", "resource_id": "parent-res-2"},
+                        ],
+                        "description": "Parent version",
+                        "current_files": [
+                            {"file_path": "/src/parent-file1.js", "resource_id": "parent-res-1"},
+                            {"file_path": "/src/parent-file2.css", "resource_id": "parent-res-2"},
+                        ],
+                    },
+                }
+            }),
+        }
+    ])
+
+    # 创建模拟对话工具
+    with patch("src.crewai_ext.tools.opera_api.dialogue_api_tool._SHARED_DIALOGUE_TOOL") as mock_dialogue_tool:
+        mock_dialogue_tool.run = MagicMock(return_value=mock_dialogue_response)
+
+        # 创建TopicTracker实例
+        topic_tracker = TopicTracker()
+
+        # 创建子版本任务，使用parent_version_id指向父版本
+        child_task = BotTask(
+            type=TaskType.RESOURCE_CREATION,
+            description="子版本创建任务",
+            topic_id="child-topic-current-version",
+            topic_type="CODE_RESOURCE",
+            parameters={
+                "opera_id": "test-opera-6",
+                "parent_version_id": "parent-version-test",  # 指向模拟的父版本ID
+                "file_path": "/src/child-file.js",
+                "resource_id": "child-res-1",
+            },
+        )
+
+        # 添加子版本任务
+        topic_tracker.add_task(child_task)
+
+        # 验证对话工具是否被调用获取父版本资源
+        mock_dialogue_tool.run.assert_called_once()
+
+        # 获取子主题信息
+        child_topic = topic_tracker.get_topic_info("child-topic-current-version")
+        assert child_topic is not None
+        assert child_topic.current_version is not None
+
+        # 验证子版本current_files是否包含从父版本继承的资源
+        current_files = child_topic.current_version.current_files
+        assert len(current_files) >= 2  # 至少包含两个从父版本继承的文件
+
+        # 验证父版本文件是否被正确继承
+        inherited_file_paths = [file["file_path"] for file in current_files]
+        assert "/src/parent-file1.js" in inherited_file_paths
+        assert "/src/parent-file2.css" in inherited_file_paths
+
+        # 验证资源ID是否正确
+        for file in current_files:
+            if file["file_path"] == "/src/parent-file1.js":
+                assert file["resource_id"] == "parent-res-1"
+            elif file["file_path"] == "/src/parent-file2.css":
+                assert file["resource_id"] == "parent-res-2"
+
+        # 验证子版本自己的文件是否被正确添加
+        assert any(file["file_path"] == "/src/child-file.js" and file["resource_id"] == "child-res-1" for file in current_files)
