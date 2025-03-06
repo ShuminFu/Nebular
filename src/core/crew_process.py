@@ -391,11 +391,17 @@ class CrewManager(BaseCrewProcess):
             resources = code_details.get("resources", [])
 
             if resources:
-                for resource in resources:
-                    action = resource.get("action", "").lower()
-                    if not action or action in ["add", "create", "update"]:
+                # 获取当前任务对应的文件路径
+                target_file = task.parameters.get("file_path")
+
+                # 在资源列表中查找匹配当前任务文件路径的资源
+                target_resource = next((res for res in resources if res.get("file_path") == target_file), None)
+
+                # 只检查目标资源的action
+                if target_resource:
+                    action = target_resource.get("action", "").lower()
+                    if not action or action in ["create", "update"]:
                         need_forward_to_cr = True
-                        break
 
             # 无论如何都添加到topic tracker
             if task.topic_id:
