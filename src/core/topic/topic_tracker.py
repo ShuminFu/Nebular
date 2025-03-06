@@ -1,8 +1,17 @@
 from dataclasses import dataclass
-from typing import Dict, Set, Optional, List, Callable, Awaitable
+from typing import Dict, Set, Optional, List, Callable, Awaitable, Literal
 from uuid import UUID
+import json
+import logging
 
 from src.core.task_utils import BotTask, TaskStatus, TaskType
+
+# 定义资源操作类型
+ResourceAction = Literal["unchange", "delete", "update", "create"]
+
+# 获取日志记录器
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class VersionMeta:
@@ -10,6 +19,7 @@ class VersionMeta:
     modified_files: List[Dict[str, str]]  # 本次修改的文件列表，包含file_path和resource_id
     description: str  # 修改原因/用户反馈/任务描述
     current_files: List[Dict[str, str]]  # 当前版本的完整文件列表，包含file_path和resource_id
+    deleted_files: List[Dict[str, str]] = None  # 本次删除的文件列表，包含file_path和resource_id
 
 
 # TODO:delta changes fields for diff modification such as line 1-20
@@ -25,6 +35,7 @@ class TopicInfo:
     expected_creation_count: int = 0  # 由generation任务预报的预期创建任务数量
     actual_creation_count: int = 0  # 实际添加到tracker的创建任务数量
     completed_creation_count: int = 0  # 已完成的创建任务数量
+    pending_updates: Dict[str, Dict] = None  # 等待更新的文件信息，file_path -> {task_id, ...}
 
 
 # 定义回调类型
@@ -39,6 +50,8 @@ class TopicTracker:
         self._completion_callbacks: List[TopicCompletionCallback] = []
         self._completed_tasks: Dict[str, Set[UUID]] = {}  # topic_id -> completed task ids
         self._pending_resource_tasks: Dict[UUID, str] = {}  # task_id -> file_path，存储等待resource_id的任务
+        self._resource_actions: Dict[UUID, Dict[str, str]] = {}  # task_id -> {file_path: action}，存储资源操作类型
+        self._processing_version_ids = set()  # 用于避免递归循环
 
     def on_completion(self, callback: TopicCompletionCallback):
         """注册主题完成回调"""
@@ -49,24 +62,46 @@ class TopicTracker:
         if not task.topic_id:
             return
 
+        # 创建新主题
         if task.topic_id not in self.topics:
-            self.topics[task.topic_id] = TopicInfo(
-                tasks=set(), type=task.topic_type, status="active", opera_id=task.parameters.get("opera_id"), current_version=None
+            topic_info = TopicInfo(
+                tasks=set(),
+                type=task.topic_type,
+                status="active",
+                opera_id=task.parameters.get("opera_id"),
+                current_version=None,
+                pending_updates={},
             )
-            # 初始化当前版本
-            if parent_topic_id := task.parameters.get("parent_topic_id"):
-                parent_version = None if parent_topic_id == "0" else parent_topic_id
+            self.topics[task.topic_id] = topic_info
+
+            # 初始化当前版本 - 同时支持parent_topic_id和parent_version_id参数
+            parent_version_id = task.parameters.get("parent_topic_id") or task.parameters.get("parent_version_id")
+            if parent_version_id:
+                parent_version = None if parent_version_id == "0" else parent_version_id
+                description = task.parameters.get("description", "Initial version")
                 self.topics[task.topic_id].current_version = VersionMeta(
-                    parent_version=parent_version, modified_files=[], description="Initial version", current_files=[]
+                    parent_version=parent_version, modified_files=[], description=description, current_files=[], deleted_files=[]
                 )
+
+                # 如果有父版本，加载父版本资源列表
+                if parent_version and parent_version != "0":
+                    self._load_parent_version_resources(task.topic_id, parent_version, task.parameters.get("opera_id"))
+
             self._completed_tasks[task.topic_id] = set()
 
         topic = self.topics[task.topic_id]
         topic.tasks.add(task.id)
 
+        # 检查任务是否包含resources信息（基于action判断，而非任务类型）
+        resources = task.parameters.get("resources", [])
+        has_actions = resources and any("action" in resource for resource in resources)
+
+        if has_actions:
+            # 处理包含action的resources
+            self._process_resources_with_actions(task)
         # 更新任务计数：根据任务类型更新对应的计数器
-        if task.type == TaskType.RESOURCE_GENERATION:
-            # 对于RESOURCE_GENERATION任务，增加预期创建任务数量
+        elif task.type == TaskType.RESOURCE_GENERATION:
+            # 对于不包含action的RESOURCE_GENERATION任务，增加预期创建任务数量
             expected_files_count = task.parameters.get("expected_files_count", 1)
             topic.expected_creation_count += expected_files_count
         elif task.type == TaskType.RESOURCE_CREATION:
@@ -80,16 +115,167 @@ class TopicTracker:
         # 对于资源创建任务，先记录file_path，等任务完成后再更新resource_id
         if task.type == TaskType.RESOURCE_CREATION and file_path:
             self._pending_resource_tasks[task.id] = file_path
-            # 如果已有resource_id，直接更新；否则等待任务完成后更新
+
+            # 如果已有resource_id，直接更新映射关系；否则等待任务完成后更新
             if resource_id:
                 self._update_file_mapping(topic, file_path, resource_id)
-        # 对于非资源创建任务，直接更新file_path和resource_id的映射
-        elif file_path and resource_id:
+        # 对于非资源创建任务且resources中不包含带action的资源，直接更新file_path和resource_id的映射
+        elif file_path and resource_id and not has_actions:
             self._update_file_mapping(topic, file_path, resource_id)
+
+    def _process_resources_with_actions(self, task: BotTask):
+        """处理任务中包含action的resources"""
+        if not task.topic_id:
+            return
+
+        topic = self.topics[task.topic_id]
+        resources = task.parameters.get("resources", [])
+
+        # 记录资源操作类型
+        resource_actions = {}
+
+        # 先处理所有删除操作，确保在更新资源前处理删除
+        for resource in resources:
+            file_path = resource.get("file_path")
+            action = resource.get("action", "").lower()
+            if file_path and action == "delete":
+                self._mark_resource_as_deleted(topic, file_path)
+                resource_actions[file_path] = action
+
+        # 处理其他操作
+        for resource in resources:
+            file_path = resource.get("file_path")
+            action = resource.get("action", "").lower()
+            if file_path and action and action != "delete":  # 跳过已处理的delete操作
+                resource_actions[file_path] = action
+                self._process_single_resource_action(topic, task, file_path, action)
+
+        self._resource_actions[task.id] = resource_actions
+
+    def _process_single_resource_action(self, topic: TopicInfo, task: BotTask, file_path: str, action: str):
+        """处理单个资源的action"""
+        resource_id = task.parameters.get("resource_id")
+
+        if action == "unchange":
+            # 不变的资源，直接从父版本复制
+            pass  # 父版本资源已在_load_parent_version_resources中加载
+        elif action == "delete":
+            # 标记删除的资源
+            self._mark_resource_as_deleted(topic, file_path)
+        elif action == "update":
+            # 更新资源，等待新的resource_id
+            if topic.pending_updates is None:
+                topic.pending_updates = {}
+
+            # 无论是否有resource_id，都需要添加到pending_updates
+            topic.pending_updates[file_path] = {"task_id": task.id}
+
+            # 如果已有resource_id，直接更新
+            if resource_id:
+                self._update_file_mapping(topic, file_path, resource_id)
+        elif action == "create":
+            # 新建资源，与现有逻辑一致
+            if resource_id:
+                self._update_file_mapping(topic, file_path, resource_id)
+            else:
+                self._pending_resource_tasks[task.id] = file_path
+
+    def _load_parent_version_resources(self, topic_id: str, parent_version_id: str, opera_id: str = None):
+        """从父版本加载资源列表
+
+        Args:
+            topic_id: 当前主题ID
+            parent_version_id: 父版本ID
+            opera_id: Opera ID，用于调用对话工具
+        """
+        # 处理特殊情况，避免递归循环
+        if parent_version_id in self._processing_version_ids:
+            logger.warning(f"检测到递归循环，跳过版本ID {parent_version_id}")
+            return
+
+        # 标记正在处理的版本ID，防止递归循环
+        self._processing_version_ids.add(parent_version_id)
+
+        try:
+            # 首先从内存中尝试获取资源
+            parent_topic = self.get_topic_info(parent_version_id)
+            if parent_topic and parent_topic.current_version and parent_topic.current_version.current_files:
+                current_topic = self.topics[topic_id]
+                if current_topic.current_version:
+                    # 将父版本的current_files复制到当前版本，但不覆盖已有的文件
+                    parent_files = parent_topic.current_version.current_files
+
+                    # 如果当前版本没有文件列表，则初始化为空列表
+                    if not current_topic.current_version.current_files:
+                        current_topic.current_version.current_files = []
+
+                    # 创建现有文件路径的集合，用于快速查找
+                    existing_file_paths = {entry["file_path"] for entry in current_topic.current_version.current_files}
+
+                    # 添加父版本中的文件，跳过已存在的
+                    for parent_file in parent_files:
+                        if parent_file["file_path"] not in existing_file_paths:
+                            current_topic.current_version.current_files.append(parent_file.copy())
+
+                    return
+
+            # 如果内存中没有找到或资源为空，尝试从对话工具获取
+            if opera_id:
+                # 从对话工具获取资源
+                resources = self.get_resources_by_version_ids([parent_version_id], opera_id)
+
+                if resources:
+                    current_topic = self.topics[topic_id]
+                    if current_topic.current_version:
+                        # 如果当前版本没有文件列表，则初始化为空列表
+                        if not current_topic.current_version.current_files:
+                            current_topic.current_version.current_files = []
+
+                        # 创建现有文件路径的集合，用于快速查找
+                        existing_file_paths = {entry["file_path"] for entry in current_topic.current_version.current_files}
+
+                        # 添加从对话工具获取的文件，跳过已存在的
+                        for resource in resources:
+                            if resource["file_path"] not in existing_file_paths:
+                                current_topic.current_version.current_files.append(resource.copy())
+        finally:
+            # 处理完成后移除标记
+            if parent_version_id in self._processing_version_ids:
+                self._processing_version_ids.remove(parent_version_id)
+
+    def _mark_resource_as_deleted(self, topic: TopicInfo, file_path: str):
+        """标记资源为已删除"""
+        if not topic.current_version:
+            return
+
+        # 初始化deleted_files列表
+        if topic.current_version.deleted_files is None:
+            topic.current_version.deleted_files = []
+
+        # 从current_files中找到对应的资源信息
+        resource_entry = None
+        files_to_remove = []
+
+        for i, entry in enumerate(topic.current_version.current_files):
+            if entry["file_path"] == file_path:
+                resource_entry = entry.copy()
+                # 标记要移除的索引
+                files_to_remove.append(i)
+
+        # 从high到low删除，避免索引变化问题
+        for i in sorted(files_to_remove, reverse=True):
+            topic.current_version.current_files.pop(i)
+
+        # 如果找到对应资源，添加到deleted_files
+        if resource_entry:
+            topic.current_version.deleted_files.append(resource_entry)
 
     def _update_file_mapping(self, topic: TopicInfo, file_path: str, resource_id: str):
         """更新文件路径与资源ID的映射关系"""
         file_entry = {"file_path": file_path, "resource_id": resource_id}
+
+        # 检查是否为pending_updates中的文件
+        is_update = topic.pending_updates and file_path in topic.pending_updates
 
         # 更新当前版本，添加空值检查
         if topic.current_version is not None:
@@ -102,7 +288,30 @@ class TopicTracker:
                         break
                 else:
                     # 如果不存在，添加新条目
-                    files_list.append(file_entry)
+                    if not is_update:  # 如果不是更新操作，才添加新条目
+                        files_list.append(file_entry)
+
+            # 如果是更新操作，且未找到现有条目，也添加到列表中
+            if is_update:
+                found = False
+                for entry in topic.current_version.current_files:
+                    if entry["file_path"] == file_path:
+                        found = True
+                        break
+                if not found:
+                    topic.current_version.current_files.append(file_entry)
+
+                found = False
+                for entry in topic.current_version.modified_files:
+                    if entry["file_path"] == file_path:
+                        found = True
+                        break
+                if not found:
+                    topic.current_version.modified_files.append(file_entry)
+
+                # 从pending_updates中移除
+                if topic.pending_updates and file_path in topic.pending_updates:
+                    topic.pending_updates.pop(file_path)
         else:
             # 如果current_version为None，则初始化一个默认版本
             topic.current_version = VersionMeta(
@@ -110,6 +319,7 @@ class TopicTracker:
                 modified_files=[file_entry],
                 description="Auto-initialized version",
                 current_files=[file_entry],
+                deleted_files=[],
             )
 
     async def update_task_status(self, task_id: UUID, status: TaskStatus, task: Optional[BotTask] = None):
@@ -131,10 +341,13 @@ class TopicTracker:
         if not topic_id:
             return
 
-        # 获取任务类型
+        # 获取任务类型和资源信息
         task_type = None
+        has_resource_actions = False
         if task is not None:
             task_type = task.type
+            resources = task.parameters.get("resources", [])
+            has_resource_actions = resources and any("action" in resource for resource in resources)
 
         # 如果是资源创建任务且已完成，处理resource_id更新
         if status == TaskStatus.COMPLETED and task_id in self._pending_resource_tasks:
@@ -150,6 +363,26 @@ class TopicTracker:
                     # 从待处理列表中移除
                     self._pending_resource_tasks.pop(task_id)
 
+        # 如果是带有资源操作的任务且已完成，处理资源操作
+        if status == TaskStatus.COMPLETED and task_id in self._resource_actions:
+            if task is not None and (result := task.result) and isinstance(result, dict):
+                topic = self.topics[topic_id]
+                resource_id = result.get("resource_id")
+                file_path = task.parameters.get("file_path")
+
+                if resource_id and file_path:
+                    actions = self._resource_actions[task_id]
+                    action = actions.get(file_path)
+
+                    if action in ["update", "create"]:
+                        self._update_file_mapping(topic, file_path, resource_id)
+
+                    # 处理完毕后清理
+                    if file_path in actions:
+                        actions.pop(file_path)
+                        if not actions:
+                            self._resource_actions.pop(task_id)
+
         # 如果任务完成，记录并更新计数
         if status == TaskStatus.COMPLETED:
             topic = self.topics[topic_id]
@@ -160,12 +393,19 @@ class TopicTracker:
                 topic.completed_creation_count += 1
                 # 只有CREATION类任务完成才会触发主题完成检查
                 await self._check_topic_completion(topic_id)
-            # 对于其他类型的任务（如RESOURCE_GENERATION），只记录完成但不检查主题完成情况
+            # 对于带有资源操作的任务，检查所有pending_updates是否处理完成
+            elif has_resource_actions:
+                if not topic.pending_updates or len(topic.pending_updates) == 0:
+                    await self._check_topic_completion(topic_id)
 
     async def _check_topic_completion(self, topic_id: str):
         """检查主题是否全部完成"""
         topic = self.topics.get(topic_id)
         if not topic or topic.status != 'active':
+            return
+
+        # 如果有未处理的pending_updates，主题未完成
+        if topic.pending_updates and len(topic.pending_updates) > 0:
             return
 
         # 新的完成逻辑：检查已完成的创建任务数量是否达到预期数量
@@ -196,3 +436,147 @@ class TopicTracker:
     def get_topic_info(self, topic_id: str) -> Optional[TopicInfo]:
         """获取主题信息"""
         return self.topics.get(topic_id)
+
+    def get_resources_by_version_ids(self, version_ids: List[str], opera_id: str = None) -> List[Dict[str, str]]:
+        """获取多个版本ID对应的资源列表
+
+        首先尝试从内存中获取资源，如果未找到则通过Dialog API工具查找
+
+        Args:
+            version_ids: 版本ID列表
+            opera_id: Opera ID，用于调用对话工具
+
+        Returns:
+            list: 资源列表，格式为[{'file_path': 'path', 'resource_id': 'id'}]
+        """
+        # 首先从内存中尝试获取资源
+        resources = []
+        for version_id in version_ids:
+            topic = self.get_topic_info(version_id)
+            if topic and topic.current_version and topic.current_version.current_files:
+                resources.extend(topic.current_version.current_files)
+
+        # 如果内存中找到了资源，直接返回
+        if resources:
+            return resources
+
+        # 如果内存中没有找到，且提供了opera_id，则尝试通过对话工具获取
+        if not opera_id:
+            return resources
+
+        # 通过Dialog API工具查找资源
+        logger.info(f"通过对话工具查找版本ID对应的资源: {version_ids}")
+
+        try:
+            from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
+
+            all_resources = []
+
+            # 遍历每个版本ID查找相关对话
+            for version_id in version_ids:
+                # 构建查询条件，寻找包含指定VersionId的对话
+                filter_data = {
+                    "action": "get_filtered",
+                    "opera_id": opera_id,
+                    "data": {
+                        "includes_staff_id_null": True,
+                        "includes_stage_index_null": True,
+                        "includes_narratage": True,
+                        "tag_node_paths": ["$.ResourcesForViewing.VersionId"],
+                        "tag_node_values": [{"path": "$.ResourcesForViewing.VersionId", "value": version_id, "type": "String"}],
+                    },
+                }
+
+                # 调用DialogueTool查询对话
+                result = _SHARED_DIALOGUE_TOOL.run(**filter_data)
+
+                if result:
+                    try:
+                        # 解析返回结果
+                        dialogues = json.loads(result)
+                        for dialogue in dialogues:
+                            if "tags" in dialogue:
+                                try:
+                                    # 从tags中提取资源信息
+                                    tags_str = dialogue.get("tags", "{}")
+                                    if isinstance(tags_str, str):
+                                        tags = json.loads(tags_str)
+                                    else:
+                                        tags = tags_str
+
+                                    # 尝试从ResourcesForViewing.Resources中获取资源
+                                    resources_viewing = tags.get("ResourcesForViewing", {})
+                                    if resources_viewing:
+                                        # 从Resources列表获取资源
+                                        resources_list = resources_viewing.get("Resources", [])
+                                        for resource in resources_list:
+                                            if "Url" in resource and "ResourceId" in resource:
+                                                url = resource["Url"]
+                                                # 处理URL格式，提取文件路径
+                                                file_path = url
+                                                if not file_path.startswith("/"):
+                                                    # 提取路径部分
+                                                    file_path = (
+                                                        "/" + file_path.split("/", 1)[-1] if "/" in file_path else file_path
+                                                    )
+
+                                                all_resources.append({
+                                                    "file_path": file_path,
+                                                    "resource_id": resource["ResourceId"],
+                                                })
+
+                                        # 尝试从CurrentVersion中获取资源
+                                        current_version = resources_viewing.get("CurrentVersion")
+                                        if current_version and "current_files" in current_version:
+                                            cv_files = current_version.get("current_files", [])
+                                            for file in cv_files:
+                                                if "file_path" in file and "resource_id" in file:
+                                                    all_resources.append(file.copy())
+
+                                    # 直接查找CurrentVersion
+                                    if "CurrentVersion" in tags:
+                                        current_version = tags.get("CurrentVersion")
+                                        if current_version:
+                                            # 从Files列表获取资源
+                                            files = current_version.get("Files", [])
+                                            for file in files:
+                                                if "FilePath" in file and "ResourceId" in file:
+                                                    all_resources.append({
+                                                        "file_path": file["FilePath"],
+                                                        "resource_id": file["ResourceId"],
+                                                    })
+
+                                            # 也尝试从current_files获取资源
+                                            cv_files = current_version.get("current_files", [])
+                                            for file in cv_files:
+                                                if "file_path" in file and "resource_id" in file:
+                                                    all_resources.append(file.copy())
+                                except json.JSONDecodeError:
+                                    logger.warning(f"解析对话tags失败: {dialogue.get('tags')}")
+                                    continue
+                                except Exception as e:
+                                    logger.error(f"处理对话tags时出错: {str(e)}")
+                                    continue
+                    except json.JSONDecodeError:
+                        logger.warning(f"解析对话响应失败: {result}")
+                    except Exception as e:
+                        logger.error(f"处理对话响应时出错: {str(e)}")
+
+            # 去重，避免重复资源
+            unique_resources = []
+            resource_ids = set()
+
+            for resource in all_resources:
+                resource_id = resource.get("resource_id")
+                if resource_id and resource_id not in resource_ids:
+                    resource_ids.add(resource_id)
+                    unique_resources.append(resource)
+
+            return unique_resources
+
+        except ImportError:
+            logger.error("无法导入对话工具，请确保已安装相关依赖")
+            return resources
+        except Exception as e:
+            logger.error(f"通过对话工具获取资源时出错: {str(e)}")
+            return resources
