@@ -21,6 +21,7 @@ from src.crewai_ext.crew_bases.resource_iteration_crewbase import IterationAnaly
 import json
 import litellm
 import time
+from src.crewai_ext.tools.opera_api.resource_api_tool import ResourceTool
 
 @dataclass
 class CrewProcessInfo:
@@ -685,6 +686,12 @@ class CrewManager(BaseCrewProcess):
             # 更新原始任务的状态
             await self.task_queue.update_task_status(task_id=UUID(task_id), new_status=TaskStatus.COMPLETED)
 
+            # 查找并更新原始任务的result字段
+            original_task = next((t for t in self.task_queue.tasks if t.id == UUID(task_id)), None)
+            if original_task and result:
+                original_task.result = result
+                self.log.info(f"已更新任务 {task_id} 的结果: {result}")
+
             # 更新当前回调任务的状态
             await self.task_queue.update_task_status(task_id=task.id, new_status=TaskStatus.COMPLETED)
 
@@ -936,6 +943,39 @@ class CrewRunner(BaseCrewProcess):
     async def _handle_generation_task(self, task: BotTask):
         """处理代码生成类型的任务"""
         try:
+            # 处理引用资源
+            processed_references = []
+            # 检查任务参数中是否包含opera_id和resource_id
+            if task.parameters.get("opera_id") and task.parameters.get("resource_id"):
+                # 初始化资源API工具
+                resource_tool = ResourceTool()
+                opera_id = task.parameters.get("opera_id")
+                resource_id = task.parameters.get("resource_id")
+
+                try:
+                    # 调用资源API下载资源
+                    ref_content = resource_tool._run(action="download", opera_id=opera_id, resource_id=resource_id)
+
+                    # 处理二进制内容
+                    if isinstance(ref_content, bytes):
+                        # 尝试将二进制内容解码为文本
+                        try:
+                            ref_text = ref_content.decode("utf-8")
+                            processed_references.append(ref_text)
+                        except UnicodeDecodeError:
+                            # 如果无法解码为文本，添加一条说明
+                            processed_references.append(f"Binary content (size: {len(ref_content)} bytes) - {ref_content}")
+                    else:
+                        # 已经是字符串或其他格式
+                        processed_references.append(str(ref_content))
+                except Exception as e:
+                    # 记录下载资源时的错误，但继续处理
+                    self.log.error(f"下载引用资源时出错: {str(e)}")
+                    processed_references.append(f"Error downloading reference: {str(e)}")
+            else:
+                # 如果没有opera_id或resource_id，直接使用原始引用
+                processed_references = task.parameters.get("references", [])
+
             # 检查任务参数中是否包含action字段
             if "action" in task.parameters:
                 # 使用另一套输入信息进行代码生成任务
@@ -950,7 +990,7 @@ class CrewRunner(BaseCrewProcess):
                     project_description=task.parameters["description"],
                     frameworks=task.parameters["code_details"]["frameworks"],
                     resources=task.parameters["code_details"]["resources"],
-                    references=task.parameters.get("references", []),
+                    references=processed_references,
                 )
             else:
                 # 保持原有的输入参数构建方式
