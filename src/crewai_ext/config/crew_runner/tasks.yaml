@@ -31,15 +31,15 @@ code_generation_task:
        - 不需要任何预编译或打包步骤
        - 避免使用需要 npm install 的库和框架
    
-    接下来请你根据以下提供的信息生成代码：
+    接下来请你根据以下提供的信息生成指定文件的代码：
     1. 文件路径：{file_path}
     2. 文件类型：{file_type}
     3. 需求描述：{requirement}
-    4. 项目信息：
+    4. 项目全局的相关信息：
         - 类型：{project_type}
         - 描述：{project_description}
         - 框架：{frameworks}
-    5. 相关文件：{resources}
+    5. 其他相关文件：{resources}
     6. 引用关系：{references}
   expected_output: >
     @file: {file_path}
@@ -48,7 +48,7 @@ code_generation_task:
     @version: 1.0.0
     @version_id: [UUID格式的版本ID]
     ---
-    [完整的代码实现，包含：
+    [必须是完整的代码实现，包含：
     1. 必要的导入语句
     2. 类型定义（如果需要）
     3. 主要功能实现

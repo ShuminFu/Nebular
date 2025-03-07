@@ -936,17 +936,34 @@ class CrewRunner(BaseCrewProcess):
     async def _handle_generation_task(self, task: BotTask):
         """处理代码生成类型的任务"""
         try:
-            # 准备代码生成输入参数
-            generation_inputs = GenerationInputs(
-                file_path=task.parameters["file_path"],
-                file_type=task.parameters["file_type"],
-                requirement=task.parameters["dialogue_context"]["text"],
-                project_type=task.parameters["code_details"]["project_type"],
-                project_description=task.parameters["code_details"]["project_description"],
-                frameworks=task.parameters["code_details"]["frameworks"],
-                resources=task.parameters["code_details"]["resources"],
-                references=task.parameters.get("references", []),
-            )
+            # 检查任务参数中是否包含action字段
+            if "action" in task.parameters:
+                # 使用另一套输入信息进行代码生成任务
+                generation_inputs = GenerationInputs(
+                    file_path=task.parameters["file_path"],
+                    file_type=task.parameters["file_type"],
+                    requirement=task.parameters["action"]
+                    + (f" at {task.parameters['position']}" if task.parameters.get("position") else "")
+                    + (f" for resource id: {task.parameters['resource_id']}" if task.parameters.get("resource_id") else "")
+                    + (f" for opera id : {task.parameters['opera_id']}" if task.parameters.get("opera_id") else ""),
+                    project_type=task.parameters["code_details"]["project_type"],
+                    project_description=task.parameters["description"],
+                    frameworks=task.parameters["code_details"]["frameworks"],
+                    resources=task.parameters["code_details"]["resources"],
+                    references=task.parameters.get("references", []),
+                )
+            else:
+                # 保持原有的输入参数构建方式
+                generation_inputs = GenerationInputs(
+                    file_path=task.parameters["file_path"],
+                    file_type=task.parameters["file_type"],
+                    requirement=task.parameters["dialogue_context"]["text"],
+                    project_type=task.parameters["code_details"]["project_type"],
+                    project_description=task.parameters["code_details"]["project_description"],
+                    frameworks=task.parameters["code_details"]["frameworks"],
+                    resources=task.parameters["code_details"]["resources"],
+                    references=task.parameters.get("references", []),
+                )
 
             # 记录LLM输入
             self.log.info(

@@ -13,7 +13,7 @@ task_decomposition_task:
     {{
         "intent": "resource_iteration", 
         "reason": "基于迭代需求的资源修改任务",
-        "is_code_request": true/false,
+        "is_code_request": true,
         "code_details": {{
             "project_type": "迭代项目",
             "project_description": "基于迭代需求对多个资源进行修改",
@@ -26,6 +26,15 @@ task_decomposition_task:
                     "action": "create|update|delete",
                     "resource_id": "资源ID",
                     "position": "如果是修改，指出有问题的修改位置。如果是新增或者删除则为全部"
+                }},
+                {{
+                    "file_path": "文件路径（如/src/html/style.css）",
+                    "type": "根据文件扩展名确定类型如css",
+                    "mime_type": "根据文件类型确定（如text/css）",
+                    "description": "针对任务需求，要对这个资源进行怎样的操作和改动的描述",
+                    "action": "create",
+                    "resource_id": "null, 因为是待生成资源，所以没有resource id",
+                    "position": "因为是新增文件则这里为全部"
                 }},
                 // ... 其他资源
             ],
