@@ -169,10 +169,6 @@ class TopicTracker:
             # 处理其他操作
             self._process_single_resource_action(topic, task, file_path, action)
 
-        # 对于create操作，增加实际创建任务数量，与不包含action的RESOURCE_CREATION任务处理方式保持一致
-        if action == "create":
-            topic.actual_creation_count += 1
-
         # 存储任务的资源操作
         self._resource_actions[task.id] = resource_actions
 
@@ -188,9 +184,11 @@ class TopicTracker:
             # 更新资源，统一使用_pending_resource_tasks的逻辑
             # 不直接使用父版本的resource_id，等待更新操作完成后获取新的resource_id
             self._pending_resource_tasks[task.id] = file_path
+            topic.expected_creation_count += 1
         elif action == "create":
             # 新建资源，与现有逻辑一致
             self._pending_resource_tasks[task.id] = file_path
+            topic.expected_creation_count += 1
 
     def _load_parent_version_resources(self, topic_id: str, parent_version_id: str, opera_id: str = None):
         """从父版本加载资源列表
