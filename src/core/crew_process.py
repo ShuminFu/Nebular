@@ -781,9 +781,6 @@ class CrewManager(BaseCrewProcess):
             else:
                 current_version = topic_info.current_version
 
-            if len(current_version.current_files) != len(current_version.modified_files):
-                # TODO: Removing, adding or updating flag here. Hashing the files to check if there are any changes.
-                pass
 
             # 将VersionMeta对象转换为可序列化的字典
             current_version_dict = {
@@ -797,11 +794,30 @@ class CrewManager(BaseCrewProcess):
             resources_tag = {
                 "ResourcesForViewing": {
                     "VersionId": topic_id,
-                    "Resources": resources,
+                    "Resources": [],
                     "CurrentVersion": current_version_dict,
                 },
-                "RemovingAllResources": True,
             }
+
+            # 如果有修改过的文件，则只添加修改过的文件到Resources中
+            if current_version.modified_files:
+                # 提取modified_files中的file_path列表
+                modified_file_paths = [item["file_path"] for item in current_version.modified_files if "file_path" in item]
+
+                # 从resources中筛选出只在modified_file_paths中的资源
+                modified_resources = [resource for resource in resources if resource.get("path") in modified_file_paths]
+                resources_tag["ResourcesForViewing"]["Resources"] = modified_resources
+            else:
+                # 如果没有修改过的文件，则添加所有resources并设置RemovingAllResources为True
+                resources_tag["ResourcesForViewing"]["Resources"] = resources
+                resources_tag["RemovingAllResources"] = True
+
+            # 如果有deleted_files，则添加到RemovingResources中
+            if hasattr(current_version, "deleted_files") and current_version.deleted_files:
+                # 提取deleted_files中的file_path列表
+                deleted_file_paths = [item["file_path"] for item in current_version.deleted_files if "file_path" in item]
+                if deleted_file_paths:
+                    resources_tag["RemovingResources"] = deleted_file_paths
 
             # 处理HTML文件导航逻辑
             self._add_navigation_index_if_needed(resources_tag, html_files)

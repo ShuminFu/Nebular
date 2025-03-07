@@ -406,12 +406,17 @@ class TopicTracker:
                     await self._check_topic_completion(topic_id)
 
     async def _check_topic_completion(self, topic_id: str):
-        """检查主题是否全部完成"""
+        """检查主题是否全部完成
+
+        主题完成的判断逻辑有三种方式，按优先级排序：
+        1. 如果设置了预期创建任务数量（expected_creation_count > 0），则检查已完成的创建任务是否达到预期数量
+        2. 如果没有预期数量，但有实际添加的创建任务（actual_creation_count > 0），则检查是否所有创建任务都已完成
+        3. 作为后备机制，检查主题的所有任务是否都已完成
+        """
         topic = self.topics.get(topic_id)
         if not topic or topic.status != "active":
             return
 
-        # 新的完成逻辑：检查已完成的创建任务数量是否达到预期数量
         # 首先检查是否有预期数量
         if topic.expected_creation_count > 0:
             # 如果有预期数量，检查已完成的创建任务是否达到预期数量

@@ -1119,3 +1119,56 @@ async def test_multiple_resources_with_actions(topic_tracker: TopicTracker):
         for entry in topic_info.current_version.current_files
         if entry["file_path"] == "/src/main.js"
     )
+
+
+@pytest.mark.asyncio
+async def test_topic_completion_fallback_mechanism(topic_tracker: TopicTracker, completion_callback_called):
+    """测试主题完成的后备机制（所有任务完成）"""
+    callback, called = completion_callback_called
+    topic_tracker.on_completion(callback)
+
+    # 创建一个RESOURCE_CREATION类型的任务（需要包含file_path参数）
+    task1 = BotTask(
+        type=TaskType.RESOURCE_CREATION,
+        description="资源创建任务1",
+        topic_id="test-topic-fallback",
+        topic_type="general",
+        parameters={
+            "opera_id": "test-opera-fallback",
+            "file_path": "/src/file1.js",  # 添加file_path参数
+        },
+    )
+
+    # 创建第二个RESOURCE_CREATION任务
+    task2 = BotTask(
+        type=TaskType.RESOURCE_CREATION,
+        description="资源创建任务2",
+        topic_id="test-topic-fallback",
+        topic_type="general",
+        parameters={
+            "opera_id": "test-opera-fallback",
+            "file_path": "/src/file2.js",  # 添加file_path参数
+        },
+    )
+
+    # 添加任务
+    topic_tracker.add_task(task1)
+    topic_tracker.add_task(task2)
+
+    # 完成第一个任务
+    task1.result = {"resource_id": "res-file1", "status": "success"}  # 添加结果
+    await topic_tracker.update_task_status(task1.id, TaskStatus.COMPLETED, task1)
+    assert called["count"] == 0  # 回调不应该被触发，因为还有一个任务未完成
+
+    # 验证主题状态
+    topic_info = topic_tracker.get_topic_info("test-topic-fallback")
+    assert topic_info.status == "active"  # 主题应该仍然是活动状态
+
+    # 完成第二个任务
+    task2.result = {"resource_id": "res-file2", "status": "success"}  # 添加结果
+    await topic_tracker.update_task_status(task2.id, TaskStatus.COMPLETED, task2)
+    assert called["count"] == 1  # 现在回调应该被触发，因为所有任务都已完成
+
+    # 验证主题状态
+    topic_info = topic_tracker.get_topic_info("test-topic-fallback")
+    assert topic_info.status == "completed"  # 主题现在应该完成
