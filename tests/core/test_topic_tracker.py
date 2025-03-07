@@ -618,15 +618,10 @@ async def test_resource_actions_processing(topic_tracker: TopicTracker, sample_i
     assert "/src/css/style.css" in resource_actions
     assert resource_actions["/src/css/style.css"] == "update"
 
-    # 验证当前任务的文件是否被标记为待更新
-    # 由于当前实现中，带有resource_id的update操作不会添加到pending_updates
-    # 我们直接设置pending_updates，以便后续测试逻辑可以正确执行
-    if topic_info.pending_updates is None:
-        topic_info.pending_updates = {}
-    topic_info.pending_updates["/src/css/style.css"] = {"task_id": sample_iteration_task.id}
-
-    assert topic_info.pending_updates is not None
-    assert "/src/css/style.css" in topic_info.pending_updates
+    # 验证update操作是否正确添加到_pending_resource_tasks中
+    # 检查任务ID是否存在于_pending_resource_tasks中
+    assert sample_iteration_task.id in topic_tracker._pending_resource_tasks
+    assert topic_tracker._pending_resource_tasks[sample_iteration_task.id] == "/src/css/style.css"
 
     # 验证资源ID是否被正确更新
     assert any(
@@ -649,8 +644,8 @@ async def test_resource_actions_processing(topic_tracker: TopicTracker, sample_i
         if entry["file_path"] == "/src/css/style.css"
     )
 
-    # 验证pending_updates是否被清理
-    assert "/src/css/style.css" not in topic_info.pending_updates
+    # 验证任务是否从_pending_resource_tasks中移除
+    assert sample_iteration_task.id not in topic_tracker._pending_resource_tasks
 
 
 @pytest.mark.asyncio
@@ -1025,3 +1020,102 @@ async def test_parent_version_loading_with_current_version():
 
         # 验证子版本自己的文件是否被正确添加
         assert any(file["file_path"] == "/src/child-file.js" and file["resource_id"] == "child-res-1" for file in current_files)
+
+
+@pytest.mark.asyncio
+async def test_multiple_resources_with_actions(topic_tracker: TopicTracker):
+    """测试处理任务中包含多个资源操作的功能"""
+    # 创建一个带有多个资源的任务
+    multi_resources_task = BotTask(
+        type=TaskType.RESOURCE_GENERATION,
+        description="多资源任务",
+        topic_id="multi-resource-topic",
+        topic_type="CODE_RESOURCE",
+        parameters={
+            "opera_id": "test-opera-multi",
+            "file_path": "/src/main.js",  # 主文件
+            "resources": [
+                {
+                    "file_path": "/src/main.js",
+                    "type": "javascript",
+                    "action": "create",
+                    "resource_id": "resource-main-1",
+                },
+                {
+                    "file_path": "/src/utils.js",
+                    "type": "javascript",
+                    "action": "update",
+                    "resource_id": "resource-utils-1",
+                },
+                {
+                    "file_path": "/src/old.js",
+                    "type": "javascript",
+                    "action": "delete",
+                    "resource_id": "resource-old-1",
+                },
+                {
+                    "file_path": "/src/unchanged.js",
+                    "type": "javascript",
+                    "action": "unchange",
+                    "resource_id": "resource-unchanged-1",
+                },
+            ],
+        },
+    )
+
+    # 添加任务
+    topic_tracker.add_task(multi_resources_task)
+
+    # 验证主题是否被创建
+    topic_info = topic_tracker.get_topic_info("multi-resource-topic")
+    assert topic_info is not None
+    assert topic_info.type == "CODE_RESOURCE"
+
+    # 验证是否正确记录了资源操作
+    assert multi_resources_task.id in topic_tracker._resource_actions
+    resource_actions = topic_tracker._resource_actions[multi_resources_task.id]
+
+    # 验证各个文件的操作是否正确记录
+    assert "/src/main.js" in resource_actions
+    assert resource_actions["/src/main.js"] == "create"
+    assert "/src/utils.js" in resource_actions
+    assert resource_actions["/src/utils.js"] == "update"
+    assert "/src/old.js" in resource_actions
+    assert resource_actions["/src/old.js"] == "delete"
+    assert "/src/unchanged.js" in resource_actions
+    assert resource_actions["/src/unchanged.js"] == "unchange"
+
+    # 验证create操作是否增加了actual_creation_count
+    assert topic_info.actual_creation_count == 1
+
+    # 验证deleted_files是否包含被标记为删除的文件
+    assert topic_info.current_version.deleted_files is not None
+    assert any(entry["file_path"] == "/src/old.js" for entry in topic_info.current_version.deleted_files)
+
+    # 验证current_files是否包含create和update的文件
+    assert any(
+        entry["file_path"] == "/src/main.js" and entry["resource_id"] == "resource-main-1"
+        for entry in topic_info.current_version.current_files
+    )
+    assert any(
+        entry["file_path"] == "/src/utils.js" and entry["resource_id"] == "resource-utils-1"
+        for entry in topic_info.current_version.current_files
+    )
+
+    # 验证update操作是否被添加到_pending_resource_tasks
+    assert multi_resources_task.id in topic_tracker._pending_resource_tasks
+    assert topic_tracker._pending_resource_tasks[multi_resources_task.id] == "/src/utils.js"
+
+    # 模拟任务完成并提供新的resource_id
+    updated_task = copy.deepcopy(multi_resources_task)
+    updated_task.result = {"resource_id": "new-resource-id-main"}
+
+    # 更新任务状态
+    await topic_tracker.update_task_status(multi_resources_task.id, TaskStatus.COMPLETED, updated_task)
+
+    # 验证主文件路径的资源ID是否被更新
+    assert any(
+        entry["resource_id"] == "new-resource-id-main"
+        for entry in topic_info.current_version.current_files
+        if entry["file_path"] == "/src/main.js"
+    )

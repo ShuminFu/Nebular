@@ -70,7 +70,7 @@ class ContextStructure(BaseModel):
     """上下文结构模型"""
     conversation_flow: ConversationFlow
     code_context: CodeContext
-    decision_points: List[DecisionPoint]
+    decision_points: DecisionPoint
 
 
 class DialogueIndices(BaseModel):

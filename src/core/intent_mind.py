@@ -444,6 +444,21 @@ class IntentMind:
                     # 获取版本ID作为父级话题ID
                     version_id = parse_version_id(self._parse_tags(dialogue.tags)) if has_iteration else "0"
 
+                    # 如果无法从tags中获取version_id，尝试从flow中获取父主题ID
+                    if not version_id and has_iteration:
+                        flow = dialogue.context.conversation_state.get("flow", {})
+                        evolution_chain = flow.get("evolution_chain", [])
+                        previous_topics = flow.get("previous_topics", [])
+
+                        # 优先使用evolution_chain中的第一个ID作为父主题ID
+                        if evolution_chain and isinstance(evolution_chain, list) and len(evolution_chain) > 0:
+                            version_id = evolution_chain[0]
+                        # 如果没有evolution_chain，尝试使用previous_topics中的第一个ID
+                        elif previous_topics and isinstance(previous_topics, list) and len(previous_topics) > 0:
+                            version_id = previous_topics[0]
+
+                        self.log.info(f"从flow中获取父主题ID: {version_id}")
+
                     # 处理任务参数，只有迭代任务才添加action相关字段
                     task_params = {
                         "file_path": resource["file_path"],

@@ -35,7 +35,6 @@ intent_analysis_task:
         - is_code_request字段返回true
         - 涉及到前端代码的内容，原则上尽量使用一个不依赖任何外部库、可以直接在浏览器中运行的解决方案。代码应当是自包含的，并使用原生 Web API。
     4. 如果是已经生成了代码：
-        - 比如parameters的text字段中已经生成了代码或者其他资源，则is_code_request字段返回false
         - 根据生成的代码中parameters的text字段中的头部信息获取file_path和mime_type用于返回的code_details.resources里。
   expected_output: |
     返回格式为JSON对象，示例如下：

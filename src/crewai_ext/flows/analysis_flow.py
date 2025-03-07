@@ -492,15 +492,15 @@ class AnalysisFlow(Flow[AnalysisState]):
 
             # 从decision_points中提取相关的对话索引
             related_indices = set()
-            for point in context_data["decision_points"]:
-                if "dialogue_index" in point:
-                    try:
-                        # 尝试转换为整数
-                        idx = int(point["dialogue_index"])
-                        if point.get("topic_id") == flow["topic_id"]:  # 确保只关联同一主题的对话
-                            related_indices.add(idx)
-                    except (ValueError, TypeError):
-                        logger.warning(f"无法解析对话索引: {point['dialogue_index']}")
+            # 直接处理decision_points作为单个对象
+            if "dialogue_index" in context_data["decision_points"]:
+                try:
+                    # 尝试转换为整数
+                    idx = int(context_data["decision_points"]["dialogue_index"])
+                    if context_data["decision_points"].get("topic_id") == flow["topic_id"]:  # 确保只关联同一主题的对话
+                        related_indices.add(idx)
+                except (ValueError, TypeError):
+                    logger.warning(f"无法解析对话索引: {context_data['decision_points']['dialogue_index']}")
 
             # 更新对话的相关索引
             self.dialogue.context.related_dialogue_indices = list(related_indices)
