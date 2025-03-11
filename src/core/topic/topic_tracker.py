@@ -100,7 +100,26 @@ class TopicTracker:
             parent_version_id = params["parent_topic_id"] or params["parent_version_id"]
             if parent_version_id:
                 parent_version = None if parent_version_id == "0" else parent_version_id
-                description = params["description"] or "Initial version"
+
+                # 构建更全面的描述，优先使用项目描述和需求列表
+                description = params["description"] or ""
+
+                # 如果有项目描述，将其添加到描述中
+                if "project_description" in params:
+                    description = params["code_details"]["project_description"]
+
+                # 如果有需求列表，将其添加到描述中
+                if "requirements" in params["code_details"]:
+                    requirements_str = ", ".join(params["code_details"]["requirements"])
+                    if description:
+                        description += f" 需求：{requirements_str}"
+                    else:
+                        description = f"需求：{requirements_str}"
+
+                # 如果仍然没有描述，使用默认值
+                if not description:
+                    description = "Initial version"
+
                 self.topics[task.topic_id].current_version = VersionMeta(
                     parent_version=parent_version, modified_files=[], description=description, current_files=[], deleted_files=[]
                 )
