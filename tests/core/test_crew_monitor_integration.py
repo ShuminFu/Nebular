@@ -35,7 +35,7 @@ class TestCrewMonitorIntegration:
                             "stop": monitor.stop,
                             "init_existing_bots": monitor._init_existing_bots,
                             "periodic_check": monitor._periodic_check,
-                            "check_new_bots": monitor._check_new_bots,
+                            "check_bots": monitor._check_bots,
                             "connect_with_retry": monitor.signalr_client.connect_with_retry,
                             "disconnect": monitor.signalr_client.disconnect,
                         }
@@ -58,8 +58,8 @@ class TestCrewMonitorIntegration:
                         async def mock_periodic_check(*args, **kwargs):
                             pass
 
-                        # 模拟_check_new_bots，简单的空实现
-                        async def mock_check_new_bots():
+                        # 模拟_check_bots，简单的空实现
+                        async def mock_check_bots():
                             pass
 
                         # 使用AsyncMock替代函数实现
@@ -71,7 +71,7 @@ class TestCrewMonitorIntegration:
                         monitor.stop = mock_stop
                         monitor._init_existing_bots = mock_init_existing_bots
                         monitor._periodic_check = mock_periodic_check
-                        monitor._check_new_bots = mock_check_new_bots
+                        monitor._check_bots = mock_check_bots
                         monitor.signalr_client.connect_with_retry = connect_mock
                         monitor.signalr_client.disconnect = disconnect_mock
 
@@ -134,7 +134,7 @@ class TestCrewMonitorIntegration:
             assert len(monitor.managed_bots) == 3
             assert calls == [("new_bot", "前端-前端任务-新测试Opera")]
 
-            # 模拟添加一个额外的Bot以测试_check_new_bots逻辑
+            # 模拟添加一个额外的Bot以测试_check_bots逻辑
             monitor.managed_bots.add("bot3")
 
             # 验证Bot被添加到管理中
@@ -206,10 +206,10 @@ class TestCrewMonitorIntegration:
         # 测试检查新Bot时的错误
         monitor.parser.parse_response.side_effect = Exception("API error")
 
-        # 调用原始的_check_new_bots方法应该不会崩溃
-        original_check_new_bots = monitor._check_new_bots
+        # 调用原始的_check_bots方法应该不会崩溃
+        original_check_bots = monitor._check_bots
         # 由于我们已经模拟了此方法为空实现，所以不会有实际操作
-        await monitor._check_new_bots()
+        await monitor._check_bots()
 
         # 验证系统能够正常处理错误，不会崩溃
         # 同样，我们只需要确认函数正常返回，没有抛出异常
