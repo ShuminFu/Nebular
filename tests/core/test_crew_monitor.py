@@ -1,5 +1,4 @@
 import pytest
-import asyncio
 import unittest.mock as mock
 from uuid import UUID
 from src.core.entrypoints.crew_manager_main import CrewMonitor
@@ -206,7 +205,7 @@ class TestCrewMonitor:
             assert "test_bot" in monitor.processes
 
     @pytest.mark.asyncio
-    async def test_start_bot_manager_already_managed(self, monitor):
+    async def test_start_bot_manager_already_managed(self, monitor: CrewMonitor):
         """测试尝试为已管理的Bot启动进程"""
         # 预设已管理的Bot
         monitor.managed_bots.add("test_bot")
@@ -219,7 +218,7 @@ class TestCrewMonitor:
             mock_process.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_start_bot_manager_process_exists_alive(self, monitor):
+    async def test_start_bot_manager_process_exists_alive(self, monitor: CrewMonitor):
         """测试当进程已存在且活跃时的处理"""
         # 创建模拟进程
         mock_process = mock.MagicMock()
@@ -237,7 +236,7 @@ class TestCrewMonitor:
             assert "test_bot" in monitor.managed_bots
 
     @pytest.mark.asyncio
-    async def test_start_bot_manager_process_exists_dead(self, monitor):
+    async def test_start_bot_manager_process_exists_dead(self, monitor: CrewMonitor):
         """测试当进程已存在但已停止时的处理"""
         # 创建模拟进程
         mock_process = mock.MagicMock()
@@ -265,7 +264,7 @@ class TestCrewMonitor:
             assert monitor.processes["test_bot"] == new_process
 
     @pytest.mark.asyncio
-    async def test_check_bots(self, monitor):
+    async def test_check_bots(self, monitor: CrewMonitor):
         """测试检查新Bot功能及检查已管理但非活跃Bot的功能"""
         # 增加BOT_NAME_FILTER常量的模拟，确保与代码匹配
         with mock.patch("src.core.entrypoints.crew_manager_main.BOT_NAME_FILTER", "前端-"):
@@ -352,7 +351,7 @@ class TestCrewMonitor:
                 assert "bot2" in monitor.managed_bots
 
     @pytest.mark.asyncio
-    async def test_periodic_check(self, monitor):
+    async def test_periodic_check(self, monitor: CrewMonitor):
         """测试定期检查功能"""
         # 模拟_check_bots方法
         with mock.patch.object(monitor, "_check_bots") as mock_check:
