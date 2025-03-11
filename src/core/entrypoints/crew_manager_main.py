@@ -1,5 +1,6 @@
 import asyncio
 import multiprocessing
+import os
 from uuid import UUID
 from src.core.logger_config import get_logger, get_logger_with_trace_id, setup_logger
 from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
@@ -13,9 +14,14 @@ from src.core.bot_api_helper import (
     get_child_bot_opera_ids,
     get_child_bot_staff_info,
 )
+from src.opera_service.signalr_client.opera_signalr_client import OperaSignalRClient, OperaCreatedArgs
 
-from typing import Optional
+from typing import Optional, Dict, Set
 import backoff
+import threading
+
+# 从环境变量读取Bot名称过滤条件，默认为"CM"
+BOT_NAME_FILTER = os.environ.get("BOT_NAME_FILTER", "CM")
 
 
 
@@ -148,60 +154,243 @@ def start_crew_manager_process(bot_id: str):
     """在新进程中启动CrewManager"""
     asyncio.run(run_crew_manager(bot_id))
 
+class CrewMonitor:
+    """监控器类，用于监听新的Opera和Bot创建事件，并动态启动相应的进程"""
+
+    def __init__(self, signalr_url: str = "http://opera.nti56.com/signalRService"):
+        self.log = get_logger_with_trace_id()
+        self.signalr_client = OperaSignalRClient(url=signalr_url)
+        self.bot_tool = BotTool()
+        self.parser = ApiResponseParser()
+        self.processes: Dict[str, multiprocessing.Process] = {}  # 存储所有进程，key为bot_id
+        self.managed_bots: Set[str] = set()  # 存储已经启动了进程的bot id
+        self.lock = threading.Lock()  # 用于保护共享资源
+
+    async def start(self):
+        """启动监控器"""
+        self.log.info("启动CrewMonitor...")
+
+        # 设置SignalR客户端回调
+        self.signalr_client.set_callback("on_opera_created", self._on_opera_created)
+
+        # 连接SignalR服务
+        await self.signalr_client.connect_with_retry()
+
+        # 初始化现有的bot
+        await self._init_existing_bots()
+
+        self.log.info("CrewMonitor已启动")
+
+    async def stop(self):
+        """停止监控器"""
+        self.log.info("正在停止CrewMonitor...")
+
+        # 断开SignalR连接
+        await self.signalr_client.disconnect()
+
+        # 停止所有进程
+        with self.lock:
+            for bot_id, process in self.processes.items():
+                self.log.info(f"正在停止Bot {bot_id}的进程...")
+                process.terminate()
+                process.join()
+
+        self.log.info("CrewMonitor已停止")
+
+    async def _init_existing_bots(self):
+        """初始化现有的Bots"""
+        self.log.info("正在初始化现有Bots...")
+
+        # 获取所有Bot
+        result = self.bot_tool.run(action="get_all")
+
+        try:
+            status_code, bots_data = self.parser.parse_response(result)
+
+            if status_code == 200:
+                # 过滤符合条件的Bot - 使用环境变量中的过滤条件
+                crew_manager_bots = [bot for bot in bots_data if BOT_NAME_FILTER in bot["name"] and not bot["isActive"]]
+
+                self.log.info(f"发现{len(crew_manager_bots)}个符合条件的Bot")
+
+                # 为每个符合条件的Bot启动CrewManager进程
+                for bot in crew_manager_bots:
+                    await self._start_bot_manager(bot["id"], bot["name"])
+            else:
+                self.log.error(f"获取Bot列表失败，状态码: {status_code}")
+        except Exception as e:
+            self.log.error(f"初始化现有Bots时出错: {str(e)}")
+
+    async def _on_opera_created(self, opera_args: OperaCreatedArgs):
+        """处理新建Opera事件"""
+        self.log.info(f"收到新建Opera事件: {opera_args.name}, ID: {opera_args.opera_id}")
+
+        try:
+            # 获取Opera的ID
+            opera_id_str = str(opera_args.opera_id)
+
+            # 检查该Opera是否已有符合条件的crew_manager_bots作为staff
+            staff_result = self.bot_tool.run(action="get_opera_staffs", opera_id=opera_id_str)
+            staff_status, staff_data = self.parser.parse_response(staff_result)
+
+            if staff_status != 200:
+                self.log.error(f"获取Opera {opera_args.name} 的Staff信息失败，状态码: {staff_status}")
+                return
+
+            # 检查是否有crew_manager_bots作为staff
+            crew_manager_staffs = []
+            if staff_data and isinstance(staff_data, list):  # 确保staff_data是一个列表
+                crew_manager_staffs = [
+                    staff for staff in staff_data if staff.get("botId") and BOT_NAME_FILTER in (staff.get("botName") or "")
+                ]
+
+            if crew_manager_staffs:
+                self.log.info(f"Opera {opera_args.name} 已有符合条件的crew_manager_bots作为staff")
+
+                # 检查这些Bot是否已经在管理列表中
+                with self.lock:
+                    for staff in crew_manager_staffs:
+                        bot_id = staff.get("botId")
+                        if bot_id and bot_id not in self.managed_bots:
+                            self.log.info(f"为已有的Bot {staff.get('botName')} (ID: {bot_id})启动进程")
+                            await self._start_bot_manager(bot_id, staff.get("botName"))
+                return  # 有符合条件的crew_manager_bots作为staff，直接返回
+
+            # 如果没有符合条件的crew_manager_bots，则创建新Bot
+            self.log.info(f"为Opera {opera_args.name} (ID: {opera_args.opera_id})创建新的Bot...")
+
+            # 创建Bot的API调用
+            bot_name = f"前端-{opera_args.name}"
+            new_bot_params = {
+                "action": "create",
+                "opera_id": opera_id_str,
+                "name": bot_name,
+                # 其他参数按需添加
+            }
+
+            new_bot_result = self.bot_tool.run(**new_bot_params)
+            status_code, new_bot_data = self.parser.parse_response(new_bot_result)
+
+            if status_code == 200:
+                self.log.info(f"成功创建Bot: {new_bot_data['name']} (ID: {new_bot_data['id']})")
+
+                # 确保不重复启动进程
+                with self.lock:
+                    if new_bot_data["id"] not in self.managed_bots:
+                        await self._start_bot_manager(new_bot_data["id"], new_bot_data["name"])
+            else:
+                self.log.error(f"创建Bot失败，状态码: {status_code}")
+
+        except Exception as e:
+            self.log.error(f"处理Opera创建事件时出错: {str(e)}")
+
+    async def _check_new_bots(self):
+        """定期检查新的Bot"""
+        self.log.info("正在检查新的Bot...")
+
+        # 获取所有Bot
+        result = self.bot_tool.run(action="get_all")
+
+        try:
+            status_code, bots_data = self.parser.parse_response(result)
+
+            if status_code == 200:
+                # 过滤符合条件且尚未管理的Bot
+                with self.lock:
+                    managed_bots = self.managed_bots.copy()
+
+                new_crew_manager_bots = [
+                    bot
+                    for bot in bots_data
+                    if BOT_NAME_FILTER in bot["name"] and not bot["isActive"] and bot["id"] not in managed_bots
+                ]
+
+                if new_crew_manager_bots:
+                    self.log.info(f"发现{len(new_crew_manager_bots)}个新的符合条件的Bot")
+
+                    # 为每个新的符合条件的Bot启动CrewManager进程
+                    for bot in new_crew_manager_bots:
+                        await self._start_bot_manager(bot["id"], bot["name"])
+                else:
+                    self.log.info("未发现新的符合条件的Bot")
+            else:
+                self.log.error(f"获取Bot列表失败，状态码: {status_code}")
+        except Exception as e:
+            self.log.error(f"检查新Bot时出错: {str(e)}")
+
+    async def _start_bot_manager(self, bot_id: str, bot_name: str):
+        """为指定Bot启动CrewManager进程"""
+        self.log.info(f"正在为Bot {bot_name}(ID: {bot_id})启动CrewManager进程...")
+
+        with self.lock:
+            # 检查是否已经在管理这个Bot
+            if bot_id in self.managed_bots:
+                self.log.info(f"Bot {bot_id}已经在管理中，避免重复启动")
+                return
+
+            # 检查进程是否已经存在但未记录
+            for process_bot_id, process in self.processes.items():
+                if process_bot_id == bot_id:
+                    if process.is_alive():
+                        self.log.info(f"Bot {bot_id}的进程已存在且活跃，仅更新记录")
+                        self.managed_bots.add(bot_id)
+                        return
+                    else:
+                        self.log.info(f"Bot {bot_id}的进程已存在但已停止，将重新启动")
+                        process.terminate()
+                        process.join()
+                        del self.processes[bot_id]
+                        break
+
+            # 启动新进程
+            process = multiprocessing.Process(target=start_crew_manager_process, args=(bot_id,))
+            process.start()
+
+            # 记录进程和Bot
+            self.processes[bot_id] = process
+            self.managed_bots.add(bot_id)
+
+            self.log.info(f"已为Bot {bot_id}启动CrewManager进程")
+
+    async def _periodic_check(self, interval: int = 5):
+        """定期检查新的Bot"""
+        while True:
+            await self._check_new_bots()
+            await asyncio.sleep(interval)
+
+
 async def main():
     # 获取logger实例
     setup_logger(name="main")
     log = get_logger(__name__, log_file="logs/main.log")
     # 为main函数创建新的trace_id
     log = get_logger_with_trace_id()
-    # 创建BotTool实例
-    bot_tool = BotTool()
-    parser = ApiResponseParser()
 
-    # 获取所有Bot
-    result = bot_tool.run(action="get_all")
-    log.info(f"获取所有Bot结果: {result}")
+    # 创建并启动监控器
+    monitor = CrewMonitor()
+    await monitor.start()
 
-    # 存储所有进程的列表
-    processes = []
+    # 启动定期检查任务
+    check_task = asyncio.create_task(monitor._periodic_check())
 
     try:
-        status_code, bots_data = parser.parse_response(result)
-
-        if status_code == 200:
-            # 过滤符合条件的Bot
-            crew_manager_bots = [bot for bot in bots_data if "前端" in bot["name"] and not bot["isActive"]]
-            log.info("符合条件的Bot列表:")
-            for bot in crew_manager_bots:
-                log.info(f"ID: {bot['id']}, Name: {bot['name']}")
-
-                # 为每个Bot创建新进程
-                process = multiprocessing.Process(
-                    target=start_crew_manager_process,
-                    args=(bot['id'],)
-                )
-                process.start()
-                processes.append(process)
-                log.info(f"已为Bot {bot['id']}启动CrewManager进程")
-
-            # 等待所有进程
-            try:
-                while True:
-                    await asyncio.sleep(1)
-            except KeyboardInterrupt:
-                log.info("正在停止所有进程...")
-                for process in processes:
-                    process.terminate()
-                    process.join()
-                log.info("所有进程已停止")
-        else:
-            log.error(f"API请求失败，状态码: {status_code}")
+        # 保持主程序运行
+        while True:
+            await asyncio.sleep(1)
+    except KeyboardInterrupt:
+        log.info("收到中断信号，正在停止...")
+        # 取消定期检查任务
+        check_task.cancel()
+        # 停止监控器
+        await monitor.stop()
+        log.info("程序已停止")
     except Exception as e:
-        log.error(f"处理结果时出错: {str(e)}")
-        # 确保清理所有进程
-        for process in processes:
-            process.terminate()
-            process.join()
+        log.error(f"程序运行出错: {str(e)}")
+        # 取消定期检查任务
+        check_task.cancel()
+        # 停止监控器
+        await monitor.stop()
+        raise
 
 if __name__ == "__main__":
     # 设置多进程启动方法
