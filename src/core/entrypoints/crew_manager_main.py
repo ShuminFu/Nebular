@@ -21,7 +21,7 @@ import backoff
 import threading
 
 # 从环境变量读取Bot名称过滤条件，默认为"CM"
-BOT_NAME_FILTER = os.environ.get("BOT_NAME_FILTER", "CM")
+BOT_NAME_FILTER = os.environ.get("BOT_NAME_FILTER", "前端")
 
 
 
@@ -208,14 +208,15 @@ class CrewMonitor:
             status_code, bots_data = self.parser.parse_response(result)
 
             if status_code == 200:
-                # 过滤符合条件的Bot - 使用环境变量中的过滤条件
+                # 过滤符合条件的Bot，包括已管理但可能已停止的bot
                 crew_manager_bots = [bot for bot in bots_data if BOT_NAME_FILTER in bot["name"] and not bot["isActive"]]
 
-                self.log.info(f"发现{len(crew_manager_bots)}个符合条件的Bot")
+                if crew_manager_bots:
+                    self.log.info(f"发现{len(crew_manager_bots)}个符合条件的Bot")
 
-                # 为每个符合条件的Bot启动CrewManager进程
-                for bot in crew_manager_bots:
-                    await self._start_bot_manager(bot["id"], bot["name"])
+                    # 为每个符合条件的Bot启动或重启CrewManager进程
+                    for bot in crew_manager_bots:
+                        await self._start_bot_manager(bot["id"], bot["name"])
             else:
                 self.log.error(f"获取Bot列表失败，状态码: {status_code}")
         except Exception as e:
@@ -284,26 +285,17 @@ class CrewMonitor:
         except Exception as e:
             self.log.error(f"处理Opera创建事件时出错: {str(e)}")
 
-    async def _check_new_bots(self):
-        """定期检查新的Bot"""
-        self.log.info("正在检查新的Bot...")
-
+    async def _check_bots(self):
+        """定期检查新的Bot和已管理但可能非活跃的Bot"""
         # 获取所有Bot
-        result = self.bot_tool.run(action="get_all")
+        result = self.bot_tool._run(action="get_all")
 
         try:
             status_code, bots_data = self.parser.parse_response(result)
 
             if status_code == 200:
-                # 过滤符合条件且尚未管理的Bot
-                with self.lock:
-                    managed_bots = self.managed_bots.copy()
-
-                new_crew_manager_bots = [
-                    bot
-                    for bot in bots_data
-                    if BOT_NAME_FILTER in bot["name"] and not bot["isActive"] and bot["id"] not in managed_bots
-                ]
+                # 1. 检查新的符合条件的Bot
+                new_crew_manager_bots = [bot for bot in bots_data if BOT_NAME_FILTER in bot["name"] and not bot["isActive"]]
 
                 if new_crew_manager_bots:
                     self.log.info(f"发现{len(new_crew_manager_bots)}个新的符合条件的Bot")
@@ -311,12 +303,46 @@ class CrewMonitor:
                     # 为每个新的符合条件的Bot启动CrewManager进程
                     for bot in new_crew_manager_bots:
                         await self._start_bot_manager(bot["id"], bot["name"])
-                else:
-                    self.log.info("未发现新的符合条件的Bot")
+
+                # 2. 检查已管理但可能已经在Opera中变为非活跃的Bot
+                with self.lock:
+                    managed_bot_ids = self.managed_bots.copy()
+
+                # 获取当前在Opera中活跃的Bot ID列表
+                active_bot_ids = {bot["id"] for bot in bots_data if bot["isActive"]}
+
+                # 找出已管理但在Opera中显示为非活跃的Bot
+                inactive_managed_bots = []
+                for bot in bots_data:
+                    if bot["id"] in managed_bot_ids and not bot["isActive"]:
+                        inactive_managed_bots.append(bot)
+
+                if inactive_managed_bots:
+                    self.log.info(f"发现{len(inactive_managed_bots)}个已管理但在Opera中显示为非活跃的Bot")
+
+                    # 重新启动这些Bot的CrewManager进程
+                    for bot in inactive_managed_bots:
+                        self.log.info(f"Bot {bot['name']}(ID: {bot['id']})在Opera中显示为非活跃，将重新启动...")
+                        with self.lock:
+                            # 从管理列表中移除，以便_start_bot_manager可以重新启动它
+                            if bot["id"] in self.managed_bots:
+                                self.managed_bots.remove(bot["id"])
+
+                            # 如果存在相关进程，终止它
+                            if bot["id"] in self.processes:
+                                process = self.processes[bot["id"]]
+                                if process.is_alive():
+                                    self.log.info(f"终止Bot {bot['id']}的现有进程")
+                                    process.terminate()
+                                    process.join()
+                                del self.processes[bot["id"]]
+
+                        # 重新启动
+                        await self._start_bot_manager(bot["id"], bot["name"])
             else:
                 self.log.error(f"获取Bot列表失败，状态码: {status_code}")
         except Exception as e:
-            self.log.error(f"检查新Bot时出错: {str(e)}")
+            self.log.error(f"检查Bot时出错: {str(e)}")
 
     async def _start_bot_manager(self, bot_id: str, bot_name: str):
         """为指定Bot启动CrewManager进程"""
@@ -355,7 +381,7 @@ class CrewMonitor:
     async def _periodic_check(self, interval: int = 5):
         """定期检查新的Bot"""
         while True:
-            await self._check_new_bots()
+            await self._check_bots()
             await asyncio.sleep(interval)
 
 
