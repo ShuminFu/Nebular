@@ -690,7 +690,7 @@ class CrewManager(BaseCrewProcess):
             original_task = next((t for t in self.task_queue.tasks if t.id == UUID(task_id)), None)
             if original_task and result:
                 original_task.result = result
-                self.log.info(f"已更新任务 {task_id} 的结果: {result}")
+                self.log.info(f"正在更新任务 {task_id} 的结果: {result}")
 
             # 更新当前回调任务的状态
             await self.task_queue.update_task_status(task_id=task.id, new_status=TaskStatus.COMPLETED)
@@ -726,7 +726,7 @@ class CrewManager(BaseCrewProcess):
             # 直接使用TopicTracker中的current_files
             if topic_info and topic_info.current_version and topic_info.current_version.current_files:
                 # 资源列表已经是最新的，直接使用
-                resources, html_files = self._build_resource_list_from_version(topic_info.current_version)
+                resources = self._build_resource_list_from_version(topic_info.current_version)
             else:
                 # 仅在current_files为空时才回退到遍历任务的方式
                 self.log.warning(f"主题 {topic_id} 的current_files为空，回退到遍历方式")
@@ -805,7 +805,7 @@ class CrewManager(BaseCrewProcess):
                 modified_file_paths = [item["file_path"] for item in current_version.modified_files if "file_path" in item]
 
                 # 从resources中筛选出只在modified_file_paths中的资源
-                modified_resources = [resource for resource in resources if resource.get("path") in modified_file_paths]
+                modified_resources = [resource for resource in resources if resource.get("Url") in modified_file_paths]
                 resources_tag["ResourcesForViewing"]["Resources"] = modified_resources
             else:
                 # 如果没有修改过的文件，则添加所有resources并设置RemovingAllResources为True
@@ -820,7 +820,7 @@ class CrewManager(BaseCrewProcess):
                     resources_tag["RemovingResources"] = deleted_file_paths
 
             # 处理HTML文件导航逻辑
-            self._add_navigation_index_if_needed(resources_tag, html_files)
+            self._add_navigation_index_if_needed(resources_tag)
 
             # 创建对话消息
             dialogue_data = DialogueForCreation(
@@ -829,7 +829,7 @@ class CrewManager(BaseCrewProcess):
                 is_narratage=False,
                 is_whisper=False,
                 text=f"主题 {topic_id} 的所有资源已生成完成。",
-                tags=json.dumps(resources_tag),
+                tags=json.dumps(resources_tag, ensure_ascii=False),
             )
 
             # 发送对话
@@ -838,7 +838,7 @@ class CrewManager(BaseCrewProcess):
             # 检查结果
             status_code, _ = ApiResponseParser.parse_response(result)
             if status_code not in [200, 201, 204]:
-                self.log.error(f"发送主题 {topic_id} 完成对话失败")
+                self.log.error(f"发送主题 {topic_id} 完成对话失败, data:{dialogue_data}")
                 return
 
             self.log.info(f"已发送主题 {topic_id} 完成对话，包含 {len(resources)} 个资源")
@@ -849,7 +849,6 @@ class CrewManager(BaseCrewProcess):
     def _build_resource_list_from_version(self, version: VersionMeta):
         """从版本元数据构建资源列表和HTML文件列表"""
         resources = []
-        html_files = []
 
         for file_entry in version.current_files:
             file_path = file_entry["file_path"]
@@ -862,31 +861,33 @@ class CrewManager(BaseCrewProcess):
             }
             resources.append(resource_info)
 
-            if file_path.lower().endswith(".html"):
-                html_files.append(file_path)
+        return resources
 
-        return resources, html_files
-
-    def _add_navigation_index_if_needed(self, resources_tag, html_files):
+    def _add_navigation_index_if_needed(self, resources_tag):
         """如果存在index.html文件，添加导航索引
+        TODO: 可以用一个小模型来结合对话内容来判断跳转哪个索引
 
         Args:
             resources_tag: 资源标签字典
-            html_files: HTML文件路径列表
         """
-        if not html_files:
-            return
+        # 获取resources列表
+        resources = resources_tag["ResourcesForViewing"].get("Resources", [])
+        html_candidates = []
 
-        # 查找index.html（精确匹配）
-        index_html_position = None
-        for i, path in enumerate(html_files):
-            if path.lower().endswith("/index.html") or path.lower() == "index.html":
-                index_html_position = i
-                break
+        # 第一轮遍历：查找index.html并记录所有html文件
+        for index, resource in enumerate(resources):
+            url = resource.get("Url", "").lower()
+            if url.endswith(".html"):
+                html_candidates.append(index)
+                if url.endswith("/index.html") or url == "index.html":
+                    # 直接使用resource列表中的索引
+                    resources_tag["ResourcesForViewing"]["NavigateIndex"] = index
+                    return
 
-        if index_html_position is not None:
-            # 找到index.html，添加NavigateIndex字段
-            resources_tag["ResourcesForViewing"]["NavigateIndex"] = index_html_position
+        # 第二轮遍历：如果没有index.html，选择第一个html文件
+        if html_candidates:
+            resources_tag["ResourcesForViewing"]["NavigateIndex"] = html_candidates[0]
+
 
     def _build_resource_list_from_tasks(self, tasks):
         """从任务列表构建资源列表和HTML文件列表
