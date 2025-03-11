@@ -71,6 +71,7 @@ class TopicTracker:
             "parent_topic_id": params.get("parent_topic_id"),
             "parent_version_id": params.get("parent_version_id"),
             "expected_files_count": params.get("expected_files_count", 1),
+            "code_details": params.get("code_details", {}),
         }
 
     def on_completion(self, callback: TopicCompletionCallback):
