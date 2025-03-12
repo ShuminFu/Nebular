@@ -259,19 +259,19 @@ class OperaSignalRClient:
             self.log.debug("收到系统关闭事件，但未设置处理回调")
 
     async def _handle_opera_created(self, args: Dict[str, Any]) -> None:
-        self.log.info(f"收到Opera创建事件: {json.dumps(args, ensure_ascii=False)}")
         if self.callbacks["on_opera_created"]:
+            data = args[0] if isinstance(args, list) else args
             opera_args = OperaCreatedArgs(
-                opera_id=UUID(args["operaId"]),
-                parent_id=UUID(args["parentId"]) if args.get(
-                    "parentId") else None,
-                name=args["name"],
-                description=args.get("description"),
-                database_name=args["databaseName"]
+                opera_id=UUID(data["operaId"]),
+                parent_id=UUID(data["parentId"]) if data.get("parentId") else None,
+                name=data["name"],
+                description=data.get("description"),
+                database_name=data["databaseName"],
             )
-            self.log.debug(f"Opera创建详情: ID={opera_args.opera_id}, 名称={opera_args.name}, "
-                         f"父ID={opera_args.parent_id}, 数据库={opera_args.database_name}")
-            await self.message_processor.handle_opera_created(opera_args)
+            self.log.debug(
+                f"Opera创建详情: ID={opera_args.opera_id}, 名称:{opera_args.name}, "
+                f"父ID:{opera_args.parent_id}, 数据库:{opera_args.database_name}"
+            )
             await self._execute_callback(
                 "on_opera_created",
                 self.callbacks["on_opera_created"],

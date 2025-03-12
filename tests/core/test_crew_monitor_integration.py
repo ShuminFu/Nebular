@@ -85,7 +85,7 @@ class TestCrewMonitorIntegration:
                             await monitor.stop()
 
     @pytest.mark.asyncio
-    async def test_monitor_full_flow(self, setup_monitor):
+    async def test_monitor_full_flow(self, setup_monitor: CrewMonitor):
         """测试完整流程：初始化、接收事件、处理新Bot"""
         monitor = setup_monitor
 
@@ -107,11 +107,17 @@ class TestCrewMonitorIntegration:
             database_name="test_db",
         )
 
+        # 模拟UUID的bot_id
+        bot_uuid = UUID("11111111-2222-3333-4444-555555555555")
+        bot_id_str = str(bot_uuid)
+        bot_name = "前端-现有Bot"
+
         # 重置模拟对象
         monitor.bot_tool.run.reset_mock()
         monitor.parser.parse_response.side_effect = [
-            (200, []),  # 获取Bot列表返回空
-            (200, {"id": "new_bot", "name": "前端-前端任务-新测试Opera"}),  # 创建Bot返回
+            (200, []),  # 获取Opera的staff信息返回空列表
+            (200, [{"id": bot_id_str, "name": bot_name, "roles": ["CrewManager"]}]),  # 获取所有Bot列表
+            (200, {"success": True}),  # 注册Bot为staff返回
         ]
 
         # 创建一个用于测试的_on_opera_created方法副本，避免依赖mock的方法
@@ -131,27 +137,56 @@ class TestCrewMonitorIntegration:
 
         monitor._start_bot_manager = mock_start_bot_manager
 
-        try:
-            # 调用Opera创建事件处理
-            await original_on_opera_created(opera_args)
+        # 创建一个模拟的_get_crew_manager_bots以避免依赖roles过滤
+        original_get_crew_manager_bots = monitor._get_crew_manager_bots
 
-            # 验证创建了新Bot并加入管理
-            assert "new_bot" in monitor.managed_bots
-            assert len(monitor.managed_bots) == 3
-            assert calls == [("new_bot", "前端-前端任务-新测试Opera")]
+        async def mock_get_crew_manager_bots(force_refresh=False):
+            # 直接返回固定结果，避免依赖外部API和roles过滤
+            return [{"id": bot_id_str, "name": bot_name, "roles": ["CrewManager"]}]
 
-            # 验证加入了重启历史
-            assert "new_bot" in monitor.restart_history
+        monitor._get_crew_manager_bots = mock_get_crew_manager_bots
 
-            # 模拟添加一个额外的Bot以测试_check_bots逻辑
-            monitor.managed_bots.add("bot3")
+        # 模拟 StaffForCreation 调用
+        with mock.patch("src.core.entrypoints.crew_manager_main.StaffForCreation") as mock_staff_creation:
+            # 配置 mock_staff_creation 返回一个有效的模拟对象
+            mock_staff_obj = mock.MagicMock()
+            mock_staff_creation.return_value = mock_staff_obj
 
-            # 验证Bot被添加到管理中
-            assert "bot3" in monitor.managed_bots
-            assert len(monitor.managed_bots) == 4
-        finally:
-            # 恢复原始方法
-            monitor._start_bot_manager = original_start_bot_manager
+            try:
+                # 调用Opera创建事件处理
+                await original_on_opera_created(opera_args)
+
+                # 验证 StaffForCreation 被正确调用
+                assert mock_staff_creation.call_count == 1
+                call_kwargs = mock_staff_creation.call_args[1]
+
+                # 检查各个参数而不是类型
+                assert str(call_kwargs["bot_id"]) == bot_id_str
+                assert call_kwargs["name"] == f"CM-{bot_name}"
+                assert call_kwargs["is_on_stage"] is True
+                assert call_kwargs["tags"] == ""
+                assert call_kwargs["roles"] == "CrewManager"
+                assert call_kwargs["permissions"] == "manager"
+                assert call_kwargs["parameter"] == "{}"
+
+                # 验证使用了现有Bot并加入管理
+                assert bot_id_str in monitor.managed_bots
+                assert len(monitor.managed_bots) == 3
+                assert calls == [(bot_id_str, bot_name)]
+
+                # 验证加入了重启历史
+                assert bot_id_str in monitor.restart_history
+
+                # 模拟添加一个额外的Bot以测试_check_bots逻辑
+                monitor.managed_bots.add("bot3")
+
+                # 验证Bot被添加到管理中
+                assert "bot3" in monitor.managed_bots
+                assert len(monitor.managed_bots) == 4
+            finally:
+                # 恢复原始方法
+                monitor._start_bot_manager = original_start_bot_manager
+                monitor._get_crew_manager_bots = original_get_crew_manager_bots
 
     @pytest.mark.asyncio
     async def test_main_function(self):
@@ -268,13 +303,43 @@ class TestCrewMonitorIntegration:
             database_name="test_db2",
         )
 
+        # 模拟UUID的bot_id
+        bot_uuid1 = UUID("11111111-2222-3333-4444-555555555555")
+        bot_id_str1 = str(bot_uuid1)
+        bot_name1 = "前端-现有Bot1"
+
+        bot_uuid2 = UUID("22222222-3333-4444-5555-666666666666")
+        bot_id_str2 = str(bot_uuid2)
+        bot_name2 = "前端-现有Bot2"
+
+        # 重置BOT缓存以确保测试正确执行
+        monitor.bot_cache = []
+        monitor.bot_cache_time = 0
+
+        # 模拟_get_crew_manager_bots方法的行为
+        original_get_crew_manager_bots = monitor._get_crew_manager_bots
+
+        # 为每次调用返回不同的Bot
+        get_bots_call_count = 0
+
+        async def mock_get_crew_manager_bots(force_refresh=False):
+            nonlocal get_bots_call_count
+            get_bots_call_count += 1
+
+            if get_bots_call_count == 1:
+                return [{"id": bot_id_str1, "name": bot_name1, "roles": ["CrewManager"]}]
+            else:
+                return [{"id": bot_id_str2, "name": bot_name2, "roles": ["CrewManager"]}]
+
+        monitor._get_crew_manager_bots = mock_get_crew_manager_bots
+
         # 模拟API返回
         monitor.bot_tool.run.return_value = "mock_result"
         side_effects = [
-            (200, []),  # 第一次获取Bot列表
-            (200, {"id": "new_bot1", "name": "前端-前端任务-测试Opera1"}),  # 创建第一个Bot
-            (200, []),  # 第二次获取Bot列表
-            (200, {"id": "new_bot2", "name": "前端-前端任务-测试Opera2"}),  # 创建第二个Bot
+            (200, []),  # 第一次获取Opera的staff信息返回空列表
+            (200, {"success": True}),  # 注册Bot1为staff
+            (200, []),  # 第二次获取Opera的staff信息返回空列表
+            (200, {"success": True}),  # 注册Bot2为staff
         ]
         monitor.parser.parse_response.side_effect = side_effects
 
@@ -291,16 +356,28 @@ class TestCrewMonitorIntegration:
         # 保存原始方法
         original_on_opera_created = monitor._on_opera_created
 
-        try:
-            # 并发处理两个Opera创建事件
-            await asyncio.gather(original_on_opera_created(opera_args1), original_on_opera_created(opera_args2))
+        # 模拟 StaffForCreation 调用
+        with mock.patch("src.core.entrypoints.crew_manager_main.StaffForCreation") as mock_staff_creation:
+            # 配置 mock_staff_creation 返回一个有效的模拟对象
+            mock_staff_obj = mock.MagicMock()
+            mock_staff_creation.return_value = mock_staff_obj
 
-            # 验证两个Bot都被添加到管理
-            assert "new_bot1" in monitor.managed_bots
-            assert "new_bot2" in monitor.managed_bots
-            assert len(calls) == 2
-            assert ("new_bot1", "前端-前端任务-测试Opera1") in calls
-            assert ("new_bot2", "前端-前端任务-测试Opera2") in calls
-        finally:
-            # 恢复原始方法
-            monitor._start_bot_manager = original_start_bot_manager
+            try:
+                # 并发处理两个Opera创建事件
+                await asyncio.gather(original_on_opera_created(opera_args1), original_on_opera_created(opera_args2))
+
+                # 验证 StaffForCreation 被调用了两次（每个事件一次）
+                assert mock_staff_creation.call_count == 2
+
+                # 验证两个Bot都被添加到管理
+                assert bot_id_str1 in monitor.managed_bots
+                assert bot_id_str2 in monitor.managed_bots
+
+                # 验证两个Bot都被调用了start_bot_manager
+                assert len(calls) == 2
+                assert (bot_id_str1, bot_name1) in calls
+                assert (bot_id_str2, bot_name2) in calls
+            finally:
+                # 恢复原始方法
+                monitor._start_bot_manager = original_start_bot_manager
+                monitor._get_crew_manager_bots = original_get_crew_manager_bots
