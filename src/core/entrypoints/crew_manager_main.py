@@ -4,7 +4,9 @@ import os
 from uuid import UUID
 from src.core.logger_config import get_logger, get_logger_with_trace_id, setup_logger
 from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
-from src.crewai_ext.tools.opera_api.staff_api_tool import StaffTool, StaffForCreation
+from src.crewai_ext.tools.opera_api.staff_api_tool import StaffTool
+from src.crewai_ext.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
+from src.opera_service.api.models import StaffInvitationForCreation
 from src.core.crew_process import CrewManager, CrewRunner, CrewProcessInfo
 from src.core.parser.api_response_parser import ApiResponseParser
 from src.core.bot_api_helper import (
@@ -163,6 +165,7 @@ class CrewMonitor:
         self.signalr_client = OperaSignalRClient(url=signalr_url)
         self.bot_tool = BotTool()
         self.staff_tool = StaffTool()
+        self.staff_invitation_tool = StaffInvitationTool()
         self.parser = ApiResponseParser()
         self.processes: Dict[str, multiprocessing.Process] = {}  # 存储所有进程，key为bot_id
         self.managed_bots: Set[str] = set()  # 存储已经启动了进程的bot id
@@ -341,30 +344,28 @@ class CrewMonitor:
             bot_name = selected_bot["name"]
 
             # 注册Bot为新Opera的staff
-            staff_result = self.staff_tool.run(
+            invitation_result = self.staff_invitation_tool.run(
                 action="create",
                 opera_id=opera_id_str,
-                data=StaffForCreation(
+                data=StaffInvitationForCreation(
                     bot_id=bot_id,
-                    name=f"CM-{bot_name}",  # 使用Bot名称作为Staff名称
-                    is_on_stage=True,  # 默认onStage
                     tags="",
                     roles="CrewManager",
                     permissions="manager",
                     parameter="{}",
                 ),
             )
-            staff_status, staff_data = self.parser.parse_response(staff_result)
+            invitation_status, invitation_data = self.parser.parse_response(invitation_result)
 
-            if staff_status == 201:
-                self.log.info(f"成功将Bot {bot_name} (ID: {bot_id})注册为Opera {opera_args.name}的staff")
+            if invitation_status == 201:
+                self.log.info(f"成功向Bot {bot_name} (ID: {bot_id})发送Opera {opera_args.name}的staff邀请")
 
                 # 确保不重复启动进程
                 with self.lock:
                     if bot_id not in self.managed_bots:
                         await self._start_bot_manager(bot_id, bot_name)
             else:
-                self.log.error(f"注册Bot作为staff失败，状态码: {staff_status}")
+                self.log.error(f"发送staff邀请失败，状态码: {invitation_status}")
 
         except Exception as e:
             self.log.error(f"处理Opera创建事件时出错: {str(e)}")
@@ -516,7 +517,7 @@ class CrewMonitor:
 
             self.log.info(f"已为Bot {bot_id}启动CrewManager进程")
 
-    async def _periodic_check(self, interval: int = 5):
+    async def _periodic_check(self, interval: int = 500):
         """定期检查新的Bot"""
         while True:
             await self._check_bots()

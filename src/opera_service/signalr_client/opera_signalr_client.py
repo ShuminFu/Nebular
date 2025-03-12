@@ -18,7 +18,6 @@ from pysignalr.messages import CompletionMessage
 from pysignalr.transport.abstract import ConnectionState
 import aiohttp
 from src.core.logger_config import get_logger, get_logger_with_trace_id
-from src.crewai_ext.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
 
 # 获取logger实例
 logger = get_logger(__name__, log_file="logs/opera_signalr.log")
@@ -74,7 +73,6 @@ class OperaSignalRClient:
         self.snitch_mode: bool = False
         self._connected = False
         self._running = True  # 添加运行状态标志
-        self.staff_invitation_tool = StaffInvitationTool()  # 初始化StaffInvitationTool
         self.roles: List[str] = []  # 添加roles属性
         # 为每个实例创建一个带trace_id的logger
         self.log = get_logger_with_trace_id()
@@ -281,10 +279,9 @@ class OperaSignalRClient:
             self.log.warning("收到Opera创建事件，但未设置处理回调")
 
     async def _handle_opera_deleted(self, args: Dict[str, Any]) -> None:
-        self.log.info(f"收到Opera删除事件: {json.dumps(args, ensure_ascii=False)}")
         if self.callbacks["on_opera_deleted"]:
-            opera_id = UUID(args["operaId"])
-            self.log.debug(f"Opera删除详情: ID={opera_id}")
+            data = args[0] if isinstance(args, list) else args
+            opera_id = UUID(data["operaId"])
             await self._execute_callback("on_opera_deleted", self.callbacks["on_opera_deleted"], opera_id)
         else:
             self.log.warning("收到Opera删除事件，但未设置处理回调")
@@ -293,57 +290,41 @@ class OperaSignalRClient:
         """处理Staff邀请事件"""
         self.log.info(f"收到Staff邀请事件: {json.dumps(args, ensure_ascii=False)}")
         try:
+            # 确保处理参数格式 - args可能是列表或字典
+            data = args[0] if isinstance(args, list) else args
+
             # 验证必要的参数
-            required_fields = ["operaId", "invitationId", "parameter", "roles", "permissions"]
+            required_fields = ["operaId", "invitationId", "roles", "permissions", "parameter", "tags"]
             for field in required_fields:
-                if field not in args:
+                if field not in data:
                     raise ValueError(f"缺少必要的字段: {field}")
 
-            # 准备接受邀请所需的数据
-            opera_id = UUID(args["operaId"])
-            invitation_id = UUID(args["invitationId"])
+            # 准备邀请数据
+            opera_id = UUID(data["operaId"])
+            invitation_id = UUID(data["invitationId"])
 
-            # 构造bot名称
-            bot_name = "AutoBot"
-            if self.roles:  # 如果有设置角色，使用角色作为名称
-                bot_name = f"Bot_{','.join(self.roles)}"
-
-            # 构造接受邀请的数据
-            acceptance_data = {
-                "name": bot_name,
-                "parameter": args.get("parameter", "{}"),  
-                "is_on_stage": True,
-                "tags": args.get("tags", ""),  
-                "roles": args.get("roles", ""),  
-                "permissions": args.get("permissions", ""),  
+            # 构造回调数据
+            invite_data = {
+                "opera_id": opera_id,
+                "invitation_id": invitation_id,
+                "parameter": json.loads(data.get("parameter", "{}")),
+                "tags": data.get("tags", ""),
+                "roles": data["roles"],
+                "permissions": data["permissions"],
             }
 
-            # 使用StaffInvitationTool接受邀请
-            result = self.staff_invitation_tool.run(
-                action="accept",
-                opera_id=opera_id,
-                invitation_id=invitation_id,
-                data=acceptance_data
-            )
-            self.log.info(f"自动接受邀请结果: {result}")
-
-            # 继续执行原有的回调逻辑
+            # 执行回调
             if self.callbacks["on_staff_invited"]:
-                invite_data = {
-                    "opera_id": opera_id,
-                    "invitation_id": invitation_id,
-                    "parameter": json.loads(args.get("parameter", "{}")),
-                    "tags": args.get("tags", ""),
-                    "roles": args["roles"],
-                    "permissions": args["permissions"],
-                }
                 await self._execute_callback("on_staff_invited", self.callbacks["on_staff_invited"], invite_data)
+            else:
+                self.log.warning("收到Staff邀请事件，但未设置处理回调")
+
         except json.JSONDecodeError as e:
             self.log.error(f"解析参数JSON失败: {str(e)}")
         except ValueError as e:
             self.log.error(f"参数验证失败: {str(e)}")
         except Exception as e:
-            self.log.error(f"自动接受邀请失败: {str(e)}")
+            self.log.error(f"处理Staff邀请事件失败: {str(e)}")
             self.log.exception("详细错误信息:")
 
     async def _handle_stage_changed(self, args: Dict[str, Any]) -> None:
