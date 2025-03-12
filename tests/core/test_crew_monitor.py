@@ -61,8 +61,8 @@ class TestCrewMonitor:
         """测试收到Opera创建事件，Opera没有符合条件的crew_manager_bots作为staff时使用现有Bot注册"""
         # 模拟MANAGER_ROLE_FILTER常量
         with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
-            # 模拟 StaffForCreation
-            with mock.patch("src.core.entrypoints.crew_manager_main.StaffForCreation") as mock_staff_creation:
+            # 模拟 StaffInvitationForCreation
+            with mock.patch("src.core.entrypoints.crew_manager_main.StaffInvitationForCreation") as mock_staff_creation:
                 # 配置 mock_staff_creation 返回一个有效的模拟对象
                 mock_staff_obj = mock.MagicMock()
                 mock_staff_creation.return_value = mock_staff_obj
@@ -99,20 +99,13 @@ class TestCrewMonitor:
                     await monitor._on_opera_created(opera_args)
 
                     # 验证API调用
-                    assert monitor.staff_tool.run.call_count == 2
+                    assert monitor.staff_tool.run.call_count == 1
                     monitor.staff_tool.run.assert_any_call(action="get_all", opera_id=str(opera_args.opera_id))
-                    monitor.staff_tool.run.assert_any_call(
-                        action="create",
-                        opera_id=str(opera_args.opera_id),
-                        data=mock_staff_obj,
-                    )
 
-                    # 验证 StaffForCreation 被正确调用
+                    # 验证 StaffInvitationForCreation 被正确调用
                     mock_staff_creation.assert_called_once()
                     # 检查参数而不是精确的 UUID 类型
                     assert mock_staff_creation.call_args[1]["bot_id"] == "existing_bot_id"
-                    assert mock_staff_creation.call_args[1]["name"] == "CM-现有Bot"
-                    assert mock_staff_creation.call_args[1]["is_on_stage"] is True
                     assert mock_staff_creation.call_args[1]["tags"] == ""
                     assert mock_staff_creation.call_args[1]["roles"] == "CrewManager"
                     assert mock_staff_creation.call_args[1]["permissions"] == "manager"
@@ -161,8 +154,8 @@ class TestCrewMonitor:
         """测试收到Opera创建事件，Opera有staff但roles为空的情况"""
         # 模拟MANAGER_ROLE_FILTER常量
         with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
-            # 模拟 StaffForCreation
-            with mock.patch("src.core.entrypoints.crew_manager_main.StaffForCreation") as mock_staff_creation:
+            # 模拟 StaffInvitationForCreation
+            with mock.patch("src.core.entrypoints.crew_manager_main.StaffInvitationForCreation") as mock_staff_creation:
                 # 配置 mock_staff_creation 返回一个有效的模拟对象
                 mock_staff_obj = mock.MagicMock()
                 mock_staff_creation.return_value = mock_staff_obj
@@ -218,20 +211,13 @@ class TestCrewMonitor:
                     await monitor._on_opera_created(opera_args)
 
                     # 验证API调用 - 应该调用获取staff、获取所有Bot和注册Bot为staff
-                    assert monitor.staff_tool.run.call_count == 2
+                    assert monitor.staff_tool.run.call_count == 1
                     monitor.staff_tool.run.assert_any_call(action="get_all", opera_id=str(opera_args.opera_id))
-                    monitor.staff_tool.run.assert_any_call(
-                        action="create",
-                        opera_id=str(opera_args.opera_id),
-                        data=mock_staff_obj,
-                    )
 
-                    # 验证 StaffForCreation 被正确调用
+                    # 验证 StaffInvitationForCreation 被正确调用
                     mock_staff_creation.assert_called_once()
                     # 检查参数而不是精确的 UUID 类型
                     assert mock_staff_creation.call_args[1]["bot_id"] == "existing_bot_id"
-                    assert mock_staff_creation.call_args[1]["name"] == "CM-现有Bot"
-                    assert mock_staff_creation.call_args[1]["is_on_stage"] is True
                     assert mock_staff_creation.call_args[1]["tags"] == ""
                     assert mock_staff_creation.call_args[1]["roles"] == "CrewManager"
                     assert mock_staff_creation.call_args[1]["permissions"] == "manager"

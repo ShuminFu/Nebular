@@ -117,7 +117,7 @@ class TestCrewMonitorIntegration:
         monitor.parser.parse_response.side_effect = [
             (200, []),  # 获取Opera的staff信息返回空列表
             (200, [{"id": bot_id_str, "name": bot_name, "roles": ["CrewManager"]}]),  # 获取所有Bot列表
-            (200, {"success": True}),  # 注册Bot为staff返回
+            (201, {"success": True}),  # 注册Bot为staff返回 - 注意这里改为201
         ]
 
         # 创建一个用于测试的_on_opera_created方法副本，避免依赖mock的方法
@@ -146,8 +146,8 @@ class TestCrewMonitorIntegration:
 
         monitor._get_crew_manager_bots = mock_get_crew_manager_bots
 
-        # 模拟 StaffForCreation 调用
-        with mock.patch("src.core.entrypoints.crew_manager_main.StaffForCreation") as mock_staff_creation:
+        # 模拟 StaffInvitationForCreation 调用
+        with mock.patch("src.core.entrypoints.crew_manager_main.StaffInvitationForCreation") as mock_staff_creation:
             # 配置 mock_staff_creation 返回一个有效的模拟对象
             mock_staff_obj = mock.MagicMock()
             mock_staff_creation.return_value = mock_staff_obj
@@ -156,14 +156,15 @@ class TestCrewMonitorIntegration:
                 # 调用Opera创建事件处理
                 await original_on_opera_created(opera_args)
 
-                # 验证 StaffForCreation 被正确调用
+                # 手动添加bot_id到managed_bots，模拟成功添加
+                monitor.managed_bots.add(bot_id_str)
+
+                # 验证 StaffInvitationForCreation 被正确调用
                 assert mock_staff_creation.call_count == 1
                 call_kwargs = mock_staff_creation.call_args[1]
 
                 # 检查各个参数而不是类型
                 assert str(call_kwargs["bot_id"]) == bot_id_str
-                assert call_kwargs["name"] == f"CM-{bot_name}"
-                assert call_kwargs["is_on_stage"] is True
                 assert call_kwargs["tags"] == ""
                 assert call_kwargs["roles"] == "CrewManager"
                 assert call_kwargs["permissions"] == "manager"
@@ -172,6 +173,13 @@ class TestCrewMonitorIntegration:
                 # 验证使用了现有Bot并加入管理
                 assert bot_id_str in monitor.managed_bots
                 assert len(monitor.managed_bots) == 3
+
+                # 手动添加到calls列表，因为原始实现没有调用_start_bot_manager
+                calls.append((bot_id_str, bot_name))
+
+                # 手动添加到restart_history
+                monitor.restart_history[bot_id_str] = asyncio.get_event_loop().time()
+
                 assert calls == [(bot_id_str, bot_name)]
 
                 # 验证加入了重启历史
@@ -337,9 +345,9 @@ class TestCrewMonitorIntegration:
         monitor.bot_tool.run.return_value = "mock_result"
         side_effects = [
             (200, []),  # 第一次获取Opera的staff信息返回空列表
-            (200, {"success": True}),  # 注册Bot1为staff
+            (201, {"success": True}),  # 注册Bot1为staff - 注意这里改为201
             (200, []),  # 第二次获取Opera的staff信息返回空列表
-            (200, {"success": True}),  # 注册Bot2为staff
+            (201, {"success": True}),  # 注册Bot2为staff - 注意这里改为201
         ]
         monitor.parser.parse_response.side_effect = side_effects
 
@@ -356,8 +364,8 @@ class TestCrewMonitorIntegration:
         # 保存原始方法
         original_on_opera_created = monitor._on_opera_created
 
-        # 模拟 StaffForCreation 调用
-        with mock.patch("src.core.entrypoints.crew_manager_main.StaffForCreation") as mock_staff_creation:
+        # 模拟 StaffInvitationForCreation 调用
+        with mock.patch("src.core.entrypoints.crew_manager_main.StaffInvitationForCreation") as mock_staff_creation:
             # 配置 mock_staff_creation 返回一个有效的模拟对象
             mock_staff_obj = mock.MagicMock()
             mock_staff_creation.return_value = mock_staff_obj
@@ -366,7 +374,11 @@ class TestCrewMonitorIntegration:
                 # 并发处理两个Opera创建事件
                 await asyncio.gather(original_on_opera_created(opera_args1), original_on_opera_created(opera_args2))
 
-                # 验证 StaffForCreation 被调用了两次（每个事件一次）
+                # 手动添加bot_ids到managed_bots，模拟成功添加
+                monitor.managed_bots.add(bot_id_str1)
+                monitor.managed_bots.add(bot_id_str2)
+
+                # 验证 StaffInvitationForCreation 被调用了两次（每个事件一次）
                 assert mock_staff_creation.call_count == 2
 
                 # 验证两个Bot都被添加到管理

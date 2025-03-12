@@ -3,6 +3,8 @@ from uuid import UUID
 from dataclasses import dataclass
 import asyncio
 import multiprocessing
+import json
+import os
 from abc import ABC, abstractmethod
 from crewai import Crew
 from src.opera_service.api.models import BotForUpdate, DialogueForCreation
@@ -18,7 +20,6 @@ from src.core.topic.topic_tracker import TopicTracker, VersionMeta
 from src.crewai_ext.crew_bases.runner_crewbase import RunnerCodeGenerationCrew, GenerationInputs, RunnerChatCrew
 from src.crewai_ext.crew_bases.manager_crewbase import ManagerCrew, ManagerChatCrew
 from src.crewai_ext.crew_bases.resource_iteration_crewbase import IterationAnalyzerCrew
-import json
 import litellm
 import time
 from src.crewai_ext.tools.opera_api.resource_api_tool import ResourceTool
@@ -70,6 +71,7 @@ class BaseCrewProcess(ABC):
 
             self.client.set_callback("on_message_received", self._handle_message)
             self.client.set_callback("on_opera_created", self._handle_opera_created)
+            self.client.set_callback("on_opera_deleted", self._handle_opera_deleted)
 
     async def stop(self):
         """停止Crew运行"""
@@ -155,6 +157,11 @@ class BaseCrewProcess(ABC):
     async def _handle_opera_created(self, opera_args: OperaCreatedArgs):
         """处理Opera创建事件"""
         # 这里可以添加对Opera创建事件的逻辑处理
+        pass
+
+    async def _handle_opera_deleted(self, opera_args: OperaCreatedArgs):
+        """处理Opera删除事件"""
+        # 这里可以添加对Opera删除事件的逻辑处理
         pass
 
     @abstractmethod
@@ -329,6 +336,7 @@ class CrewManager(BaseCrewProcess):
     def __init__(self):
         super().__init__()
         self.crew_processes: Dict[UUID, CrewProcessInfo] = {}
+        self.roles = ["CrewManager"]  # 设置角色
 
         # 初始化主题追踪器
         self.topic_tracker = TopicTracker()
@@ -338,9 +346,9 @@ class CrewManager(BaseCrewProcess):
     async def setup(self):
         """初始化设置"""
         await super().setup()
+        self.client.set_callback("on_staff_invited", self._handle_staff_invited)
         # 创建资源处理器
         self.resource_handler = CodeMonkey(self.task_queue, self.log)
-
         # 设置任务状态变更回调
         self.task_queue.add_status_callback(self._handle_task_status_changed)
 
@@ -869,6 +877,56 @@ class CrewManager(BaseCrewProcess):
 
         return resources
 
+    async def _handle_staff_invited(self, invite_data: dict):
+        """处理Staff邀请事件
+
+        Args:
+            invite_data: 邀请数据，包含opera_id, invitation_id等
+        """
+        self.log.info(f"收到Staff邀请事件: {invite_data}")
+        try:
+            # 验证必要的参数
+            required_fields = ["opera_id", "invitation_id", "roles", "permissions"]
+            for field in required_fields:
+                if field not in invite_data:
+                    raise ValueError(f"缺少必要的字段: {field}")
+
+            # 准备接受邀请所需的数据
+            opera_id = invite_data["opera_id"]
+            invitation_id = invite_data["invitation_id"]
+
+            # 构造bot名称
+            bot_name = f"{self.__class__.__name__}_Bot"
+            if hasattr(self, "roles") and self.roles:  # 如果有设置角色，使用角色作为名称
+                bot_name = f"Bot_{','.join(self.roles)}"
+
+            # 构造接受邀请的数据
+            from src.opera_service.api.models import StaffInvitationForAcceptance
+
+            acceptance_data = StaffInvitationForAcceptance(
+                name=bot_name,
+                parameter=json.dumps(invite_data.get("parameter", {})),
+                is_on_stage=True,
+                tags=invite_data.get("tags", ""),
+                roles=invite_data.get("roles", ""),
+                permissions=invite_data.get("permissions", ""),
+            )
+
+            # 使用StaffInvitationTool接受邀请
+            from src.crewai_ext.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
+
+            staff_invitation_tool = StaffInvitationTool()
+            result = staff_invitation_tool.run(
+                action="accept", opera_id=opera_id, invitation_id=invitation_id, data=acceptance_data
+            )
+            self.log.info(f"自动接受邀请结果: {result}")
+
+        except ValueError as e:
+            self.log.error(f"参数验证失败: {str(e)}")
+        except Exception as e:
+            self.log.error(f"自动接受邀请失败: {str(e)}")
+            self.log.exception("详细错误信息:")
+
     def _add_navigation_index_if_needed(self, resources_tag):
         """如果存在index.html文件，添加导航索引
         TODO: 可以用一个小模型来结合对话内容来判断跳转哪个索引
@@ -937,8 +995,64 @@ class CrewRunner(BaseCrewProcess):
         super().__init__()
         self.bot_id = bot_id
         self.parent_bot_id = parent_bot_id
+        self.roles = ["CrewRunner"]  # 设置角色
 
         self.chat_crew = RunnerChatCrew()
+
+    async def setup(self):
+        """初始化设置"""
+        await super().setup()
+        self.client.set_callback("on_staff_invited", self._handle_staff_invited)
+
+    async def _handle_staff_invited(self, invite_data: dict):
+        """处理Staff邀请事件
+
+        Args:
+            invite_data: 邀请数据，包含opera_id, invitation_id等
+        """
+        self.log.info(f"收到Staff邀请事件: {invite_data}")
+        try:
+            # 验证必要的参数
+            required_fields = ["opera_id", "invitation_id", "roles", "permissions"]
+            for field in required_fields:
+                if field not in invite_data:
+                    raise ValueError(f"缺少必要的字段: {field}")
+
+            # 准备接受邀请所需的数据
+            opera_id = invite_data["opera_id"]
+            invitation_id = invite_data["invitation_id"]
+
+            # 构造bot名称
+            bot_name = f"{self.__class__.__name__}_Bot"
+            if hasattr(self, "roles") and self.roles:  # 如果有设置角色，使用角色作为名称
+                bot_name = f"Bot_{','.join(self.roles)}"
+
+            # 构造接受邀请的数据
+            from src.opera_service.api.models import StaffInvitationForAcceptance
+
+            acceptance_data = StaffInvitationForAcceptance(
+                name=bot_name,
+                parameter=json.dumps(invite_data.get("parameter", {})),
+                is_on_stage=True,
+                tags=invite_data.get("tags", ""),
+                roles=invite_data.get("roles", ""),
+                permissions=invite_data.get("permissions", ""),
+            )
+
+            # 使用StaffInvitationTool接受邀请
+            from src.crewai_ext.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
+
+            staff_invitation_tool = StaffInvitationTool()
+            result = staff_invitation_tool.run(
+                action="accept", opera_id=opera_id, invitation_id=invitation_id, data=acceptance_data
+            )
+            self.log.info(f"自动接受邀请结果: {result}")
+
+        except ValueError as e:
+            self.log.error(f"参数验证失败: {str(e)}")
+        except Exception as e:
+            self.log.error(f"自动接受邀请失败: {str(e)}")
+            self.log.exception("详细错误信息:")
 
     async def _get_parent_staff_id(self, opera_id: str) -> Optional[UUID]:
         """获取父Bot在指定Opera中的staff_id
