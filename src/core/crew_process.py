@@ -4,7 +4,6 @@ from dataclasses import dataclass
 import asyncio
 import multiprocessing
 import json
-import os
 from abc import ABC, abstractmethod
 from crewai import Crew
 from src.opera_service.api.models import BotForUpdate, DialogueForCreation
@@ -920,6 +919,91 @@ class CrewManager(BaseCrewProcess):
                 action="accept", opera_id=opera_id, invitation_id=invitation_id, data=acceptance_data
             )
             self.log.info(f"自动接受邀请结果: {result}")
+
+            # 成功接受邀请后，为该Opera创建子Bot
+            try:
+                # 导入BotTool和创建子Bot的函数
+                from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
+                from src.core.bot_api_helper import create_child_bot, update_parent_bot_tags, get_child_bot_staff_info
+
+                # 创建BotTool实例
+                bot_tool = BotTool()
+
+                # 获取Opera详细信息
+                from src.crewai_ext.tools.opera_api.opera_api_tool import OperaTool
+                from src.core.parser.api_response_parser import ApiResponseParser
+
+                opera_tool = OperaTool()
+                opera_result = opera_tool.run(action="get", opera_id=opera_id)
+                status_code, opera_data = ApiResponseParser.parse_response(opera_result)
+
+                if status_code != 200 or not opera_data:
+                    self.log.error(f"获取Opera {opera_id} 信息失败，无法创建子Bot")
+                    return
+
+                # 构造Opera信息字典
+                opera_info = {
+                    "id": opera_id,
+                    "name": opera_data.get("name", "未命名Opera"),
+                    "description": opera_data.get("description", ""),
+                }
+
+                # 创建子Bot
+                self.log.info(f"开始为Opera {opera_id} 创建子Bot...")
+                child_bot_ids = await create_child_bot(bot_tool, opera_info, str(self.bot_id), self.log)
+
+                if child_bot_ids:
+                    # 更新父Bot的标签，记录子Bot列表
+                    await update_parent_bot_tags(bot_tool, str(self.bot_id), child_bot_ids, self.log)
+
+                    # 为每个子Bot获取staff信息，并添加到crew_processes中
+                    for child_bot_id in child_bot_ids:
+                        # 获取子Bot的配置
+                        bot_info = bot_tool.run(action="get", bot_id=child_bot_id)
+                        _, bot_data = ApiResponseParser.parse_response(bot_info)
+
+                        # 提取CrewConfig
+                        crew_config = {}
+                        if bot_data.get("defaultTags"):
+                            try:
+                                tags = json.loads(bot_data["defaultTags"])
+                                crew_config = tags.get("CrewConfig", {})
+                            except json.JSONDecodeError:
+                                self.log.warning(f"解析子Bot {child_bot_id} 的defaultTags失败")
+
+                        # 获取staff信息
+                        staff_info = await get_child_bot_staff_info(bot_tool, child_bot_id, self.log)
+
+                        if staff_info:
+                            # 提取所有opera的staff_ids和roles
+                            staff_ids = {}
+                            roles = {}
+                            opera_ids = []
+
+                            for opera_id_str, info in staff_info.items():
+                                opera_ids.append(UUID(opera_id_str))
+                                staff_ids[UUID(opera_id_str)] = info["staff_ids"]
+                                roles[UUID(opera_id_str)] = info.get("roles", [])
+
+                            # 创建CrewProcessInfo
+                            process_info = CrewProcessInfo(
+                                process=None,  # 只保存信息，不创建进程
+                                bot_id=UUID(child_bot_id),
+                                crew_config=crew_config,
+                                opera_ids=opera_ids,
+                                roles=roles,
+                                staff_ids=staff_ids,
+                            )
+
+                            # 添加到crew_processes
+                            self.crew_processes[UUID(child_bot_id)] = process_info
+                            self.log.info(f"已将子Bot {child_bot_id} 添加到crew_processes中")
+
+                self.log.info(f"成功为Opera {opera_id} 创建了 {len(child_bot_ids)} 个子Bot")
+
+            except Exception as e:
+                self.log.error(f"创建子Bot时发生错误: {str(e)}")
+                self.log.exception("详细错误信息:")
 
         except ValueError as e:
             self.log.error(f"参数验证失败: {str(e)}")
