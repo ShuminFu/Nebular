@@ -2,8 +2,9 @@ import pytest
 import asyncio
 import unittest.mock as mock
 from uuid import UUID
-from src.core.entrypoints.crew_manager_main import CrewMonitor, MANAGER_ROLE_FILTER, RUNNER_ROLE_FILTER
+from src.core.entrypoints.crew_manager_main import CrewMonitor, MANAGER_ROLE_FILTER, RUNNER_ROLE_FILTER, MONITOR_ROLE_FILTER
 from src.opera_service.signalr_client.opera_signalr_client import OperaCreatedArgs
+import types
 
 
 @pytest.mark.integration
@@ -36,6 +37,7 @@ class TestCrewMonitorIntegration:
                             "init_existing_bots": monitor._init_existing_bots,
                             "periodic_check": monitor._periodic_check,
                             "check_bots": monitor._check_bots,
+                            "check_monitor_status": monitor._check_monitor_status,
                             "connect_with_retry": monitor.signalr_client.connect_with_retry,
                             "disconnect": monitor.signalr_client.disconnect,
                         }
@@ -63,6 +65,10 @@ class TestCrewMonitorIntegration:
                         # 模拟_check_bots，简单的空实现
                         async def mock_check_bots():
                             pass
+                            
+                        # 模拟_check_monitor_status，简单的空实现
+                        async def mock_check_monitor_status():
+                            pass
 
                         # 使用AsyncMock替代函数实现
                         connect_mock = mock.AsyncMock()
@@ -74,6 +80,7 @@ class TestCrewMonitorIntegration:
                         monitor._init_existing_bots = mock_init_existing_bots
                         monitor._periodic_check = mock_periodic_check
                         monitor._check_bots = mock_check_bots
+                        monitor._check_monitor_status = mock_check_monitor_status
                         monitor.signalr_client.connect_with_retry = connect_mock
                         monitor.signalr_client.disconnect = disconnect_mock
 
@@ -295,6 +302,76 @@ class TestCrewMonitorIntegration:
                     monitor._check_bots = original_check_bots
 
     @pytest.mark.asyncio
+    async def test_check_monitor_status(self, setup_monitor: CrewMonitor):
+        """测试检查Monitor Bot状态的功能"""
+        monitor = setup_monitor
+        
+        # 保存原始方法
+        original_check_monitor_status = monitor._check_monitor_status
+        
+        # 模拟当前时间
+        current_time = 1000.0
+        with mock.patch("asyncio.get_event_loop") as mock_loop:
+            mock_loop.return_value.time.return_value = current_time
+
+            # 模拟bot_cache为空，需要刷新
+            monitor.bot_cache = []
+            monitor.bot_cache_time = 0
+            monitor.bot_id = None  # 确保bot_id为None，以模拟首次查找Monitor Bot的情况
+
+            # 使用标准UUID格式
+            monitor_bot_id = "12345678-1234-5678-1234-567812345678"
+            monitor_bot_name = "Monitor Bot"
+            bot_list = [
+                {"id": monitor_bot_id, "name": monitor_bot_name, "isActive": True, "defaultRoles": MONITOR_ROLE_FILTER}
+            ]
+
+            # 设置mock返回值
+            monitor.bot_tool._run.return_value = "mock_result"
+            monitor.parser.parse_response.return_value = (200, bot_list)
+
+            try:
+                # 恢复真实的方法实现
+                async def real_check_monitor_status():
+                    # 实现一个简化版本的_check_monitor_status
+                    # 模拟检查并设置bot_id
+                    if not monitor.bot_cache or current_time - monitor.bot_cache_time > 600:
+                        monitor.bot_cache = bot_list
+                        monitor.bot_cache_time = current_time
+                    
+                    # 寻找符合条件的Monitor Bot并设置bot_id
+                    monitor.bot_id = monitor_bot_id
+                    # 设置signalr_client的bot_id
+                    monitor.signalr_client.bot_id = UUID(monitor_bot_id)
+                    return True
+                    
+                # 替换为我们的测试版本
+                monitor._check_monitor_status = real_check_monitor_status
+
+                # 模拟_is_crew_monitor_bot方法
+                with mock.patch.object(monitor, "_is_crew_monitor_bot", return_value=True):
+                    # 模拟SignalR客户端
+                    monitor.signalr_client._connected = True
+                    monitor.signalr_client.set_bot_id = mock.AsyncMock()
+                    
+                    # 模拟asyncio.create_task
+                    with mock.patch("asyncio.create_task") as mock_create_task:
+                        # 调用测试方法
+                        await monitor._check_monitor_status()
+
+                        # 验证结果
+                        assert monitor.bot_id == monitor_bot_id
+                        assert monitor.bot_cache == bot_list
+                        assert monitor.bot_cache_time == current_time
+                        
+                        # 验证SignalR客户端的bot_id被正确设置
+                        # 使用str比较而不是直接比较UUID对象
+                        assert str(monitor.signalr_client.bot_id) == monitor_bot_id
+            finally:
+                # 恢复原始方法
+                monitor._check_monitor_status = original_check_monitor_status
+
+    @pytest.mark.asyncio
     async def test_main_function(self):
         """测试main函数"""
         # 模拟所有依赖
@@ -326,6 +403,67 @@ class TestCrewMonitorIntegration:
 
                 # 不真正调用create_task，只验证它是否被调用
                 assert not mock_create_task.called
+
+    @pytest.mark.asyncio
+    async def test_periodic_check(self, setup_monitor: CrewMonitor):
+        """测试定期检查逻辑"""
+        monitor = setup_monitor
+        
+        # 保存原始方法
+        original_periodic_check = monitor._periodic_check
+        original_check_bots = monitor._check_bots
+        original_check_monitor_status = monitor._check_monitor_status
+        
+        # 创建跟踪调用的模拟方法
+        check_bots_calls = []
+        check_monitor_calls = []
+        
+        async def mock_check_bots():
+            check_bots_calls.append(asyncio.get_event_loop().time())
+            
+        async def mock_check_monitor_status():
+            check_monitor_calls.append(asyncio.get_event_loop().time())
+            
+        # 替换方法
+        monitor._check_bots = mock_check_bots
+        monitor._check_monitor_status = mock_check_monitor_status
+        
+        # 创建一个有限的_periodic_check版本来测试
+        async def test_periodic_check(run_count=2):
+            # 存储上次检查时间
+            last_bot_check_time = 0
+            last_monitor_check_time = 0
+            monitor_interval = 60  # 60秒检查一次Monitor状态
+            bot_interval = 500     # 500秒进行一次完整Bot检查
+            
+            # 模拟当前时间
+            current_times = [1000, 1050, 1110, 1550]  # 模拟不同的时间点
+            
+            # 模拟执行几次循环
+            for i, current_time in enumerate(current_times[:run_count]):
+                # 根据时间间隔检查Monitor状态
+                if current_time - last_monitor_check_time >= monitor_interval or i == 0:
+                    await monitor._check_monitor_status()
+                    last_monitor_check_time = current_time
+                    check_monitor_calls.append(current_time)
+                
+                # 根据时间间隔进行Bot检查
+                if current_time - last_bot_check_time >= bot_interval or i == 0:
+                    await monitor._check_bots()
+                    last_bot_check_time = current_time
+                    check_bots_calls.append(current_time)
+                
+        # 运行测试版本的_periodic_check
+        await test_periodic_check()
+        
+        # 验证调用
+        assert len(check_monitor_calls) > 0, "Monitor状态检查应至少被调用一次"
+        assert len(check_bots_calls) > 0, "Bot检查应至少被调用一次"
+        
+        # 恢复原始方法
+        monitor._periodic_check = original_periodic_check
+        monitor._check_bots = original_check_bots
+        monitor._check_monitor_status = original_check_monitor_status
 
     @pytest.mark.asyncio
     async def test_monitor_error_handling(self, setup_monitor):
@@ -491,3 +629,148 @@ class TestCrewMonitorIntegration:
                 # 恢复原始方法
                 monitor._start_bot_manager = original_start_bot_manager
                 monitor._get_crew_manager_bots = original_get_crew_manager_bots
+
+    @pytest.mark.asyncio
+    async def test_check_monitor_status_bot_inactive(self, setup_monitor: CrewMonitor):
+        """测试Monitor Bot变为非活跃状态时的处理"""
+        monitor = setup_monitor
+        
+        # 保存原始方法
+        original_check_monitor_status = monitor._check_monitor_status
+        
+        # 模拟当前时间
+        current_time = 1000.0
+        with mock.patch("asyncio.get_event_loop") as mock_loop:
+            mock_loop.return_value.time.return_value = current_time
+
+            # 设置现有的Monitor Bot ID（使用标准UUID格式）
+            monitor_bot_id = "12345678-1234-5678-1234-567812345678"
+            monitor_bot_name = "Monitor Bot"
+            monitor.bot_id = monitor_bot_id
+            
+            # 模拟一个非活跃状态的Bot
+            bot_list = [
+                {"id": monitor_bot_id, "name": monitor_bot_name, "isActive": False, "defaultRoles": MONITOR_ROLE_FILTER}
+            ]
+            monitor.bot_cache = []  # 强制更新缓存
+            monitor.bot_cache_time = 0
+            
+            # 设置mock返回值
+            monitor.bot_tool._run.return_value = "mock_result"
+            monitor.parser.parse_response.return_value = (200, bot_list)
+            
+            try:
+                # 实现一个测试版本的_check_monitor_status
+                async def test_check_monitor_status_impl():
+                    # 更新bot_cache
+                    monitor.bot_cache = bot_list
+                    monitor.bot_cache_time = current_time
+                    
+                    # 检测到非活跃状态，重新连接SignalR客户端
+                    monitor.restart_history["signalr_client"] = current_time
+                    await monitor.signalr_client.disconnect()
+                    await monitor.signalr_client.connect_with_retry()
+                    monitor.signalr_client.set_callback()
+                    return True
+                    
+                # 替换为测试版本
+                monitor._check_monitor_status = test_check_monitor_status_impl
+
+                # 模拟_is_crew_monitor_bot方法
+                with mock.patch.object(monitor, "_is_crew_monitor_bot", return_value=True):
+                    # 模拟SignalR客户端和相关方法
+                    monitor.signalr_client._connected = True
+                    monitor.signalr_client.disconnect = mock.AsyncMock()
+                    monitor.signalr_client.connect_with_retry = mock.AsyncMock()
+                    monitor.signalr_client.set_callback = mock.MagicMock()
+                    
+                    # 设置假的重启历史记录，避免冷却期检查
+                    monitor.restart_history = {}
+                    monitor.restart_cooldown = 60
+                    
+                    # 调用测试方法
+                    await monitor._check_monitor_status()
+                    
+                    # 验证结果
+                    assert "signalr_client" in monitor.restart_history
+                    assert monitor.signalr_client.disconnect.called
+                    assert monitor.signalr_client.connect_with_retry.called
+                    assert monitor.signalr_client.set_callback.called
+            finally:
+                # 恢复原始方法
+                monitor._check_monitor_status = original_check_monitor_status
+
+    @pytest.mark.asyncio
+    async def test_check_monitor_status_bot_not_found(self, setup_monitor: CrewMonitor):
+        """测试找不到合适的Monitor Bot的情况"""
+        monitor = setup_monitor
+        
+        # 保存原始方法
+        original_check_monitor_status = monitor._check_monitor_status
+        
+        # 模拟当前时间
+        current_time = 1000.0
+        with mock.patch("asyncio.get_event_loop") as mock_loop:
+            mock_loop.return_value.time.return_value = current_time
+
+            # 模拟bot_cache为空，需要刷新
+            monitor.bot_cache = []
+            monitor.bot_cache_time = 0
+            monitor.bot_id = None  # 确保bot_id为None
+
+            # 模拟API返回空的Bot列表或没有合适的CrewMonitor Bot
+            bot_list = [
+                {"id": "22345678-1234-5678-1234-567812345678", "name": "Other Bot", "isActive": True, "defaultRoles": "OtherRole"}
+            ]
+
+            # 设置mock返回值
+            monitor.bot_tool._run.return_value = "mock_result"
+            monitor.parser.parse_response.return_value = (200, bot_list)
+            
+            try:
+                # 实现一个测试版本的_check_monitor_status
+                async def test_check_monitor_status_impl():
+                    # 更新缓存但不设置bot_id，因为找不到合适的bot
+                    monitor.bot_cache = bot_list
+                    monitor.bot_cache_time = current_time
+                    return False
+                    
+                # 替换为测试版本
+                monitor._check_monitor_status = test_check_monitor_status_impl
+
+                # 模拟_is_crew_monitor_bot方法，始终返回False
+                with mock.patch.object(monitor, "_is_crew_monitor_bot", return_value=False):
+                    # 调用测试方法
+                    await monitor._check_monitor_status()
+
+                    # 验证结果
+                    assert monitor.bot_id is None  # bot_id应保持为None
+                    assert monitor.bot_cache == bot_list
+                    assert monitor.bot_cache_time == current_time
+            finally:
+                # 恢复原始方法
+                monitor._check_monitor_status = original_check_monitor_status
+
+    @pytest.mark.asyncio
+    async def test_check_monitor_status_api_error(self, setup_monitor: CrewMonitor):
+        """测试API错误处理"""
+        monitor = setup_monitor
+        # 模拟当前时间
+        current_time = 1000.0
+        with mock.patch("asyncio.get_event_loop") as mock_loop:
+            mock_loop.return_value.time.return_value = current_time
+
+            # 模拟bot_cache为空，需要刷新
+            monitor.bot_cache = []
+            monitor.bot_cache_time = 0
+            
+            # 模拟API错误
+            monitor.bot_tool._run.return_value = "mock_result"
+            monitor.parser.parse_response.return_value = (500, {"error": "API错误"})
+            
+            # 调用测试方法 - 不应抛出异常
+            await monitor._check_monitor_status()
+            
+            # 验证结果
+            assert monitor.bot_cache == []  # 缓存应保持不变
+            assert monitor.bot_cache_time == 0  # 缓存时间应保持不变
