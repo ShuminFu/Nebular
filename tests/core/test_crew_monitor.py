@@ -268,87 +268,198 @@ class TestCrewMonitor:
         """测试检查新Bot功能及检查已管理但非活跃Bot的功能"""
         # 增加BOT_NAME_FILTER常量的模拟，确保与代码匹配
         with mock.patch("src.core.entrypoints.crew_manager_main.BOT_NAME_FILTER", "前端-"):
-            # 预设已管理的Bot
-            monitor.managed_bots.add("bot1")
-            monitor.managed_bots.add("bot2")
-            monitor.managed_bots.add("bot5")  # 添加一个将在Opera中变为非活跃的Bot
+            # 模拟当前时间
+            current_time = 1000.0
+            with mock.patch("asyncio.get_event_loop") as mock_loop:
+                mock_loop.return_value.time.return_value = current_time
 
-            # 模拟进程
-            mock_process = mock.MagicMock()
-            mock_process.is_alive.return_value = True
-            monitor.processes["bot5"] = mock_process
+                # 预设已管理的Bot
+                monitor.managed_bots.add("bot1")
+                monitor.managed_bots.add("bot2")
+                monitor.managed_bots.add("bot5")  # 添加一个将在Opera中变为非活跃的Bot
+                monitor.managed_bots.add("bot6")  # 添加一个处于冷却期的Bot
 
-            # 模拟BotTool.run返回值
-            monitor.bot_tool.run.return_value = "mock_result"
+                # 模拟进程
+                mock_process1 = mock.MagicMock()
+                mock_process1.is_alive.return_value = True
+                monitor.processes["bot5"] = mock_process1
 
-            # 模拟parser.parse_response返回值 - 包含新的符合条件的Bot和已管理但变为非活跃的Bot
-            monitor.parser.parse_response.return_value = (
-                200,
-                [
-                    {"id": "bot1", "name": "前端-测试Bot1", "isActive": True},  # 已管理且活跃
-                    {"id": "bot2", "name": "前端-测试Bot2", "isActive": True},  # 已管理且活跃
-                    {"id": "bot3", "name": "前端-新Bot", "isActive": False},  # 新的符合条件Bot
-                    {"id": "bot4", "name": "其他Bot", "isActive": False},  # 不符合条件
-                    {"id": "bot5", "name": "前端-已变非活跃", "isActive": False},  # 已管理但变为非活跃
-                ],
-            )
+                mock_process2 = mock.MagicMock()
+                mock_process2.is_alive.return_value = True
+                monitor.processes["bot6"] = mock_process2
 
-            # 模拟_start_bot_manager方法
-            with mock.patch.object(monitor, "_start_bot_manager") as mock_start:
-                await monitor._check_bots()
+                # 设置重启历史
+                monitor.restart_history = {
+                    "bot6": current_time - 30  # 设置为30秒前重启，应该在冷却期内
+                }
+                # 设置冷却时间为60秒
+                monitor.restart_cooldown = 60
 
-                # 验证调用了_start_bot_manager两次:
-                # 1. 为新的符合条件的Bot启动进程
-                # 2. 为已管理但变为非活跃的Bot重新启动进程
-                assert mock_start.call_count == 3
+                # 模拟BotTool.run返回值
+                monitor.bot_tool.run.return_value = "mock_result"
 
-                # 验证为新的符合条件的Bot启动了进程
-                mock_start.assert_any_call("bot3", "前端-新Bot")
+                # 模拟parser.parse_response返回值 - 包含新的符合条件的Bot和已管理但变为非活跃的Bot
+                monitor.parser.parse_response.return_value = (
+                    200,
+                    [
+                        {"id": "bot1", "name": "前端-测试Bot1", "isActive": True},  # 已管理且活跃
+                        {"id": "bot2", "name": "前端-测试Bot2", "isActive": True},  # 已管理且活跃
+                        {"id": "bot3", "name": "前端-新Bot", "isActive": False},  # 新的符合条件Bot
+                        {"id": "bot4", "name": "其他Bot", "isActive": False},  # 不符合条件
+                        {"id": "bot5", "name": "前端-已变非活跃", "isActive": False},  # 已管理但变为非活跃，未在冷却期
+                        {"id": "bot6", "name": "前端-冷却中", "isActive": False},  # 已管理但变为非活跃，在冷却期内
+                    ],
+                )
 
-                # 验证为已管理但变为非活跃的Bot重新启动了进程
-                mock_start.assert_any_call("bot5", "前端-已变非活跃")
+                # 模拟_start_bot_manager方法
+                with mock.patch.object(monitor, "_start_bot_manager") as mock_start:
+                    # 添加调试日志模拟
+                    with mock.patch.object(monitor.log, "debug") as mock_debug:
+                        await monitor._check_bots()
 
-                # 验证已经从管理列表中移除了变为非活跃的Bot（在重新启动前）
-                assert "bot5" not in monitor.managed_bots
+                        # 验证调用了_start_bot_manager两次:
+                        # 1. 为新的符合条件的Bot启动进程
+                        # 2. 为已管理但变为非活跃的Bot（未在冷却期）重新启动进程
+                        assert mock_start.call_count == 2
 
-                # 验证终止了已存在的进程
-                mock_process.terminate.assert_called_once()
-                mock_process.join.assert_called_once()
-                assert "bot5" not in monitor.processes
+                        # 验证为新的符合条件的Bot启动了进程
+                        mock_start.assert_any_call("bot3", "前端-新Bot")
+
+                        # 验证为已管理但变为非活跃的Bot（未在冷却期）重新启动了进程
+                        mock_start.assert_any_call("bot5", "前端-已变非活跃")
+
+                        # 验证已经从管理列表中移除了变为非活跃的Bot（在重新启动前）
+                        assert "bot5" not in monitor.managed_bots
+
+                        # 验证终止了已存在的进程
+                        mock_process1.terminate.assert_called_once()
+                        mock_process1.join.assert_called_once()
+                        assert "bot5" not in monitor.processes
+
+                        # 验证处于冷却期的Bot没有被重启
+                        assert not mock_process2.terminate.called
+                        assert "bot6" in monitor.managed_bots
+
+                        # 验证记录了冷却期内的Bot
+                        mock_debug.assert_called_once()
+                        debug_message = mock_debug.call_args[0][0]
+                        assert "有2个Bot在冷却期内" in debug_message
 
     @pytest.mark.asyncio
     async def test_check_bots_no_inactive_managed_bots(self, monitor):
         """测试当没有已管理但变为非活跃的Bot时的情况"""
         # 增加BOT_NAME_FILTER常量的模拟，确保与代码匹配
         with mock.patch("src.core.entrypoints.crew_manager_main.BOT_NAME_FILTER", "前端-"):
-            # 预设已管理的Bot
-            monitor.managed_bots.add("bot1")
-            monitor.managed_bots.add("bot2")
+            # 模拟当前时间
+            current_time = 1000.0
+            with mock.patch("asyncio.get_event_loop") as mock_loop:
+                mock_loop.return_value.time.return_value = current_time
 
-            # 模拟BotTool.run返回值
-            monitor.bot_tool.run.return_value = "mock_result"
+                # 预设已管理的Bot
+                monitor.managed_bots.add("bot1")
+                monitor.managed_bots.add("bot2")
 
-            # 模拟parser.parse_response返回值 - 所有已管理的Bot都是活跃的
-            monitor.parser.parse_response.return_value = (
-                200,
-                [
-                    {"id": "bot1", "name": "前端-测试Bot1", "isActive": True},  # 已管理且活跃
-                    {"id": "bot2", "name": "前端-测试Bot2", "isActive": True},  # 已管理且活跃
-                    {"id": "bot3", "name": "前端-新Bot", "isActive": False},  # 新的符合条件Bot
-                    {"id": "bot4", "name": "其他Bot", "isActive": False},  # 不符合条件
-                ],
-            )
+                # 模拟BotTool.run返回值
+                monitor.bot_tool.run.return_value = "mock_result"
 
-            # 模拟_start_bot_manager方法
-            with mock.patch.object(monitor, "_start_bot_manager") as mock_start:
-                await monitor._check_bots()
+                # 模拟parser.parse_response返回值 - 所有已管理的Bot都是活跃的
+                monitor.parser.parse_response.return_value = (
+                    200,
+                    [
+                        {"id": "bot1", "name": "前端-测试Bot1", "isActive": True},  # 已管理且活跃
+                        {"id": "bot2", "name": "前端-测试Bot2", "isActive": True},  # 已管理且活跃
+                        {"id": "bot3", "name": "前端-新Bot", "isActive": False},  # 新的符合条件Bot
+                        {"id": "bot4", "name": "其他Bot", "isActive": False},  # 不符合条件
+                    ],
+                )
 
-                # 验证只为新的符合条件的Bot启动了进程
-                mock_start.assert_called_once_with("bot3", "前端-新Bot")
+                # 模拟_start_bot_manager方法
+                with mock.patch.object(monitor, "_start_bot_manager") as mock_start:
+                    await monitor._check_bots()
 
-                # 验证已管理的Bot仍在管理列表中
-                assert "bot1" in monitor.managed_bots
-                assert "bot2" in monitor.managed_bots
+                    # 验证只为新的符合条件的Bot启动了进程
+                    mock_start.assert_called_once_with("bot3", "前端-新Bot")
+
+                    # 验证已管理的Bot仍在管理列表中
+                    assert "bot1" in monitor.managed_bots
+                    assert "bot2" in monitor.managed_bots
+
+    @pytest.mark.asyncio
+    async def test_check_bots_cooldown_period(self, monitor):
+        """测试Bot冷却期功能"""
+        # 增加BOT_NAME_FILTER常量的模拟，确保与代码匹配
+        with mock.patch("src.core.entrypoints.crew_manager_main.BOT_NAME_FILTER", "前端-"):
+            # 模拟当前时间
+            current_time = 1000.0
+            with mock.patch("asyncio.get_event_loop") as mock_loop:
+                mock_loop.return_value.time.return_value = current_time
+
+                # 预设3个已管理的Bot
+                monitor.managed_bots.add("bot1")  # 活跃Bot
+                monitor.managed_bots.add("bot2")  # 非活跃Bot，刚重启（在冷却期内）
+                monitor.managed_bots.add("bot3")  # 非活跃Bot，重启时间已超过冷却期
+
+                # 设置重启历史
+                monitor.restart_history = {
+                    "bot2": current_time - 30,  # 30秒前重启，在冷却期内
+                    "bot3": current_time - 120,  # 120秒前重启，已超过冷却期
+                }
+                # 设置冷却时间为60秒
+                monitor.restart_cooldown = 60
+
+                # 模拟进程
+                mock_process1 = mock.MagicMock()
+                mock_process1.is_alive.return_value = True
+                monitor.processes["bot1"] = mock_process1
+
+                mock_process2 = mock.MagicMock()
+                mock_process2.is_alive.return_value = True
+                monitor.processes["bot2"] = mock_process2
+
+                mock_process3 = mock.MagicMock()
+                mock_process3.is_alive.return_value = True
+                monitor.processes["bot3"] = mock_process3
+
+                # 模拟BotTool.run返回值
+                monitor.bot_tool.run.return_value = "mock_result"
+
+                # 模拟parser.parse_response返回值
+                monitor.parser.parse_response.return_value = (
+                    200,
+                    [
+                        {"id": "bot1", "name": "前端-测试Bot1", "isActive": True},  # 已管理且活跃
+                        {"id": "bot2", "name": "前端-冷却中", "isActive": False},  # 已管理但非活跃，在冷却期内
+                        {"id": "bot3", "name": "前端-可重启", "isActive": False},  # 已管理但非活跃，已超过冷却期
+                        {"id": "bot4", "name": "前端-新Bot", "isActive": False},  # 新的符合条件Bot
+                    ],
+                )
+
+                # 模拟_start_bot_manager方法
+                with mock.patch.object(monitor, "_start_bot_manager") as mock_start:
+                    # 添加调试日志模拟
+                    with mock.patch.object(monitor.log, "debug") as mock_debug:
+                        await monitor._check_bots()
+
+                        # 验证调用了_start_bot_manager两次:
+                        # 1. 为新的符合条件的Bot启动进程
+                        # 2. 为已超过冷却期的非活跃Bot重新启动进程
+                        assert mock_start.call_count == 2
+                        mock_start.assert_any_call("bot4", "前端-新Bot")
+                        mock_start.assert_any_call("bot3", "前端-可重启")
+
+                        # 验证bot3被移除并且其进程被终止
+                        assert "bot3" not in monitor.managed_bots
+                        mock_process3.terminate.assert_called_once()
+                        mock_process3.join.assert_called_once()
+
+                        # 验证在冷却期内的bot2没有被重启
+                        assert "bot2" in monitor.managed_bots
+                        assert not mock_process2.terminate.called
+
+                        # 验证记录了冷却期内的Bot
+                        mock_debug.assert_called_once()
+                        debug_message = mock_debug.call_args[0][0]
+                        assert "有2个Bot在冷却期内" in debug_message
 
     @pytest.mark.asyncio
     async def test_periodic_check(self, monitor: CrewMonitor):
