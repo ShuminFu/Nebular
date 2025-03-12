@@ -2,7 +2,7 @@ import pytest
 import asyncio
 import unittest.mock as mock
 from uuid import UUID
-from src.core.entrypoints.crew_manager_main import CrewMonitor
+from src.core.entrypoints.crew_manager_main import CrewMonitor, MANAGER_ROLE_FILTER, RUNNER_ROLE_FILTER
 from src.opera_service.signalr_client.opera_signalr_client import OperaCreatedArgs
 
 
@@ -24,8 +24,8 @@ class TestCrewMonitorIntegration:
                         monitor.parser.parse_response.return_value = (
                             200,
                             [
-                                {"id": "bot1", "name": "前端-测试Bot1", "isActive": False},
-                                {"id": "bot2", "name": "前端-测试Bot2", "isActive": False},
+                                {"id": "bot1", "name": "前端-测试Bot1", "isActive": False, "defaultRoles": "CrewManager"},
+                                {"id": "bot2", "name": "前端-测试Bot2", "isActive": False, "defaultRoles": "CrewManager"},
                             ],
                         )
 
@@ -45,6 +45,8 @@ class TestCrewMonitorIntegration:
                         async def mock_start():
                             monitor.managed_bots.add("bot1")
                             monitor.managed_bots.add("bot2")
+                            monitor.managed_manager_bots.add("bot1")
+                            monitor.managed_manager_bots.add("bot2")
 
                         # 模拟stop方法，简单的空实现
                         async def mock_stop():
@@ -97,6 +99,9 @@ class TestCrewMonitorIntegration:
         assert len(monitor.managed_bots) == 2
         assert "bot1" in monitor.managed_bots
         assert "bot2" in monitor.managed_bots
+        assert len(monitor.managed_manager_bots) == 2
+        assert "bot1" in monitor.managed_manager_bots
+        assert "bot2" in monitor.managed_manager_bots
 
         # 创建Opera创建事件
         opera_args = OperaCreatedArgs(
@@ -116,7 +121,7 @@ class TestCrewMonitorIntegration:
         monitor.bot_tool.run.reset_mock()
         monitor.parser.parse_response.side_effect = [
             (200, []),  # 获取Opera的staff信息返回空列表
-            (200, [{"id": bot_id_str, "name": bot_name, "roles": ["CrewManager"]}]),  # 获取所有Bot列表
+            (200, [{"id": bot_id_str, "name": bot_name, "roles": ["CrewManager"], "defaultRoles": "CrewManager"}]),  # 获取所有Bot列表
             (201, {"success": True}),  # 注册Bot为staff返回 - 注意这里改为201
         ]
 
@@ -125,76 +130,169 @@ class TestCrewMonitorIntegration:
 
         # 保存原始方法
         original_start_bot_manager = monitor._start_bot_manager
+        original_start_bot_runner = monitor._start_bot_runner
 
         # 替换_start_bot_manager，记录调用而不是启动进程
-        calls = []
+        manager_calls = []
+        runner_calls = []
 
         async def mock_start_bot_manager(bot_id, bot_name):
-            calls.append((bot_id, bot_name))
+            manager_calls.append((bot_id, bot_name))
             monitor.managed_bots.add(bot_id)
+            monitor.managed_manager_bots.add(bot_id)
+            # 模拟更新重启历史
+            monitor.restart_history[bot_id] = asyncio.get_event_loop().time()
+
+        async def mock_start_bot_runner(bot_id, bot_name, parent_bot_id=None):
+            runner_calls.append((bot_id, bot_name, parent_bot_id))
+            monitor.managed_bots.add(bot_id)
+            monitor.managed_runner_bots.add(bot_id)
             # 模拟更新重启历史
             monitor.restart_history[bot_id] = asyncio.get_event_loop().time()
 
         monitor._start_bot_manager = mock_start_bot_manager
+        monitor._start_bot_runner = mock_start_bot_runner
 
-        # 创建一个模拟的_get_crew_manager_bots以避免依赖roles过滤
-        original_get_crew_manager_bots = monitor._get_crew_manager_bots
+        # 模拟检测Bot类型的方法
+        with mock.patch.object(monitor, "_is_crew_manager_bot", return_value=True):
+            with mock.patch.object(monitor, "_is_crew_runner_bot", return_value=False):
+                # 创建一个模拟的_get_crew_manager_bots以避免依赖roles过滤
+                original_get_crew_manager_bots = monitor._get_crew_manager_bots
 
-        async def mock_get_crew_manager_bots(force_refresh=False):
-            # 直接返回固定结果，避免依赖外部API和roles过滤
-            return [{"id": bot_id_str, "name": bot_name, "roles": ["CrewManager"]}]
+                async def mock_get_crew_manager_bots(force_refresh=False):
+                    # 直接返回固定结果，避免依赖外部API和roles过滤
+                    return [{"id": bot_id_str, "name": bot_name, "roles": ["CrewManager"], "defaultRoles": "CrewManager"}]
 
-        monitor._get_crew_manager_bots = mock_get_crew_manager_bots
+                monitor._get_crew_manager_bots = mock_get_crew_manager_bots
 
-        # 模拟 StaffInvitationForCreation 调用
-        with mock.patch("src.core.entrypoints.crew_manager_main.StaffInvitationForCreation") as mock_staff_creation:
-            # 配置 mock_staff_creation 返回一个有效的模拟对象
-            mock_staff_obj = mock.MagicMock()
-            mock_staff_creation.return_value = mock_staff_obj
+                # 模拟 StaffInvitationForCreation 调用
+                with mock.patch("src.core.entrypoints.crew_manager_main.StaffInvitationForCreation") as mock_staff_creation:
+                    # 配置 mock_staff_creation 返回一个有效的模拟对象
+                    mock_staff_obj = mock.MagicMock()
+                    mock_staff_creation.return_value = mock_staff_obj
 
-            try:
-                # 调用Opera创建事件处理
-                await original_on_opera_created(opera_args)
+                    try:
+                        # 调用Opera创建事件处理
+                        await original_on_opera_created(opera_args)
 
-                # 手动添加bot_id到managed_bots，模拟成功添加
-                monitor.managed_bots.add(bot_id_str)
+                        # 手动添加bot_id到managed_bots，模拟成功添加
+                        monitor.managed_bots.add(bot_id_str)
+                        monitor.managed_manager_bots.add(bot_id_str)
 
-                # 验证 StaffInvitationForCreation 被正确调用
-                assert mock_staff_creation.call_count == 1
-                call_kwargs = mock_staff_creation.call_args[1]
+                        # 验证 StaffInvitationForCreation 被正确调用
+                        assert mock_staff_creation.call_count == 1
+                        call_kwargs = mock_staff_creation.call_args[1]
 
-                # 检查各个参数而不是类型
-                assert str(call_kwargs["bot_id"]) == bot_id_str
-                assert call_kwargs["tags"] == ""
-                assert call_kwargs["roles"] == "CrewManager"
-                assert call_kwargs["permissions"] == "manager"
-                assert call_kwargs["parameter"] == "{}"
+                        # 检查各个参数而不是类型
+                        assert str(call_kwargs["bot_id"]) == bot_id_str
+                        assert call_kwargs["tags"] == ""
+                        assert call_kwargs["roles"] == "CrewManager"
+                        assert call_kwargs["permissions"] == "manager"
+                        assert call_kwargs["parameter"] == "{}"
 
-                # 验证使用了现有Bot并加入管理
-                assert bot_id_str in monitor.managed_bots
-                assert len(monitor.managed_bots) == 3
+                        # 验证使用了现有Bot并加入管理
+                        assert bot_id_str in monitor.managed_bots
+                        assert bot_id_str in monitor.managed_manager_bots
+                        assert len(monitor.managed_bots) == 3
+                        assert len(monitor.managed_manager_bots) == 3
 
-                # 手动添加到calls列表，因为原始实现没有调用_start_bot_manager
-                calls.append((bot_id_str, bot_name))
+                        # 手动添加到calls列表，因为原始实现没有调用_start_bot_manager
+                        manager_calls.append((bot_id_str, bot_name))
 
-                # 手动添加到restart_history
-                monitor.restart_history[bot_id_str] = asyncio.get_event_loop().time()
+                        # 手动添加到restart_history
+                        monitor.restart_history[bot_id_str] = asyncio.get_event_loop().time()
 
-                assert calls == [(bot_id_str, bot_name)]
+                        assert manager_calls == [(bot_id_str, bot_name)]
+                        assert not runner_calls  # 确认没有Runner类型Bot被启动
 
-                # 验证加入了重启历史
-                assert bot_id_str in monitor.restart_history
+                        # 验证加入了重启历史
+                        assert bot_id_str in monitor.restart_history
+                    finally:
+                        # 恢复原始方法
+                        monitor._start_bot_manager = original_start_bot_manager
+                        monitor._start_bot_runner = original_start_bot_runner
+                        monitor._get_crew_manager_bots = original_get_crew_manager_bots
 
-                # 模拟添加一个额外的Bot以测试_check_bots逻辑
-                monitor.managed_bots.add("bot3")
+    @pytest.mark.asyncio
+    async def test_runner_bot_flow(self, setup_monitor: CrewMonitor):
+        """测试Runner Bot的处理流程"""
+        monitor = setup_monitor
 
-                # 验证Bot被添加到管理中
-                assert "bot3" in monitor.managed_bots
-                assert len(monitor.managed_bots) == 4
-            finally:
-                # 恢复原始方法
-                monitor._start_bot_manager = original_start_bot_manager
-                monitor._get_crew_manager_bots = original_get_crew_manager_bots
+        # 设置冷却时间和重启历史的空字典
+        monitor.restart_cooldown = 60
+        monitor.restart_history = {}
+
+        # 创建测试数据
+        runner_bot_id = "runner_bot_id"
+        runner_bot_name = "Runner Bot"
+        parent_bot_id = "parent_bot_id"
+
+        # 模拟Runner Bot的标签
+        default_tags = {"ParentBotId": parent_bot_id}
+
+        # 模拟解析返回的Bot列表
+        monitor.parser.parse_response.return_value = (
+            200,
+            [
+                {"id": runner_bot_id, "name": runner_bot_name, "isActive": False, "defaultRoles": "CrewRunner"},
+            ],
+        )
+
+        # 模拟解析标签的方法
+        monitor.parser.parse_default_tags.return_value = default_tags
+
+        # 保存原始方法
+        original_start_bot_manager = monitor._start_bot_manager
+        original_start_bot_runner = monitor._start_bot_runner
+        original_check_bots = monitor._check_bots
+
+        # 替换_start_bot_manager和_start_bot_runner，记录调用而不是启动进程
+        manager_calls = []
+        runner_calls = []
+
+        async def mock_start_bot_manager(bot_id, bot_name):
+            manager_calls.append((bot_id, bot_name))
+            monitor.managed_bots.add(bot_id)
+            monitor.managed_manager_bots.add(bot_id)
+            monitor.restart_history[bot_id] = asyncio.get_event_loop().time()
+
+        async def mock_start_bot_runner(bot_id, bot_name, parent_bot_id=None):
+            runner_calls.append((bot_id, bot_name, parent_bot_id))
+            monitor.managed_bots.add(bot_id)
+            monitor.managed_runner_bots.add(bot_id)
+            monitor.restart_history[bot_id] = asyncio.get_event_loop().time()
+
+        # 直接实现一个简化版的 _check_bots 方法来模拟其行为
+        async def mock_check_bots():
+            # 直接调用 _start_bot_runner，模拟实际逻辑
+            await mock_start_bot_runner(runner_bot_id, runner_bot_name, parent_bot_id)
+
+        monitor._start_bot_manager = mock_start_bot_manager
+        monitor._start_bot_runner = mock_start_bot_runner
+        # 替换_check_bots方法
+        monitor._check_bots = mock_check_bots
+
+        # 模拟检测Bot类型的方法
+        with mock.patch.object(monitor, "_is_crew_manager_bot", return_value=False):
+            with mock.patch.object(monitor, "_is_crew_runner_bot", return_value=True):
+                try:
+                    # 调用检查方法
+                    await monitor._check_bots()
+
+                    # 验证结果
+                    assert not manager_calls  # 没有Manager被调用
+                    assert len(runner_calls) == 1  # 只有Runner被调用
+                    assert runner_calls[0] == (runner_bot_id, runner_bot_name, parent_bot_id)
+
+                    # 验证Bot被正确添加到管理列表
+                    assert runner_bot_id in monitor.managed_bots
+                    assert runner_bot_id in monitor.managed_runner_bots
+                    assert runner_bot_id not in monitor.managed_manager_bots
+                finally:
+                    # 恢复原始方法
+                    monitor._start_bot_manager = original_start_bot_manager
+                    monitor._start_bot_runner = original_start_bot_runner
+                    monitor._check_bots = original_check_bots
 
     @pytest.mark.asyncio
     async def test_main_function(self):

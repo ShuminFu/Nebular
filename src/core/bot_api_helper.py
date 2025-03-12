@@ -90,7 +90,7 @@ async def create_child_bot(bot_tool: BotTool, opera: dict, parent_bot_id: str, l
                 opera_id=opera["id"],
                 data=StaffInvitationForCreation(
                     bot_id=new_bot["id"],
-                    roles="auto_runner",
+                    roles="CrewRunner",
                     permissions="runner",
                     tags="auto,runner",
                     parameter=json.dumps({

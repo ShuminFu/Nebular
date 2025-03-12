@@ -1,7 +1,7 @@
 import pytest
 import unittest.mock as mock
 from uuid import UUID
-from src.core.entrypoints.crew_manager_main import CrewMonitor
+from src.core.entrypoints.crew_manager_main import CrewMonitor, MANAGER_ROLE_FILTER, RUNNER_ROLE_FILTER
 from src.opera_service.signalr_client.opera_signalr_client import OperaCreatedArgs
 
 
@@ -24,6 +24,8 @@ class TestCrewMonitor:
                         monitor = CrewMonitor()
                         # 模拟已初始化的状态
                         monitor.managed_bots = set()
+                        monitor.managed_manager_bots = set()
+                        monitor.managed_runner_bots = set()
                         monitor.processes = {}
                         return monitor
 
@@ -340,7 +342,7 @@ class TestCrewMonitor:
 
     @pytest.mark.asyncio
     async def test_start_bot_manager_new_bot(self, monitor):
-        """测试为新Bot启动进程"""
+        """测试为新Bot启动Manager进程"""
         # 模拟multiprocessing.Process
         with mock.patch("multiprocessing.Process") as mock_process:
             process_instance = mock_process.return_value
@@ -353,6 +355,26 @@ class TestCrewMonitor:
 
             # 验证更新了状态
             assert "test_bot" in monitor.managed_bots
+            assert "test_bot" in monitor.managed_manager_bots
+            assert "test_bot" in monitor.processes
+
+    @pytest.mark.asyncio
+    async def test_start_bot_runner_new_bot(self, monitor):
+        """测试为新Bot启动Runner进程"""
+        # 模拟multiprocessing.Process
+        with mock.patch("multiprocessing.Process") as mock_process:
+            process_instance = mock_process.return_value
+            parent_bot_id = "parent_bot_id"
+
+            await monitor._start_bot_runner("test_bot", "测试Bot", parent_bot_id)
+
+            # 验证创建了新进程
+            mock_process.assert_called_once()
+            process_instance.start.assert_called_once()
+
+            # 验证更新了状态
+            assert "test_bot" in monitor.managed_bots
+            assert "test_bot" in monitor.managed_runner_bots
             assert "test_bot" in monitor.processes
 
     @pytest.mark.asyncio
@@ -364,6 +386,19 @@ class TestCrewMonitor:
         # 模拟multiprocessing.Process
         with mock.patch("multiprocessing.Process") as mock_process:
             await monitor._start_bot_manager("test_bot", "测试Bot")
+
+            # 验证没有创建新进程
+            mock_process.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_start_bot_runner_already_managed(self, monitor: CrewMonitor):
+        """测试尝试为已管理的Bot启动Runner进程"""
+        # 预设已管理的Bot
+        monitor.managed_bots.add("test_bot")
+
+        # 模拟multiprocessing.Process
+        with mock.patch("multiprocessing.Process") as mock_process:
+            await monitor._start_bot_runner("test_bot", "测试Bot", "parent_bot_id")
 
             # 验证没有创建新进程
             mock_process.assert_not_called()
@@ -385,6 +420,25 @@ class TestCrewMonitor:
             # 验证没有创建新进程，只更新了记录
             mock_process_class.assert_not_called()
             assert "test_bot" in monitor.managed_bots
+
+    @pytest.mark.asyncio
+    async def test_start_bot_runner_process_exists_alive(self, monitor: CrewMonitor):
+        """测试当Runner进程已存在且活跃时的处理"""
+        # 创建模拟进程
+        mock_process = mock.MagicMock()
+        mock_process.is_alive.return_value = True
+
+        # 预设进程但不在managed_bots中
+        monitor.processes["test_bot"] = mock_process
+
+        # 模拟multiprocessing.Process
+        with mock.patch("multiprocessing.Process") as mock_process_class:
+            await monitor._start_bot_runner("test_bot", "测试Bot", "parent_bot_id")
+
+            # 验证没有创建新进程，只更新了记录
+            mock_process_class.assert_not_called()
+            assert "test_bot" in monitor.managed_bots
+            assert "test_bot" in monitor.managed_runner_bots
 
     @pytest.mark.asyncio
     async def test_start_bot_manager_process_exists_dead(self, monitor: CrewMonitor):
@@ -412,6 +466,35 @@ class TestCrewMonitor:
 
             # 验证更新了状态
             assert "test_bot" in monitor.managed_bots
+            assert monitor.processes["test_bot"] == new_process
+
+    @pytest.mark.asyncio
+    async def test_start_bot_runner_process_exists_dead(self, monitor: CrewMonitor):
+        """测试当Runner进程已存在但已停止时的处理"""
+        # 创建模拟进程
+        mock_process = mock.MagicMock()
+        mock_process.is_alive.return_value = False
+
+        # 预设进程但不在managed_bots中
+        monitor.processes["test_bot"] = mock_process
+
+        # 模拟multiprocessing.Process
+        with mock.patch("multiprocessing.Process") as mock_process_class:
+            new_process = mock_process_class.return_value
+
+            await monitor._start_bot_runner("test_bot", "测试Bot", "parent_bot_id")
+
+            # 验证终止并删除了旧进程
+            mock_process.terminate.assert_called_once()
+            mock_process.join.assert_called_once()
+
+            # 验证创建了新进程
+            mock_process_class.assert_called_once()
+            new_process.start.assert_called_once()
+
+            # 验证更新了状态
+            assert "test_bot" in monitor.managed_bots
+            assert "test_bot" in monitor.managed_runner_bots
             assert monitor.processes["test_bot"] == new_process
 
     @pytest.mark.asyncio
@@ -783,3 +866,109 @@ class TestCrewMonitor:
                 assert mock_start.call_count == 2
                 mock_start.assert_any_call("bot2", "Bot2")
                 mock_start.assert_any_call("bot3", "Bot3")
+
+    @pytest.mark.asyncio
+    async def test_check_bots_with_runner_bots(self, monitor: CrewMonitor):
+        """测试检查CrewRunner类型的Bot"""
+        # 模拟RUNNER_ROLE_FILTER常量
+        with mock.patch("src.core.entrypoints.crew_manager_main.RUNNER_ROLE_FILTER", "CrewRunner"):
+            # 模拟当前时间
+            current_time = 1000.0
+            with mock.patch("asyncio.get_event_loop") as mock_loop:
+                mock_loop.return_value.time.return_value = current_time
+
+                # 预设管理集合的初始状态
+                monitor.managed_bots = set()
+                monitor.managed_manager_bots = set()
+                monitor.managed_runner_bots = set()
+
+                # 模拟BotTool._run返回值
+                monitor.bot_tool._run.return_value = "mock_result"
+
+                # 模拟解析器返回的结果，包含一个Manager和一个Runner
+                monitor.parser.parse_response.return_value = (
+                    200,
+                    [
+                        {"id": "manager_bot", "name": "Manager Bot", "isActive": False, "defaultRoles": "CrewManager"},
+                        {"id": "runner_bot", "name": "Runner Bot", "isActive": False, "defaultRoles": "CrewRunner"},
+                        {"id": "other_bot", "name": "Other Bot", "isActive": False, "defaultRoles": "Agent"},
+                    ],
+                )
+
+                # 模拟_is_crew_manager_bot和_is_crew_runner_bot方法
+                with mock.patch.object(monitor, "_is_crew_manager_bot", side_effect=lambda bot: bot["defaultRoles"] == "CrewManager"):
+                    with mock.patch.object(monitor, "_is_crew_runner_bot", side_effect=lambda bot: bot["defaultRoles"] == "CrewRunner"):
+                        # 模拟_start_bot_manager和_start_bot_runner方法
+                        with mock.patch.object(monitor, "_start_bot_manager") as mock_start_manager:
+                            with mock.patch.object(monitor, "_start_bot_runner") as mock_start_runner:
+                                # 模拟从标签中解析出的父Bot ID
+                                monitor.parser.parse_default_tags.return_value = {"ParentBotId": "parent_bot_id"}
+
+                                await monitor._check_bots()
+
+                                # 验证为Manager和Runner Bot启动了进程
+                                mock_start_manager.assert_called_once_with("manager_bot", "Manager Bot")
+                                mock_start_runner.assert_called_once_with("runner_bot", "Runner Bot", "parent_bot_id")
+
+    @pytest.mark.asyncio
+    async def test_check_bots_inactive_runner_bot(self, monitor: CrewMonitor):
+        """测试处理变为非活跃的Runner Bot"""
+        # 模拟RUNNER_ROLE_FILTER常量
+        with mock.patch("src.core.entrypoints.crew_manager_main.RUNNER_ROLE_FILTER", "CrewRunner"):
+            # 模拟当前时间
+            current_time = 1000.0
+            with mock.patch("asyncio.get_event_loop") as mock_loop:
+                mock_loop.return_value.time.return_value = current_time
+
+                # 预设已管理的Bot，包括一个Runner Bot
+                monitor.managed_bots.add("manager_bot")
+                monitor.managed_manager_bots.add("manager_bot")
+                monitor.managed_bots.add("runner_bot")
+                monitor.managed_runner_bots.add("runner_bot")
+
+                # 模拟进程
+                mock_manager_process = mock.MagicMock()
+                mock_manager_process.is_alive.return_value = True
+                monitor.processes["manager_bot"] = mock_manager_process
+
+                mock_runner_process = mock.MagicMock()
+                mock_runner_process.is_alive.return_value = True
+                monitor.processes["runner_bot"] = mock_runner_process
+
+                # 设置重启历史（超过冷却期）
+                monitor.restart_history = {
+                    "runner_bot": current_time - 120,  # 120秒前重启，已超过冷却期
+                }
+                # 设置冷却时间为60秒
+                monitor.restart_cooldown = 60
+
+                # 模拟BotTool._run返回值
+                monitor.bot_tool._run.return_value = "mock_result"
+
+                # 模拟解析器返回的结果，包含非活跃的Runner Bot
+                monitor.parser.parse_response.return_value = (
+                    200,
+                    [
+                        {"id": "manager_bot", "name": "Manager Bot", "isActive": True, "defaultRoles": "CrewManager"},
+                        {"id": "runner_bot", "name": "Runner Bot", "isActive": False, "defaultRoles": "CrewRunner"},
+                    ],
+                )
+
+                # 模拟_is_crew_manager_bot和_is_crew_runner_bot方法
+                with mock.patch.object(monitor, "_is_crew_manager_bot", side_effect=lambda bot: bot["defaultRoles"] == "CrewManager"):
+                    with mock.patch.object(monitor, "_is_crew_runner_bot", side_effect=lambda bot: bot["defaultRoles"] == "CrewRunner"):
+                        # 模拟_start_bot_manager和_start_bot_runner方法
+                        with mock.patch.object(monitor, "_start_bot_manager") as mock_start_manager:
+                            with mock.patch.object(monitor, "_start_bot_runner") as mock_start_runner:
+                                # 模拟从标签中解析出的父Bot ID
+                                monitor.parser.parse_default_tags.return_value = {"ParentBotId": "parent_bot_id"}
+
+                                await monitor._check_bots()
+
+                                # 验证未活跃的Runner Bot被移除并重启
+                                mock_start_manager.assert_not_called()
+                                mock_start_runner.assert_called_once_with("runner_bot", "Runner Bot", "parent_bot_id")
+                                assert "runner_bot" not in monitor.managed_bots
+                                assert "runner_bot" not in monitor.managed_runner_bots
+                                mock_runner_process.terminate.assert_called_once()
+                                mock_runner_process.join.assert_called_once()
