@@ -3,7 +3,6 @@ import unittest.mock as mock
 from uuid import UUID
 from src.core.entrypoints.crew_manager_main import CrewMonitor
 from src.opera_service.signalr_client.opera_signalr_client import OperaCreatedArgs
-from src.crewai_ext.tools.opera_api.staff_api_tool import StaffTool
 
 
 class TestCrewMonitor:
