@@ -89,6 +89,10 @@ class TestCrewMonitorIntegration:
         """测试完整流程：初始化、接收事件、处理新Bot"""
         monitor = setup_monitor
 
+        # 设置冷却时间和重启历史的空字典
+        monitor.restart_cooldown = 60
+        monitor.restart_history = {}
+
         # 验证初始化现有Bot
         assert len(monitor.managed_bots) == 2
         assert "bot1" in monitor.managed_bots
@@ -122,6 +126,8 @@ class TestCrewMonitorIntegration:
         async def mock_start_bot_manager(bot_id, bot_name):
             calls.append((bot_id, bot_name))
             monitor.managed_bots.add(bot_id)
+            # 模拟更新重启历史
+            monitor.restart_history[bot_id] = asyncio.get_event_loop().time()
 
         monitor._start_bot_manager = mock_start_bot_manager
 
@@ -133,6 +139,9 @@ class TestCrewMonitorIntegration:
             assert "new_bot" in monitor.managed_bots
             assert len(monitor.managed_bots) == 3
             assert calls == [("new_bot", "前端-前端任务-新测试Opera")]
+
+            # 验证加入了重启历史
+            assert "new_bot" in monitor.restart_history
 
             # 模拟添加一个额外的Bot以测试_check_bots逻辑
             monitor.managed_bots.add("bot3")
