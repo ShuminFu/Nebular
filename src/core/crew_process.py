@@ -8,7 +8,7 @@ from crewai import Crew
 from src.opera_service.api.models import BotForUpdate, DialogueForCreation
 from src.core.logger_config import get_logger_with_trace_id
 from src.core.parser.api_response_parser import ApiResponseParser
-from src.opera_service.signalr_client.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs
+from src.opera_service.signalr_client.opera_signalr_client import OperaSignalRClient, MessageReceivedArgs, OperaCreatedArgs
 from src.crewai_ext.tools.opera_api.bot_api_tool import _SHARED_BOT_TOOL
 from src.crewai_ext.tools.opera_api.dialogue_api_tool import _SHARED_DIALOGUE_TOOL
 from src.core.intent_mind import IntentMind
@@ -69,6 +69,7 @@ class BaseCrewProcess(ABC):
                 raise asyncio.TimeoutError()
 
             self.client.set_callback("on_message_received", self._handle_message)
+            self.client.set_callback("on_opera_created", self._handle_opera_created)
 
     async def stop(self):
         """停止Crew运行"""
@@ -150,6 +151,11 @@ class BaseCrewProcess(ABC):
             asyncio.create_task(self.intent_processor.process_message(message))
         except Exception as e:
             self.log.error(f"处理消息时发生错误: {str(e)}")
+
+    async def _handle_opera_created(self, opera_args: OperaCreatedArgs):
+        """处理Opera创建事件"""
+        # 这里可以添加对Opera创建事件的逻辑处理
+        pass
 
     @abstractmethod
     def _setup_crew(self) -> Crew:

@@ -4,6 +4,7 @@ import os
 from uuid import UUID
 from src.core.logger_config import get_logger, get_logger_with_trace_id, setup_logger
 from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
+from src.crewai_ext.tools.opera_api.staff_api_tool import StaffTool, StaffForCreation
 from src.core.crew_process import CrewManager, CrewRunner, CrewProcessInfo
 from src.core.parser.api_response_parser import ApiResponseParser
 from src.core.bot_api_helper import (
@@ -16,12 +17,12 @@ from src.core.bot_api_helper import (
 )
 from src.opera_service.signalr_client.opera_signalr_client import OperaSignalRClient, OperaCreatedArgs
 
-from typing import Optional, Dict, Set
+from typing import Optional, Dict, Set, List
 import backoff
 import threading
 
 # 从环境变量读取Bot名称过滤条件，默认为"CM"
-BOT_NAME_FILTER = os.environ.get("BOT_NAME_FILTER", "前端")
+MANAGER_ROLE_FILTER = os.environ.get("MANAGER_ROLE_FILTER", "CrewManager")
 
 
 
@@ -161,12 +162,36 @@ class CrewMonitor:
         self.log = get_logger_with_trace_id()
         self.signalr_client = OperaSignalRClient(url=signalr_url)
         self.bot_tool = BotTool()
+        self.staff_tool = StaffTool()
         self.parser = ApiResponseParser()
         self.processes: Dict[str, multiprocessing.Process] = {}  # 存储所有进程，key为bot_id
         self.managed_bots: Set[str] = set()  # 存储已经启动了进程的bot id
         self.lock = threading.Lock()  # 用于保护共享资源
         self.restart_history: Dict[str, float] = {}  # 记录Bot重启历史，key为bot_id，value为重启时间戳
         self.restart_cooldown = 60  # 重启冷却时间（秒），避免频繁重启
+
+        # 添加Bot缓存和缓存时间
+        self.bot_cache: List[Dict] = []  # 缓存的Bot列表
+        self.bot_cache_time: float = 0  # 缓存的更新时间戳
+        self.bot_cache_ttl = 300  # 缓存有效期（秒）
+
+    def _is_crew_manager_bot(self, bot: Dict) -> bool:
+        """检查Bot是否是CrewManager角色
+
+        Args:
+            bot: Bot数据字典
+
+        Returns:
+            是否是CrewManager Bot
+        """
+        roles = bot.get("defaultRoles")
+        return (
+            # 处理defaultRoles可能是字符串的情况
+            roles == MANAGER_ROLE_FILTER
+            or
+            # 处理defaultRoles可能是列表的情况
+            (isinstance(roles, list) and MANAGER_ROLE_FILTER in roles)
+        )
 
     async def start(self):
         """启动监控器"""
@@ -211,7 +236,7 @@ class CrewMonitor:
 
             if status_code == 200:
                 # 过滤符合条件的Bot，包括已管理但可能已停止的bot
-                crew_manager_bots = [bot for bot in bots_data if BOT_NAME_FILTER in bot["name"] and not bot["isActive"]]
+                crew_manager_bots = [bot for bot in bots_data if self._is_crew_manager_bot(bot) and not bot["isActive"]]
 
                 if crew_manager_bots:
                     self.log.info(f"发现{len(crew_manager_bots)}个符合条件的Bot")
@@ -224,31 +249,72 @@ class CrewMonitor:
         except Exception as e:
             self.log.error(f"初始化现有Bots时出错: {str(e)}")
 
+    async def _get_crew_manager_bots(self, force_refresh: bool = False) -> List[Dict]:
+        """获取符合条件的CrewManager Bot列表
+
+        Args:
+            force_refresh: 是否强制刷新缓存
+
+        Returns:
+            符合条件的Bot列表
+        """
+        current_time = asyncio.get_event_loop().time()
+
+        # 如果缓存有效且不强制刷新，直接返回缓存数据
+        if not force_refresh and self.bot_cache and current_time - self.bot_cache_time < self.bot_cache_ttl:
+            self.log.debug(f"使用缓存的Bot列表，缓存时间: {self.bot_cache_time}，当前时间: {current_time}")
+            return [bot for bot in self.bot_cache if self._is_crew_manager_bot(bot)]
+
+        # 否则重新获取Bot列表
+        try:
+            result = self.bot_tool._run(action="get_all")
+            status_code, bots_data = self.parser.parse_response(result)
+
+            if status_code == 200:
+                # 更新缓存和时间戳
+                self.bot_cache = bots_data
+                self.bot_cache_time = current_time
+                return [bot for bot in bots_data if self._is_crew_manager_bot(bot)]
+            else:
+                self.log.error(f"获取Bot列表失败，状态码: {status_code}")
+                # 如果请求失败但有缓存，返回缓存数据
+                if self.bot_cache:
+                    self.log.warning("使用过期的Bot缓存作为备用")
+                    return [bot for bot in self.bot_cache if self._is_crew_manager_bot(bot)]
+                return []
+        except Exception as e:
+            self.log.error(f"获取Bot列表时出错: {str(e)}")
+            # 如果发生异常但有缓存，返回缓存数据
+            if self.bot_cache:
+                self.log.warning("获取Bot列表出错，使用过期的Bot缓存作为备用")
+                return [bot for bot in self.bot_cache if self._is_crew_manager_bot(bot)]
+            return []
+
     async def _on_opera_created(self, opera_args: OperaCreatedArgs):
         """处理新建Opera事件"""
-        self.log.info(f"收到新建Opera事件: {opera_args.name}, ID: {opera_args.opera_id}")
+        self.log.info(f"CrewMonitor收到新建Opera事件: {opera_args.name}, Opera ID: {opera_args.opera_id}")
 
         try:
             # 获取Opera的ID
             opera_id_str = str(opera_args.opera_id)
 
             # 检查该Opera是否已有符合条件的crew_manager_bots作为staff
-            staff_result = self.bot_tool.run(action="get_opera_staffs", opera_id=opera_id_str)
+            staff_result = self.staff_tool.run(action="get_all", opera_id=opera_id_str)
             staff_status, staff_data = self.parser.parse_response(staff_result)
 
             if staff_status != 200:
                 self.log.error(f"获取Opera {opera_args.name} 的Staff信息失败，状态码: {staff_status}")
                 return
 
-            # 检查是否有crew_manager_bots作为staff
+            # 检查是否有具有CrewManager角色的staff
             crew_manager_staffs = []
             if staff_data and isinstance(staff_data, list):  # 确保staff_data是一个列表
                 crew_manager_staffs = [
-                    staff for staff in staff_data if staff.get("botId") and BOT_NAME_FILTER in (staff.get("botName") or "")
+                    staff for staff in staff_data if staff.get("botId") and "CrewManager" in (staff.get("roles") or [])
                 ]
 
             if crew_manager_staffs:
-                self.log.info(f"Opera {opera_args.name} 已有符合条件的crew_manager_bots作为staff")
+                self.log.info(f"Opera {opera_args.name} 已有具有CrewManager角色的Bot作为staff")
 
                 # 检查这些Bot是否已经在管理列表中
                 with self.lock:
@@ -257,32 +323,48 @@ class CrewMonitor:
                         if bot_id and bot_id not in self.managed_bots:
                             self.log.info(f"为已有的Bot {staff.get('botName')} (ID: {bot_id})启动进程")
                             await self._start_bot_manager(bot_id, staff.get("botName"))
-                return  # 有符合条件的crew_manager_bots作为staff，直接返回
+                return  # 有具有CrewManager角色的Bot作为staff，直接返回
 
-            # 如果没有符合条件的crew_manager_bots，则创建新Bot
-            self.log.info(f"为Opera {opera_args.name} (ID: {opera_args.opera_id})创建新的Bot...")
+            # 如果没有符合条件的CrewManager staff，则查找现有的CrewManager Bot并注册为staff
+            self.log.info(f"为Opera {opera_args.name} (ID: {opera_args.opera_id})注册现有的CrewManager Bot...")
 
-            # 创建Bot的API调用
-            bot_name = f"{BOT_NAME_FILTER}-{opera_args.name}"
-            new_bot_params = {
-                "action": "create",
-                "opera_id": opera_id_str,
-                "name": bot_name,
-                # 其他参数按需添加
-            }
+            # 获取所有符合条件的Bot（使用缓存机制）
+            crew_manager_bots = await self._get_crew_manager_bots()
 
-            new_bot_result = self.bot_tool.run(**new_bot_params)
-            status_code, new_bot_data = self.parser.parse_response(new_bot_result)
+            if not crew_manager_bots:
+                self.log.error(f"未找到符合条件的CrewManager Bot，无法为新Opera {opera_args.name}注册staff")
+                return
 
-            if status_code == 200:
-                self.log.info(f"成功创建Bot: {new_bot_data['name']} (ID: {new_bot_data['id']})")
+            # 选择第一个符合条件的Bot作为staff
+            selected_bot = crew_manager_bots[0]
+            bot_id = selected_bot["id"]
+            bot_name = selected_bot["name"]
+
+            # 注册Bot为新Opera的staff
+            staff_result = self.staff_tool.run(
+                action="create",
+                opera_id=opera_id_str,
+                data=StaffForCreation(
+                    bot_id=bot_id,
+                    name=f"CM-{bot_name}",  # 使用Bot名称作为Staff名称
+                    is_on_stage=True,  # 默认onStage
+                    tags="",
+                    roles="CrewManager",
+                    permissions="manager",
+                    parameter="{}",
+                ),
+            )
+            staff_status, staff_data = self.parser.parse_response(staff_result)
+
+            if staff_status == 201:
+                self.log.info(f"成功将Bot {bot_name} (ID: {bot_id})注册为Opera {opera_args.name}的staff")
 
                 # 确保不重复启动进程
                 with self.lock:
-                    if new_bot_data["id"] not in self.managed_bots:
-                        await self._start_bot_manager(new_bot_data["id"], new_bot_data["name"])
+                    if bot_id not in self.managed_bots:
+                        await self._start_bot_manager(bot_id, bot_name)
             else:
-                self.log.error(f"创建Bot失败，状态码: {status_code}")
+                self.log.error(f"注册Bot作为staff失败，状态码: {staff_status}")
 
         except Exception as e:
             self.log.error(f"处理Opera创建事件时出错: {str(e)}")
@@ -292,18 +374,16 @@ class CrewMonitor:
         # 获取当前时间
         current_time = asyncio.get_event_loop().time()
 
-        # 获取所有Bot
-        result = self.bot_tool._run(action="get_all")
-
+        # 获取所有Bot (使用缓存机制)
         try:
-            status_code, bots_data = self.parser.parse_response(result)
+            # 强制刷新缓存，确保数据最新
+            crew_manager_bots = await self._get_crew_manager_bots(force_refresh=True)
+            all_bots = self.bot_cache  # 使用完整的缓存列表
 
-            if status_code == 200:
+            if crew_manager_bots and all_bots:
                 # 1. 检查新的符合条件的Bot
                 new_crew_manager_bots = [
-                    bot
-                    for bot in bots_data
-                    if BOT_NAME_FILTER in bot["name"] and not bot["isActive"] and bot["id"] not in self.managed_bots
+                    bot for bot in crew_manager_bots if not bot["isActive"] and bot["id"] not in self.managed_bots
                 ]
 
                 if new_crew_manager_bots:
@@ -318,11 +398,11 @@ class CrewMonitor:
                     managed_bot_ids = self.managed_bots.copy()
 
                 # 获取当前在Opera中活跃的Bot ID列表
-                active_bot_ids = {bot["id"] for bot in bots_data if bot["isActive"]}
+                active_bot_ids = {bot["id"] for bot in all_bots if bot["isActive"]}
 
                 # 找出已管理但在Opera中显示为非活跃的Bot，同时考虑冷却期
                 inactive_managed_bots = []
-                for bot in bots_data:
+                for bot in all_bots:
                     bot_id = bot["id"]
 
                     # 条件1：已在管理列表中
@@ -366,20 +446,36 @@ class CrewMonitor:
                         # 重新启动
                         await self._start_bot_manager(bot_id, bot["name"])
 
-                # 输出在冷却期内的Bot数量（日志级别为DEBUG）
-                cooling_bots = [
-                    bot
-                    for bot in bots_data
-                    if bot["id"] in managed_bot_ids
-                    and not bot["isActive"]
-                    and bot["id"] in self.restart_history
-                    and current_time - self.restart_history[bot["id"]] < self.restart_cooldown
-                ]
+                # 3. 检查已管理但可能已被删除的Bot
+                existing_bot_ids = {bot["id"] for bot in all_bots}
+                with self.lock:
+                    deleted_bot_ids = [bot_id for bot_id in self.managed_bots if bot_id not in existing_bot_ids]
 
-                if cooling_bots:
-                    self.log.debug(f"有{len(cooling_bots)}个Bot在冷却期内，跳过重启")
+                if deleted_bot_ids:
+                    self.log.info(f"发现{len(deleted_bot_ids)}个已被删除的Bot，将停止其对应进程")
+
+                    for bot_id in deleted_bot_ids:
+                        self.log.info(f"Bot ID: {bot_id}已不存在，停止其对应进程并从管理列表中移除")
+
+                        with self.lock:
+                            # 从管理列表中移除
+                            if bot_id in self.managed_bots:
+                                self.managed_bots.remove(bot_id)
+
+                            # 终止对应进程
+                            if bot_id in self.processes:
+                                process = self.processes[bot_id]
+                                if process.is_alive():
+                                    self.log.info(f"终止已删除Bot {bot_id}的进程")
+                                    process.terminate()
+                                    process.join()
+                                del self.processes[bot_id]
+
+                            # 清理重启历史
+                            if bot_id in self.restart_history:
+                                del self.restart_history[bot_id]
             else:
-                self.log.error(f"获取Bot列表失败，状态码: {status_code}")
+                self.log.error("获取Bot列表失败或没有符合条件的Bot")
         except Exception as e:
             self.log.error(f"检查Bot时出错: {str(e)}")
 

@@ -90,9 +90,9 @@ async def create_child_bot(bot_tool: BotTool, opera: dict, parent_bot_id: str, l
                 opera_id=opera["id"],
                 data=StaffInvitationForCreation(
                     bot_id=new_bot["id"],
-                    roles="auto_manager",
-                    permissions="full_access",
-                    tags="auto,manager",
+                    roles="auto_runner",
+                    permissions="runner",
+                    tags="auto,runner",
                     parameter=json.dumps({
                         "management_scope": {
                             "opera_id": str(opera["id"]),
@@ -107,7 +107,7 @@ async def create_child_bot(bot_tool: BotTool, opera: dict, parent_bot_id: str, l
             invite_status, invite_data = parser.parse_response(invitation_response)
             if invite_status == 201 and (invite_id := invite_data.get('id')):
                 # 自动接受邀请（符合StaffInvitationForAcceptance模型）
-                staff_invitation_tool.run( 
+                staff_invitation_tool.run(
                     action="accept",
                     opera_id=opera["id"],
                     invitation_id=invite_id,
@@ -115,10 +115,10 @@ async def create_child_bot(bot_tool: BotTool, opera: dict, parent_bot_id: str, l
                         name=f"auto generated {runner_config['agents']['role']}",
                         parameter=json.dumps({"auto_accept": True}),
                         is_on_stage=True,
-                        tags="auto,manager",
-                        roles="auto_manager",
-                        permissions="full_access"
-                    )
+                        tags="auto,runner",
+                        roles="auto_runner",
+                        permissions="runner",
+                    ),
                 )
                 log.info(f"邀请 {invite_id} 已自动接受")
 
@@ -162,7 +162,7 @@ async def get_child_bot_opera_ids(bot_tool: BotTool, child_bot_id: str, log) -> 
     """获取ChildBot管理的Opera IDs"""
     try:
         parser = ApiResponseParser()
-        child_bot_info = bot_tool.run(action="get", bot_id=child_bot_id)
+        child_bot_info = bot_tool._run(action="get", bot_id=child_bot_id)
         _, child_data = parser.parse_response(child_bot_info)
         child_tags = parser.parse_default_tags(child_data)
 
@@ -170,7 +170,7 @@ async def get_child_bot_opera_ids(bot_tool: BotTool, child_bot_id: str, log) -> 
             return set(child_tags["RelatedOperas"])
 
         # 通过API获取
-        staffs_result = bot_tool.run(
+        staffs_result = bot_tool._run(
             action="get_all_staffs",
             bot_id=child_bot_id,
             data={"need_opera_info": True, "need_staffs": 1, "need_staff_invitations": 0},
@@ -188,7 +188,7 @@ async def get_child_bot_staff_info(bot_tool: BotTool, child_bot_id: str, log) ->
     """获取ChildBot的staff信息和roles"""
     try:
         parser = ApiResponseParser()
-        staffs_result = bot_tool.run(
+        staffs_result = bot_tool._run(
             action="get_all_staffs",
             bot_id=child_bot_id,
             data={"need_opera_info": True, "need_staffs": 1, "need_staff_invitations": 0},
