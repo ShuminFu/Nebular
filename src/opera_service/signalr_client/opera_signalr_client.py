@@ -148,6 +148,7 @@ class OperaSignalRClient:
         try:
             # 首先设置运行标志为False，让健康检查任务自然退出
             self._running = False
+            self._connected = False  # 立即更新连接状态，防止重连时的竞态条件
 
             # 取消连接任务
             if self._connection_task and not self._connection_task.done():
@@ -155,7 +156,9 @@ class OperaSignalRClient:
                 try:
                     await self._connection_task
                 except asyncio.CancelledError:
-                    self.log.debug("连接任务已正常取消")
+                    self.log.debug("signalr client 心跳已终止运行")
+                except Exception as e:
+                    self.log.warning(f"signalr client 取消连接任务时出错: {str(e)}")
             self._connection_task = None
 
             # 等待并取消健康检查任务
@@ -167,12 +170,27 @@ class OperaSignalRClient:
                     try:
                         await self._health_check_task
                     except asyncio.CancelledError:
-                        self.log.debug("健康检查任务已正常取消")
+                        self.log.debug("signalr client 健康检查任务已正常取消")
+                    except Exception as e:
+                        self.log.warning(f"signalr client 取消健康检查任务时出错: {str(e)}")
             self._health_check_task = None
 
-            # 确保客户端断开连接
-            if self.client:
-                await self.client.stop()
+            # 重置客户端实例，确保完全断开
+            self.client = SignalRClient(self.url)
+
+            # 重新设置基本回调
+            self.client.on_open(self._on_open)
+            self.client.on_close(self._on_close)
+            self.client.on_error(self._on_error)
+
+            # 重新注册所有回调方法
+            self.client.on("Hello", self._handle_hello)
+            self.client.on("OnSystemShutdown", self._handle_system_shutdown)
+            self.client.on("OnOperaCreated", self._handle_opera_created)
+            self.client.on("OnOperaDeleted", self._handle_opera_deleted)
+            self.client.on("OnStaffInvited", self._handle_staff_invited)
+            self.client.on("OnStageChanged", self._handle_stage_changed)
+            self.client.on("OnMessageReceived", self._handle_message_received)
 
         except Exception as e:
             self.log.exception(f"断开连接时出错: {e}")
@@ -182,12 +200,44 @@ class OperaSignalRClient:
     async def set_bot_id(self, bot_id: UUID):
         """设置Bot ID"""
         self.bot_id = bot_id
-        await self.client.send("SetBotId", [str(bot_id)])
+
+        # 检查连接状态
+        if not self._connected or not self.client:
+            self.log.warning(f"尝试设置Bot ID时连接未就绪，已保存Bot ID: {bot_id}，将在连接建立后自动设置")
+            return
+
+        try:
+            # 尝试发送Bot ID
+            await self.client.send("SetBotId", [str(bot_id)])
+            self.log.debug(f"成功设置Bot ID: {bot_id}")
+        except RuntimeError as e:
+            if "Connection is closed" in str(e):
+                self.log.warning("设置Bot ID失败: 连接已关闭，将在重新连接后自动设置")
+            else:
+                self.log.error(f"设置Bot ID失败: {str(e)}")
+        except Exception as e:
+            self.log.error(f"设置Bot ID时发生未知错误: {str(e)}")
 
     async def set_snitch_mode(self, enabled: bool):
         """设置告密模式"""
         self.snitch_mode = enabled
-        await self.client.send("SetSnitchMode", [enabled])
+
+        # 检查连接状态
+        if not self._connected or not self.client:
+            self.log.warning("尝试设置告密模式时连接未就绪，已保存模式设置: {enabled}，将在连接建立后自动设置")
+            return
+
+        try:
+            # 尝试发送告密模式设置
+            await self.client.send("SetSnitchMode", [enabled])
+            self.log.debug(f"成功设置告密模式: {enabled}")
+        except RuntimeError as e:
+            if "Connection is closed" in str(e):
+                self.log.warning("设置告密模式失败: 连接已关闭，将在重新连接后自动设置")
+            else:
+                self.log.error(f"设置告密模式失败: {str(e)}")
+        except Exception as e:
+            self.log.error(f"设置告密模式时发生未知错误: {str(e)}")
 
     async def send(self, method: str, args: list):
         """发送消息到SignalR服务器
@@ -196,7 +246,21 @@ class OperaSignalRClient:
             method: 要调用的方法名
             args: 参数列表
         """
-        await self.client.send(method, args)
+        if not self._connected or not self.client:
+            self.log.warning(f"尝试发送消息 '{method}' 时连接未就绪")
+            raise ConnectionError("SignalR连接未建立")
+
+        try:
+            await self.client.send(method, args)
+            self.log.debug(f"已成功发送消息: {method}")
+        except RuntimeError as e:
+            if "Connection is closed" in str(e):
+                self.log.warning(f"发送消息 '{method}' 失败: 连接已关闭")
+                self._connected = False  # 更新连接状态
+            raise  # 重新抛出异常，让调用者处理
+        except Exception as e:
+            self.log.error(f"发送消息 '{method}' 时发生错误: {str(e)}")
+            raise  # 重新抛出异常，让调用者处理
 
     def set_callback(self, event_name: str, callback: Callable):
         """设置回调函数"""
@@ -247,7 +311,7 @@ class OperaSignalRClient:
         if self.callbacks["on_hello"]:
             await self._execute_callback("on_hello", self.callbacks["on_hello"])
         else:
-            self.log.debug("收到Hello事件，但未设置处理回调")
+            self.log.debug("Hello from signalr server!")
 
     async def _handle_system_shutdown(self, *args) -> None:
         self.log.warning(f"收到系统关闭事件: {args}")

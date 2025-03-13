@@ -22,6 +22,7 @@ from src.opera_service.signalr_client.opera_signalr_client import OperaSignalRCl
 from typing import Optional, Dict, Set, List
 import backoff
 import threading
+from datetime import datetime
 
 # 从环境变量读取Bot名称过滤条件，默认为"CM"
 MANAGER_ROLE_FILTER = os.environ.get("MANAGER_ROLE_FILTER", "CrewManager")
@@ -251,17 +252,60 @@ class CrewMonitor:
         """停止监控器"""
         self.log.info("正在停止CrewMonitor...")
 
-        # 断开SignalR连接
-        await self.signalr_client.disconnect()
+        try:
+            # 断开SignalR连接
+            if self.signalr_client._connected:
+                self.log.info("正在断开SignalR连接...")
+                try:
+                    await self.signalr_client.disconnect()
+                    self.log.info("SignalR连接已断开")
+                except Exception as e:
+                    self.log.error(f"断开SignalR连接时出错: {str(e)}")
+                    # 如果断开失败，尝试直接重置状态
+                    self.signalr_client._connected = False
+                    self.signalr_client.client = None
+                    self.log.info("已强制重置SignalR客户端状态")
 
-        # 停止所有进程
-        with self.lock:
-            for bot_id, process in self.processes.items():
-                self.log.info(f"正在停止Bot {bot_id}的进程...")
-                process.terminate()
-                process.join()
+            # 停止所有进程
+            with self.lock:
+                process_count = len(self.processes)
+                if process_count > 0:
+                    self.log.info(f"正在停止{process_count}个Bot进程...")
 
-        self.log.info("CrewMonitor已停止")
+                    for bot_id, process in list(self.processes.items()):
+                        try:
+                            if process.is_alive():
+                                self.log.info(f"正在停止Bot {bot_id}的进程...")
+                                process.terminate()
+                                # 给进程一些时间来正常终止
+                                process.join(timeout=2.0)
+
+                                # 如果仍然活跃，强制结束
+                                if process.is_alive():
+                                    self.log.warning("进程未在超时时间内终止，强制结束")
+                                    import signal
+
+                                    try:
+                                        os.kill(process.pid, signal.SIGKILL)
+                                    except Exception as e:
+                                        self.log.error(f"强制终止进程时出错: {str(e)}")
+                            else:
+                                self.log.info(f"Bot {bot_id}的进程已不再活跃")
+                        except Exception as e:
+                            self.log.error(f"停止Bot {bot_id}的进程时出错: {str(e)}")
+                else:
+                    self.log.info("没有需要停止的进程")
+
+                # 清空进程列表和管理的bot集合
+                self.processes.clear()
+                self.managed_bots.clear()
+                self.managed_manager_bots.clear()
+                self.managed_runner_bots.clear()
+                self.log.info("已清除所有进程记录和Bot管理列表")
+        except Exception as e:
+            self.log.error(f"停止CrewMonitor时出错: {str(e)}")
+        finally:
+            self.log.info("CrewMonitor已停止")
 
     async def _init_existing_bots(self):
         """初始化现有的Bots"""
@@ -349,7 +393,6 @@ class CrewMonitor:
         
         # 如果缓存有效且不强制刷新，直接返回
         if not force_refresh and self.bot_cache and current_time - self.bot_cache_time < self.bot_cache_ttl:
-            self.log.debug(f"使用现有Bot缓存，缓存时间: {self.bot_cache_time}，当前时间: {current_time}")
             return
             
         # 否则重新获取Bot列表
@@ -361,7 +404,6 @@ class CrewMonitor:
                 # 更新缓存和时间戳
                 self.bot_cache = bots_data
                 self.bot_cache_time = current_time
-                self.log.debug(f"已更新Bot缓存，共{len(bots_data)}个Bot")
             else:
                 self.log.error(f"获取Bot列表失败，状态码: {status_code}")
                 # 如果请求失败但有缓存，保留现有缓存
@@ -688,142 +730,185 @@ class CrewMonitor:
         """
         # 获取当前时间
         current_time = asyncio.get_event_loop().time()
+        # 转换为可读的时间格式
+        readable_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
         try:
-            # 获取所有Bot，使用现有缓存（不强制刷新）以降低API调用频率
+            # 检查缓存是否为空
+            if not self.bot_cache:
+                await self._update_bot_cache(force_refresh=True)  # 强制刷新缓存
+                if not self.bot_cache:  # 如果刷新后仍为空
+                    self.log.error(f"[时间:{readable_time}] 无法获取Bot缓存，跳过本次监控检查")
+                    return  # 如果缓存为空，直接返回，不进行后续检查
+
+            # 检查缓存是否过期
+            if (current_time - self.bot_cache_time) >= self.bot_cache_ttl:
+                self.log.info(
+                    f"[时间:{readable_time}] Bot缓存已过期（当前缓存时间: {self.bot_cache_time}，TTL: {self.bot_cache_ttl}秒），强制刷新"
+                )
+                await self._update_bot_cache(force_refresh=True)  # 缓存过期，强制刷新
+
+            # 使用最新的缓存
             all_bots = self.bot_cache
-            
-            # 如果缓存为空或过期，则进行更新
-            if not all_bots or (current_time - self.bot_cache_time) > 60:  # 1分钟缓存过期
-                self.log.debug(f"Bot缓存为空或已过期，上次更新: {self.bot_cache_time:.0f}，当前时间: {current_time:.0f}，正在刷新")
-                result = self.bot_tool.run(action="get_all")
-                status_code, bots_data = self.parser.parse_response(result)
-                
-                if status_code == 200:
-                    all_bots = bots_data
-                    # 更新缓存
-                    self.bot_cache = all_bots
-                    self.bot_cache_time = current_time
-                    self.log.debug(f"已更新Bot缓存，共{len(all_bots)}个Bot")
-                else:
-                    self.log.error(f"获取Bot列表失败，状态码: {status_code}")
-                    return
-            
+
             if all_bots:
-                # 0.1 如果没有设置Monitor Bot ID，尝试查找合适的CrewMonitor Bot
-                if not self.bot_id:
+                # 1. 如果没有设置Monitor Bot ID，尝试查找合适的CrewMonitor Bot
+                if self.bot_id is None:
                     crew_monitor_bots = [bot for bot in all_bots if self._is_crew_monitor_bot(bot)]
                     if crew_monitor_bots:
                         self.bot_id = crew_monitor_bots[0]["id"]
-                        self.log.info(f"[时间:{current_time:.0f}] 找到CrewMonitor Bot，ID: {self.bot_id}，名称: {crew_monitor_bots[0]['name']}")
-                        
+                        self.log.info(
+                            f"[时间:{readable_time}] 找到CrewMonitor Bot，ID: {self.bot_id}，名称: {crew_monitor_bots[0]['name']}"
+                        )
+
                         # 设置SignalR客户端的bot id
                         self.signalr_client.bot_id = UUID(self.bot_id)
-                        self.log.info(f"[时间:{current_time:.0f}] 已设置Bot ID: {self.bot_id}")
-                        
-                        # 如果SignalR客户端已连接，发送bot id
-                        if self.signalr_client._connected:
-                            asyncio.create_task(self.signalr_client.set_bot_id(UUID(self.bot_id)))
-                            self.log.info(f"[时间:{current_time:.0f}] 已发送Bot ID: {self.bot_id}到SignalR服务器")
+
+                        # 无论SignalR客户端是否已连接，都发送bot id
+                        asyncio.create_task(self.signalr_client.set_bot_id(UUID(self.bot_id)))
+                        self.log.info(f"[时间:{readable_time}] 已发送Bot ID: {self.bot_id}到SignalR服务器")
                     else:
-                        self.log.warning(f"[时间:{current_time:.0f}] 未找到CrewMonitor角色的Bot，继续使用无身份连接")
-                
-                # 0.2 如果已设置Monitor Bot ID，检查状态
-                if self.bot_id:
+                        self.log.warning(f"[时间:{readable_time}] 未找到CrewMonitor角色的Bot，继续使用无身份连接")
+
+                # 2. 如果已设置Monitor Bot ID，检查状态
+                if self.bot_id is not None:
                     # 查找Monitor使用的Bot
                     monitor_bot = next((bot for bot in all_bots if bot["id"] == self.bot_id), None)
-                    
+
                     # 检查是否需要重连SignalR
                     need_reconnect = False
                     reconnect_reason = ""
-                    
-                    # 情况1: Bot存在但处于非活跃状态
+
+                    # 只根据isActive状态决定是否重连
                     if monitor_bot and not monitor_bot["isActive"]:
                         need_reconnect = True
                         reconnect_reason = f"Monitor Bot {monitor_bot['name']} (ID: {self.bot_id})显示为非活跃状态"
-                        self.log.debug(f"[时间:{current_time:.0f}] 检测到Monitor Bot非活跃状态")
-                    
-                    # 情况2: SignalR客户端未连接但Bot处于活跃状态
-                    elif monitor_bot and monitor_bot["isActive"] and not self.signalr_client._connected:
-                        need_reconnect = True
-                        reconnect_reason = f"SignalR客户端断开连接，但Monitor Bot {monitor_bot['name']} (ID: {self.bot_id})处于活跃状态"
-                        self.log.debug(f"[时间:{current_time:.0f}] 检测到SignalR客户端断开但Bot处于活跃状态")
-                    
-                    # 情况3: Bot不存在，需要查找新的Bot
+                        self.log.debug(f"[时间:{readable_time}] 检测到Monitor Bot非活跃状态")
+                    # 情况2: Bot不存在，需要重置bot_id并寻找新的Bot
                     elif not monitor_bot:
-                        crew_monitor_bots = [bot for bot in all_bots if self._is_crew_monitor_bot(bot)]
-                        if crew_monitor_bots:
-                            self.bot_id = crew_monitor_bots[0]["id"]
-                            monitor_bot = crew_monitor_bots[0]
-                            need_reconnect = True
-                            reconnect_reason = f"原Monitor Bot不存在，找到新的Bot {monitor_bot['name']} (ID: {self.bot_id})"
-                            self.log.debug(f"[时间:{current_time:.0f}] 原Monitor Bot不存在，已找到新的Bot")
-                        else:
-                            self.log.warning(f"[时间:{current_time:.0f}] 原Monitor Bot不存在，且未找到新的CrewMonitor Bot")
-                    else:
-                        # 一切正常的情况
-                        self.log.debug(f"[时间:{current_time:.0f}] Monitor Bot状态正常，SignalR连接状态: {self.signalr_client._connected}")
-                    
+                        self.bot_id = None  # 重置标志，下次检查时会重新查找
+                        self.log.warning(f"[时间:{readable_time}] 原Monitor Bot不存在，将在下次检查时寻找新的Bot")
+                    elif monitor_bot and monitor_bot["isActive"]:
+                        # Bot活跃状态正常，不需要重连
+                        self.log.info(f"[时间:{readable_time}] Monitor Bot状态正常：{monitor_bot['name']} (ID: {self.bot_id})")
+
                     # 如果需要重连，并且不在冷却期内
                     if need_reconnect:
                         last_reconnect_time = self.restart_history.get("signalr_client", 0)
                         time_since_last_reconnect = current_time - last_reconnect_time
-                        
+
                         if time_since_last_reconnect >= self.restart_cooldown:
-                            self.log.warning(f"[时间:{current_time:.0f}] {reconnect_reason}，重启SignalR客户端...")
-                            
+                            self.log.warning(f"[时间:{readable_time}] {reconnect_reason}，重启SignalR客户端...")
+
                             # 记录重连时间
                             self.restart_history["signalr_client"] = current_time
-                            
+
                             # 重新连接SignalR客户端
                             try:
-                                # 先断开现有连接（如果已连接）
-                                if self.signalr_client._connected:
-                                    await self.signalr_client.disconnect()
-                                    self.log.info(f"[时间:{current_time:.0f}] 已断开SignalR客户端连接")
-                                
-                                # 重新设置Bot ID
-                                if monitor_bot:
-                                    self.signalr_client.bot_id = UUID(self.bot_id)
-                                    self.log.info(f"[时间:{current_time:.0f}] 设置Monitor Bot ID: {self.bot_id}")
-                                
+                                # 先断开现有连接
+                                await self.signalr_client.disconnect()
+                                self.log.info(f"[时间:{readable_time}] 已断开SignalR客户端连接")
+
+                                # 等待足够的时间确保连接完全断开
+                                await asyncio.sleep(3)
+
+                                # 检查连接是否真的断开
+                                if hasattr(self.signalr_client, "is_disconnected") and not self.signalr_client.is_disconnected():
+                                    self.log.warning(f"[时间:{readable_time}] 连接未完全断开，等待更长时间...")
+                                    await asyncio.sleep(5)  # 再等待5秒
+
                                 # 重新连接
-                                await self.signalr_client.connect_with_retry()
-                                self.log.info(f"[时间:{current_time:.0f}] SignalR客户端已重新连接")
-                                
+                                self.log.info(f"[时间:{readable_time}] 开始重新连接SignalR客户端...")
+                                await self.signalr_client.connect_with_retry(max_retries=3, retry_delay=5)
+                                self.log.info(f"[时间:{readable_time}] SignalR客户端已重新连接")
+
+                                # 等待连接稳定
+                                await asyncio.sleep(2)
+
                                 # 重新设置回调
                                 self.signalr_client.set_callback("on_opera_created", self._on_opera_created)
-                                self.log.info(f"[时间:{current_time:.0f}] 已重新设置SignalR客户端回调")
+                                self.log.info(f"[时间:{readable_time}] 已重新设置SignalR客户端回调")
+
+                                # 等待连接进一步稳定
+                                await asyncio.sleep(3)
+
+                                # 重新设置Bot ID，但确保连接已就绪并添加重试机制
+                                if monitor_bot:
+                                    self.signalr_client.bot_id = UUID(self.bot_id)
+
+                                    # 检查连接是否就绪
+                                    if self.signalr_client._connected and self.signalr_client.client:
+                                        try:
+                                            # 使用等待而不是创建任务，以便捕获异常
+                                            await self.signalr_client.set_bot_id(UUID(self.bot_id))
+                                            self.log.info(f"[时间:{readable_time}] 已成功重新设置Bot ID")
+                                        except Exception as e:
+                                            self.log.error(f"[时间:{readable_time}] 设置Bot ID时出错: {str(e)}")
+                                            # 不抛出异常，让监控器继续运行
+                                    else:
+                                        self.log.warning(f"[时间:{readable_time}] 连接未就绪，将在下次检查时尝试设置Bot ID")
+                            except RuntimeError as e:
+                                # 特别处理"Cannot connect while not disconnected"错误
+                                if "Cannot connect while not disconnected" in str(e):
+                                    self.log.error(f"[时间:{readable_time}] 连接状态错误: {str(e)}，尝试强制重置客户端...")
+                                    # 强制重置SignalR客户端
+                                    try:
+                                        # 创建新的客户端实例
+                                        old_client = self.signalr_client
+                                        self.signalr_client = OperaSignalRClient(url=old_client.url)
+
+                                        # 复制必要的状态
+                                        self.signalr_client.bot_id = old_client.bot_id
+                                        self.signalr_client.snitch_mode = old_client.snitch_mode
+
+                                        # 设置回调
+                                        self.signalr_client.set_callback("on_opera_created", self._on_opera_created)
+
+                                        # 尝试连接
+                                        await asyncio.sleep(1)  # 短暂等待确保状态稳定
+                                        await self.signalr_client.connect_with_retry()
+                                        self.log.info(f"[时间:{readable_time}] 已成功重置并重连SignalR客户端")
+
+                                        # 如果有Bot ID，设置它
+                                        if self.bot_id:
+                                            await asyncio.sleep(2)  # 等待连接稳定
+                                            if self.signalr_client._connected:
+                                                await self.signalr_client.set_bot_id(UUID(self.bot_id))
+                                                self.log.info(f"[时间:{readable_time}] 已在重置后设置Bot ID")
+                                    except Exception as inner_e:
+                                        self.log.error(f"[时间:{readable_time}] 重置SignalR客户端时出错: {str(inner_e)}")
+                                else:
+                                    self.log.error(f"[时间:{readable_time}] 重新连接SignalR客户端时出错: {str(e)}")
                             except Exception as e:
-                                self.log.error(f"[时间:{current_time:.0f}] 重新连接SignalR客户端时出错: {str(e)}")
+                                self.log.error(f"[时间:{readable_time}] 重新连接SignalR客户端时出错: {str(e)}")
                         else:
-                            self.log.debug(f"[时间:{current_time:.0f}] 需要重连但在冷却期内，距离上次重连: {time_since_last_reconnect:.0f}秒，冷却期: {self.restart_cooldown}秒")
-                else:
-                    self.log.debug(f"[时间:{current_time:.0f}] 未设置Monitor Bot ID，跳过状态检查")
-        
+                            self.log.debug(
+                                f"[时间:{readable_time}] 需要重连但在冷却期内，距离上次重连: {time_since_last_reconnect:.0f}秒，冷却期: {self.restart_cooldown}秒"
+                            )
+
         except Exception as e:
-            self.log.error(f"[时间:{current_time:.0f}] 检查Monitor状态时出错: {str(e)}")
+            self.log.error(f"[时间:{readable_time}] 检查Monitor状态时出错: {str(e)}")
 
     async def _periodic_check(self, monitor_interval: int = 60, bot_interval: int = 300):
         """定期检查Bot状态
-        
+
         Args:
             monitor_interval: Monitor状态检查间隔（秒）
             bot_interval: 常规Bot检查间隔（秒）
         """
+        await asyncio.sleep(bot_interval)
         last_bot_check_time = 0
-        
         while True:
             current_time = asyncio.get_event_loop().time()
-            
-            # 每次循环都检查Monitor状态
-            await self._check_monitor_status()
-            
+
             # 检查是否需要进行完整的Bot检查
             if current_time - last_bot_check_time >= bot_interval:
                 await self._check_bots()
                 last_bot_check_time = current_time
-                
+
+            # 每次循环都检查Monitor状态
+            await self._check_monitor_status()
+
             # 等待下一次Monitor检查
             await asyncio.sleep(monitor_interval)
 
@@ -835,19 +920,19 @@ async def main():
     # 为main函数创建新的trace_id
     log = get_logger_with_trace_id()
 
-    # 创建并启动监控器
-    monitor = CrewMonitor()
-    await monitor.start()
-
-    # 启动定期检查任务
-    # monitor_interval=60: 每60秒检查一次Monitor Bot状态
-    # bot_interval=500: 每500秒执行一次完整的Bot检查
-    check_task = asyncio.create_task(monitor._periodic_check(
-        monitor_interval=5,  # 每x秒检查一次Monitor Bot状态
-        bot_interval=20  # 每秒执行一次完整的Bot检查
-    ))
-
     try:
+        # 创建并启动监控器
+        monitor = CrewMonitor()
+        await monitor.start()
+
+        # 启动定期检查任务
+        check_task = asyncio.create_task(
+            monitor._periodic_check(
+                monitor_interval=30,
+                bot_interval=60,
+            )
+        )
+
         # 保持主程序运行
         while True:
             await asyncio.sleep(1)
@@ -861,12 +946,19 @@ async def main():
     except Exception as e:
         log.error(f"程序运行出错: {str(e)}")
         # 取消定期检查任务
-        check_task.cancel()
+        if "check_task" in locals() and not check_task.done():
+            check_task.cancel()
         # 停止监控器
-        await monitor.stop()
+        if "monitor" in locals():
+            await monitor.stop()
         raise
 
 if __name__ == "__main__":
     # 设置多进程启动方法
     multiprocessing.set_start_method('spawn')
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        # 获取logger实例
+        log = get_logger(__name__, log_file="logs/main.log")
+        log.error(f"主程序异常退出: {str(e)}")
