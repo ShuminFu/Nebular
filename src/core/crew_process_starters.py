@@ -8,7 +8,9 @@ import multiprocessing
 from uuid import UUID
 from src.core.logger_config import get_logger_with_trace_id
 from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
-from src.core.crew_process import CrewManager, CrewRunner, CrewProcessInfo
+from src.core.crew_process import CrewProcessInfo
+from src.core.crew_bots.crew_manager import CrewManager
+from src.core.crew_bots.crew_runner import CrewRunner
 from src.core.parser.api_response_parser import ApiResponseParser
 from src.core.bot_api_helper import (
     fetch_bot_data,

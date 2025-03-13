@@ -4,7 +4,7 @@ from uuid import UUID
 import re
 
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
-from src.core.crew_process import CrewRunner
+from src.core.crew_bots.crew_runner import CrewRunner
 from src.core.task_utils import TaskType, TaskPriority, TaskStatus, BotTask
 
 

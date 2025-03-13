@@ -3,11 +3,13 @@
 from uuid import UUID
 import json
 
-from src.core.crew_process import CrewManager, CrewRunner, CrewProcessInfo
+from src.core.crew_process import CrewProcessInfo
 from src.core.task_utils import BotTask, TaskType, TaskStatus, TaskPriority, BotTaskQueue
 from src.core.tests.test_task_utils import AsyncTestCase
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs
 from src.core.intent_mind import IntentMind
+from src.core.crew_bots.crew_manager import CrewManager
+from src.core.crew_bots.crew_runner import CrewRunner
 
 
 class TestTaskDispatch(AsyncTestCase):

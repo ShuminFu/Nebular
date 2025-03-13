@@ -7,7 +7,8 @@ CM received `raw message` -> into processing dialogue & ==code_creation== -> Bot
 import unittest
 from uuid import UUID
 from datetime import datetime, timezone
-from src.core.crew_process import CrewManager, CrewRunner
+from src.core.crew_bots.crew_manager import CrewManager
+from src.core.crew_bots.crew_runner import CrewRunner
 from src.core.task_utils import TaskType, TaskStatus, BotTask
 from src.core.parser.api_response_parser import ApiResponseParser
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs

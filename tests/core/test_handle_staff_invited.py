@@ -2,7 +2,8 @@ import unittest
 from unittest.mock import MagicMock, patch, AsyncMock
 from uuid import UUID
 
-from src.core.crew_process import CrewManager, CrewRunner
+from src.core.crew_bots.crew_manager import CrewManager
+from src.core.crew_bots.crew_runner import CrewRunner
 
 
 class TestHandleStaffInvited(unittest.IsolatedAsyncioTestCase):

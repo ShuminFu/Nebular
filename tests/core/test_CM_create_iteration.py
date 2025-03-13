@@ -2,7 +2,7 @@ import asyncio
 import json
 import uuid
 from unittest import mock
-from src.core.crew_process import CrewManager
+from src.core.crew_bots.crew_manager import CrewManager
 from src.opera_service.signalr_client.opera_signalr_client import MessageReceivedArgs  # noqa
 from src.core.task_utils import TaskType, TaskStatus, TaskPriority  # noqa
 

@@ -4,7 +4,8 @@ import json
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
 
-from src.core.crew_process import CrewManager, CrewProcessInfo
+from src.core.crew_bots.crew_manager import CrewManager
+from src.core.crew_process import CrewProcessInfo
 from src.core.task_utils import BotTask, TaskType, TaskStatus, TaskPriority
 
 

@@ -1,7 +1,7 @@
 import pytest
 from uuid import UUID
-from src.core.crew_process import CrewRunner, RunnerCodeGenerationCrew
-from src.crewai_ext.crew_bases.runner_crewbase import RunnerChatCrew
+from src.core.crew_bots.crew_runner import CrewRunner
+from src.crewai_ext.crew_bases.runner_crewbase import RunnerCodeGenerationCrew, RunnerChatCrew
 
 
 @pytest.fixture
