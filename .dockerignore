@@ -1,0 +1,34 @@
+# Git 相关
+.git
+.gitignore
+
+# 缓存相关
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.crewai_llm_cache/
+.test_cache/
+.cache/
+.vscode/
+.idea/
+
+# 虚拟环境
+.venv/
+venv/
+ENV/
+
+# 日志文件
+logs/
+*.log
+
+# 编辑器相关
+.DS_Store
+.cursor/
+.cursorignore
+
+# 其他
+*.egg-info/
+dist/
+build/
+*.egg 

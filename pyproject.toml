@@ -1,40 +1,45 @@
-[tool.poetry]
-name = "poetry-nebular"
+[project]
+name = "nebular"
 version = "0.1.0"
 description = "ai assistants playground"
-authors = ["Your Name <you@example.com>"]
+authors = [{ name = "Shumin", email = "shumin@funfun.zone" }]
+requires-python = ">=3.12, <3.13"
 readme = "README.md"
-package-mode = false
+dependencies = [
+    "fastapi>=0.115.2,<0.116",
+    "pysignalr>=1.0.0,<2",
+    "loguru>=0.7.2,<0.8",
+    "uvicorn>=0.32.0,<0.33",
+    "backoff>=2.2.1,<3",
+    "httpx>=0.27.2",
+    "crewai>=0.105.0,<0.106",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.12, <3.13"
-fastapi = "^0.115.2"
-pysignalr = "^1.0.0"
-loguru = "^0.7.2"
-uvicorn = "^0.32.0"
-backoff = "^2.2.1"
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.3,<9",
+    "pytest-asyncio>=0.24.0,<0.25",
+    "ipykernel>=6.29.5,<7",
+    "pylint>=3.3.4,<4",
+]
+crewai = [
+    "crewai>=0.105.0,<0.106",
+    "crewai-tools>=0.25.0,<0.26",
+]
 
-[[tool.poetry.source]]
-name = "tencent"
-url = "https://mirrors.cloud.tencent.com/pypi/simple/"
-priority = "primary"
-
-
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3.3"
-pytest-asyncio = "^0.24.0"
-ipykernel = "^6.29.5"
-pylint = "^3.3.4"
+[tool.uv]
+package = false
+managed = true  
+dev-dependencies = ["nebular[dev]", "nebular[crewai]"]  
 
 
-[tool.poetry.group.crewai.dependencies]
-crewai = "^0.100.0"
-crewai-tools = "^0.25.0"
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
 
 
 
