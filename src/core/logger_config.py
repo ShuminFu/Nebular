@@ -13,7 +13,7 @@ def setup_logger(name: str = None, log_file: str = None):
     """
     # 控制台输出配置
     logger.add(
-        sys.stderr,
+        sys.stdout,
         format=(
             "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
             "<level>{level: <8}</level> | "

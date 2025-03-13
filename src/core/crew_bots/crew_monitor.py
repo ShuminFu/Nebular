@@ -1,157 +1,26 @@
 import asyncio
 import multiprocessing
+from typing import Optional, Dict, Set, List
+import threading
+from datetime import datetime
 import os
 from uuid import UUID
-from src.core.logger_config import get_logger, get_logger_with_trace_id, setup_logger
-from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
+
 from src.crewai_ext.tools.opera_api.staff_api_tool import StaffTool
 from src.crewai_ext.tools.opera_api.staff_invitation_api_tool import StaffInvitationTool
 from src.opera_service.api.models import StaffInvitationForCreation
-from src.core.crew_process import CrewManager, CrewRunner, CrewProcessInfo
-from src.core.parser.api_response_parser import ApiResponseParser
-from src.core.bot_api_helper import (
-    fetch_bot_data,
-    fetch_staff_data,
-    create_child_bot,
-    update_parent_bot_tags,
-    get_child_bot_opera_ids,
-    get_child_bot_staff_info,
-)
 from src.opera_service.signalr_client.opera_signalr_client import OperaSignalRClient, OperaCreatedArgs
+from src.core.logger_config import get_logger_with_trace_id
+from src.crewai_ext.tools.opera_api.bot_api_tool import BotTool
+from src.core.parser.api_response_parser import ApiResponseParser
 
-from typing import Optional, Dict, Set, List
-import backoff
-import threading
-from datetime import datetime
+from src.core.crew_process_starters import start_crew_manager_process, start_crew_runner_process
 
 # 从环境变量读取Bot名称过滤条件，默认为"CM"
 MANAGER_ROLE_FILTER = os.environ.get("MANAGER_ROLE_FILTER", "CrewManager")
 RUNNER_ROLE_FILTER = os.environ.get("RUNNER_ROLE_FILTER", "CrewRunner")  # 新增Runner角色过滤条件
 MONITOR_ROLE_FILTER = os.environ.get("MONITOR_ROLE_FILTER", "CrewMonitor")  # 新增Monitor角色过滤条件
 
-
-
-# 重试装饰器
-
-
-@backoff.on_exception(backoff.expo,
-                      (asyncio.TimeoutError, ConnectionError),
-                      max_tries=3,
-                      max_time=300)
-async def run_crew_manager(bot_id: str):
-    """为单个Bot运行CrewManager"""
-    # 为每个manager实例创建新的trace_id
-    log = get_logger_with_trace_id()
-    manager = CrewManager()
-    manager.bot_id = UUID(bot_id)
-    bot_tool = BotTool()
-    parser = ApiResponseParser()
-
-    try:
-        # 1. 获取Bot信息和关联的Opera
-        bot_data = await fetch_bot_data(bot_tool, bot_id, log)
-        managed_operas = await fetch_staff_data(bot_tool, bot_id, log)
-
-        # 2. 获取现有ChildBots及其管理的Opera
-        default_tags = parser.parse_default_tags(bot_data)
-        existing_child_bots = parser.get_child_bots(default_tags) or []
-        log.info(f"现有ChildBots: {existing_child_bots}")
-
-        # 获取ChildBots管理的Opera
-        childbot_related_opera_ids = set()
-        for child_bot_id in existing_child_bots:
-            opera_ids = await get_child_bot_opera_ids(bot_tool, child_bot_id, log)
-            childbot_related_opera_ids.update(opera_ids)
-
-        # 3. 为未覆盖的Opera创建ChildBot
-        for opera in managed_operas:
-            if str(opera["id"]) not in childbot_related_opera_ids:
-                new_bot_ids = await create_child_bot(bot_tool, opera, bot_id, log)
-                if new_bot_ids:
-                    existing_child_bots.extend(new_bot_ids)
-                    await update_parent_bot_tags(bot_tool, bot_id, existing_child_bots, log, existing_bot_data=bot_data)
-
-        # 4. 启动未激活的ChildBots
-        for child_bot_id in existing_child_bots:
-            try:
-                child_bot_data = await fetch_bot_data(bot_tool, child_bot_id, log)
-
-                if not child_bot_data.get("isActive", True):
-                    # 获取子Bot的配置信息
-                    child_tags = parser.parse_default_tags(child_bot_data)
-                    crew_config = child_tags.get("CrewConfig", {})
-                    related_operas = child_tags.get("RelatedOperas", [])
-
-                    # 获取子Bot在各个Opera中的staff_id和roles
-                    staff_info = await get_child_bot_staff_info(bot_tool, child_bot_id, log)
-                    staff_ids = {opera_id: info["staff_ids"] for opera_id, info in staff_info.items()}
-                    roles = {opera_id: info["roles"] for opera_id, info in staff_info.items()}
-
-                    # 创建进程并记录信息
-                    process = multiprocessing.Process(target=start_crew_runner_process, args=(child_bot_id, bot_id))
-                    process.start()
-                    log.info(f"已为子Bot {child_bot_id} 启动CrewRunner进程，父Bot ID: {bot_id}")
-                    # 创建并存储进程信息
-                    process_info = CrewProcessInfo(
-                        process=process,
-                        bot_id=UUID(child_bot_id),
-                        crew_config=crew_config,
-                        opera_ids=[UUID(opera_id) for opera_id in related_operas],
-                        roles=roles,
-                        staff_ids=staff_ids,
-                    )
-                    manager.crew_processes[UUID(child_bot_id)] = process_info
-            except Exception as e:
-                log.error(f"处理子Bot {child_bot_id} 时出错: {str(e)}")
-                continue
-
-        # 运行CrewManager
-        await manager.run()
-
-    except asyncio.TimeoutError:
-        log.error(f"Bot {bot_id} 等待连接超时，将进行重试")
-        raise
-    except KeyboardInterrupt:
-        await manager.stop()
-        log.info(f"CrewManager已停止，Bot ID: {bot_id}")
-    except Exception as e:
-        log.error(f"CrewManager运行出错，Bot ID: {bot_id}, 错误: {str(e)}")
-        raise
-
-
-@backoff.on_exception(backoff.expo,
-                      (asyncio.TimeoutError, ConnectionError),
-                      max_tries=3,
-                      max_time=300)
-async def run_crew_runner(runner: CrewRunner, bot_id: str):
-    """在新进程中运行CrewRunner"""
-    # 为每个runner实例创建新的trace_id
-    log = get_logger_with_trace_id()
-    try:
-        await runner.run()
-    except Exception as e:
-        log.error(f"CrewRunner运行出错，Bot ID: {bot_id}, 错误: {str(e)}")
-        raise
-
-
-def start_crew_runner_process(bot_id: str, parent_bot_id: str, crew_config: Optional[dict] = None):
-    """在新进程中启动CrewRunner
-
-    Args:
-        bot_id: Bot ID
-        parent_bot_id: 父Bot ID
-        crew_config: 从ManagerInitFlow生成的CR配置
-    """
-    runner = CrewRunner(
-        bot_id=UUID(bot_id),
-        parent_bot_id=UUID(parent_bot_id),
-        crew_config=crew_config,  # 传递动态配置
-    )
-    asyncio.run(run_crew_runner(runner, bot_id))
-
-def start_crew_manager_process(bot_id: str):
-    """在新进程中启动CrewManager"""
-    asyncio.run(run_crew_manager(bot_id))
 
 class CrewMonitor:
     """监控器类，用于监听新的Opera和Bot创建事件，并动态启动相应的进程"""
@@ -173,10 +42,10 @@ class CrewMonitor:
         self.bot_cache: List[Dict] = []  # 缓存的Bot列表
         self.bot_cache_time: float = 0  # 缓存的更新时间戳
         self.bot_cache_ttl = 300  # 缓存有效期（秒）
-        
+
         self.managed_manager_bots: Set[str] = set()  # 存储已经启动了进程的Manager bot id
         self.managed_runner_bots: Set[str] = set()  # 存储已经启动了进程的Runner bot id
-        
+
         self.bot_id: Optional[str] = None
 
     def _is_crew_manager_bot(self, bot: Dict) -> bool:
@@ -196,7 +65,7 @@ class CrewMonitor:
             # 处理defaultRoles可能是列表的情况
             (isinstance(roles, list) and MANAGER_ROLE_FILTER in roles)
         )
-        
+
     def _is_crew_runner_bot(self, bot: Dict) -> bool:
         """检查Bot是否是CrewRunner角色
 
@@ -214,7 +83,7 @@ class CrewMonitor:
             # 处理defaultRoles可能是列表的情况
             (isinstance(roles, list) and RUNNER_ROLE_FILTER in roles)
         )
-        
+
     def _is_crew_monitor_bot(self, bot: Dict) -> bool:
         """检查Bot是否是CrewMonitor角色
 
@@ -321,7 +190,7 @@ class CrewMonitor:
                 # 更新Bot缓存
                 self.bot_cache = bots_data
                 self.bot_cache_time = asyncio.get_event_loop().time()
-                
+
                 # 查找CrewMonitor角色的bot并设置为自己的bot id
                 crew_monitor_bots = [bot for bot in bots_data if self._is_crew_monitor_bot(bot)]
                 if crew_monitor_bots:
@@ -338,7 +207,7 @@ class CrewMonitor:
                         self.log.info(f"已设置Bot ID: {self.bot_id}，连接后将自动发送")
                 else:
                     self.log.warning("未找到CrewMonitor角色的Bot，SignalR客户端将使用默认设置")
-                
+
                 # 过滤符合条件的Bot，包括已管理但可能已停止的bot
                 crew_manager_bots = [bot for bot in bots_data if self._is_crew_manager_bot(bot) and not bot["isActive"]]
 
@@ -364,10 +233,10 @@ class CrewMonitor:
         """
         # 确保Bot缓存是最新的
         await self._update_bot_cache(force_refresh)
-        
+
         # 从缓存中筛选Manager Bot
         return [bot for bot in self.bot_cache if self._is_crew_manager_bot(bot)]
-    
+
     async def _get_crew_runner_bots(self, force_refresh: bool = False) -> List[Dict]:
         """获取符合条件的CrewRunner Bot列表
 
@@ -379,27 +248,27 @@ class CrewMonitor:
         """
         # 确保Bot缓存是最新的
         await self._update_bot_cache(force_refresh)
-        
+
         # 从缓存中筛选Runner Bot
         return [bot for bot in self.bot_cache if self._is_crew_runner_bot(bot)]
-    
+
     async def _update_bot_cache(self, force_refresh: bool = False) -> None:
         """更新Bot缓存
-        
+
         Args:
             force_refresh: 是否强制刷新缓存
         """
         current_time = asyncio.get_event_loop().time()
-        
+
         # 如果缓存有效且不强制刷新，直接返回
         if not force_refresh and self.bot_cache and current_time - self.bot_cache_time < self.bot_cache_ttl:
             return
-            
+
         # 否则重新获取Bot列表
         try:
             result = self.bot_tool._run(action="get_all")
             status_code, bots_data = self.parser.parse_response(result)
-            
+
             if status_code == 200:
                 # 更新缓存和时间戳
                 self.bot_cache = bots_data
@@ -507,8 +376,7 @@ class CrewMonitor:
             if all_bots:
                 # 1. 检查新的符合条件的Bot (Manager)
                 new_crew_manager_bots = [
-                    bot for bot in crew_manager_bots 
-                    if not bot["isActive"] and bot["id"] not in self.managed_bots
+                    bot for bot in crew_manager_bots if not bot["isActive"] and bot["id"] not in self.managed_bots
                 ]
 
                 if new_crew_manager_bots:
@@ -517,11 +385,10 @@ class CrewMonitor:
                     # 为每个新的符合条件的Bot启动CrewManager进程
                     for bot in new_crew_manager_bots:
                         await self._start_bot_manager(bot["id"], bot["name"])
-                
+
                 # 1.1 检查新的符合条件的Bot (Runner)
                 new_crew_runner_bots = [
-                    bot for bot in crew_runner_bots 
-                    if not bot["isActive"] and bot["id"] not in self.managed_bots
+                    bot for bot in crew_runner_bots if not bot["isActive"] and bot["id"] not in self.managed_bots
                 ]
 
                 if new_crew_runner_bots:
@@ -532,7 +399,7 @@ class CrewMonitor:
                         # 从标签中获取父Bot ID (如果有)
                         default_tags = self.parser.parse_default_tags(bot)
                         parent_bot_id = default_tags.get("ParentBotId")
-                        
+
                         await self._start_bot_runner(bot["id"], bot["name"], parent_bot_id)
 
                 # 2. 检查已管理但可能已经在Opera中变为非活跃的Bot (Manager和Runner)
@@ -593,7 +460,7 @@ class CrewMonitor:
                             # 从标签中获取父Bot ID (如果有)
                             default_tags = self.parser.parse_default_tags(bot)
                             parent_bot_id = default_tags.get("ParentBotId")
-                            
+
                             await self._start_bot_runner(bot_id, bot["name"], parent_bot_id)
 
                 # 3. 检查已管理但可能已被删除的Bot
@@ -671,7 +538,7 @@ class CrewMonitor:
             self.restart_history[bot_id] = asyncio.get_event_loop().time()
 
             self.log.info(f"已为Bot {bot_id}启动CrewManager进程")
-    
+
     async def _start_bot_runner(self, bot_id: str, bot_name: str, parent_bot_id: Optional[str] = None):
         """为指定Bot启动CrewRunner进程
 
@@ -705,12 +572,9 @@ class CrewMonitor:
 
             # 确定父Bot ID
             parent_id = parent_bot_id if parent_bot_id else "00000000-0000-0000-0000-000000000000"
-            
+
             # 启动新进程
-            process = multiprocessing.Process(
-                target=start_crew_runner_process, 
-                args=(bot_id, parent_id)
-            )
+            process = multiprocessing.Process(target=start_crew_runner_process, args=(bot_id, parent_id))
             process.start()
 
             # 记录进程和Bot
@@ -725,27 +589,25 @@ class CrewMonitor:
 
     async def _check_monitor_status(self):
         """检查Monitor Bot状态并在必要时重连SignalR
-        
+
         这是一个轻量级检查，只关注Monitor自身的Bot状态和SignalR连接状态。
         """
         # 获取当前时间
         current_time = asyncio.get_event_loop().time()
         # 转换为可读的时间格式
         readable_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
         try:
             # 检查缓存是否为空
             if not self.bot_cache:
                 await self._update_bot_cache(force_refresh=True)  # 强制刷新缓存
                 if not self.bot_cache:  # 如果刷新后仍为空
-                    self.log.error(f"[时间:{readable_time}] 无法获取Bot缓存，跳过本次监控检查")
+                    self.log.error("无法获取Bot缓存，跳过本次监控检查")
                     return  # 如果缓存为空，直接返回，不进行后续检查
 
             # 检查缓存是否过期
             if (current_time - self.bot_cache_time) >= self.bot_cache_ttl:
-                self.log.info(
-                    f"[时间:{readable_time}] Bot缓存已过期（当前缓存时间: {self.bot_cache_time}，TTL: {self.bot_cache_ttl}秒），强制刷新"
-                )
+                self.log.info(f"Bot缓存已过期（当前缓存时间: {self.bot_cache_time}，TTL: {self.bot_cache_ttl}秒），强制刷新")
                 await self._update_bot_cache(force_refresh=True)  # 缓存过期，强制刷新
 
             # 使用最新的缓存
@@ -757,18 +619,16 @@ class CrewMonitor:
                     crew_monitor_bots = [bot for bot in all_bots if self._is_crew_monitor_bot(bot)]
                     if crew_monitor_bots:
                         self.bot_id = crew_monitor_bots[0]["id"]
-                        self.log.info(
-                            f"[时间:{readable_time}] 找到CrewMonitor Bot，ID: {self.bot_id}，名称: {crew_monitor_bots[0]['name']}"
-                        )
+                        self.log.info("找到CrewMonitor Bot，ID: {self.bot_id}，名称: {crew_monitor_bots[0]['name']}")
 
                         # 设置SignalR客户端的bot id
                         self.signalr_client.bot_id = UUID(self.bot_id)
 
                         # 无论SignalR客户端是否已连接，都发送bot id
                         asyncio.create_task(self.signalr_client.set_bot_id(UUID(self.bot_id)))
-                        self.log.info(f"[时间:{readable_time}] 已发送Bot ID: {self.bot_id}到SignalR服务器")
+                        self.log.info(f"已发送Bot ID: {self.bot_id}到SignalR服务器")
                     else:
-                        self.log.warning(f"[时间:{readable_time}] 未找到CrewMonitor角色的Bot，继续使用无身份连接")
+                        self.log.warning("未找到CrewMonitor角色的Bot，继续使用无身份连接")
 
                 # 2. 如果已设置Monitor Bot ID，检查状态
                 if self.bot_id is not None:
@@ -783,14 +643,14 @@ class CrewMonitor:
                     if monitor_bot and not monitor_bot["isActive"]:
                         need_reconnect = True
                         reconnect_reason = f"Monitor Bot {monitor_bot['name']} (ID: {self.bot_id})显示为非活跃状态"
-                        self.log.debug(f"[时间:{readable_time}] 检测到Monitor Bot非活跃状态")
+                        self.log.debug("检测到Monitor Bot非活跃状态")
                     # 情况2: Bot不存在，需要重置bot_id并寻找新的Bot
                     elif not monitor_bot:
                         self.bot_id = None  # 重置标志，下次检查时会重新查找
-                        self.log.warning(f"[时间:{readable_time}] 原Monitor Bot不存在，将在下次检查时寻找新的Bot")
+                        self.log.warning("原Monitor Bot不存在，将在下次检查时寻找新的Bot")
                     elif monitor_bot and monitor_bot["isActive"]:
                         # Bot活跃状态正常，不需要重连
-                        self.log.info(f"[时间:{readable_time}] Monitor Bot状态正常：{monitor_bot['name']} (ID: {self.bot_id})")
+                        self.log.info(f"Monitor Bot状态正常：{monitor_bot['name']} (ID: {self.bot_id})")
 
                     # 如果需要重连，并且不在冷却期内
                     if need_reconnect:
@@ -798,7 +658,7 @@ class CrewMonitor:
                         time_since_last_reconnect = current_time - last_reconnect_time
 
                         if time_since_last_reconnect >= self.restart_cooldown:
-                            self.log.warning(f"[时间:{readable_time}] {reconnect_reason}，重启SignalR客户端...")
+                            self.log.warning(f"{reconnect_reason}，重启SignalR客户端...")
 
                             # 记录重连时间
                             self.restart_history["signalr_client"] = current_time
@@ -807,27 +667,27 @@ class CrewMonitor:
                             try:
                                 # 先断开现有连接
                                 await self.signalr_client.disconnect()
-                                self.log.info(f"[时间:{readable_time}] 已断开SignalR客户端连接")
+                                self.log.info("已断开SignalR客户端连接")
 
                                 # 等待足够的时间确保连接完全断开
                                 await asyncio.sleep(3)
 
                                 # 检查连接是否真的断开
                                 if hasattr(self.signalr_client, "is_disconnected") and not self.signalr_client.is_disconnected():
-                                    self.log.warning(f"[时间:{readable_time}] 连接未完全断开，等待更长时间...")
+                                    self.log.warning("连接未完全断开，等待更长时间...")
                                     await asyncio.sleep(5)  # 再等待5秒
 
                                 # 重新连接
-                                self.log.info(f"[时间:{readable_time}] 开始重新连接SignalR客户端...")
+                                self.log.info("开始重新连接SignalR客户端...")
                                 await self.signalr_client.connect_with_retry(max_retries=3, retry_delay=5)
-                                self.log.info(f"[时间:{readable_time}] SignalR客户端已重新连接")
+                                self.log.info("SignalR客户端已重新连接")
 
                                 # 等待连接稳定
                                 await asyncio.sleep(2)
 
                                 # 重新设置回调
                                 self.signalr_client.set_callback("on_opera_created", self._on_opera_created)
-                                self.log.info(f"[时间:{readable_time}] 已重新设置SignalR客户端回调")
+                                self.log.info("已重新设置SignalR客户端回调")
 
                                 # 等待连接进一步稳定
                                 await asyncio.sleep(3)
@@ -841,16 +701,16 @@ class CrewMonitor:
                                         try:
                                             # 使用等待而不是创建任务，以便捕获异常
                                             await self.signalr_client.set_bot_id(UUID(self.bot_id))
-                                            self.log.info(f"[时间:{readable_time}] 已成功重新设置Bot ID")
+                                            self.log.info("已成功重新设置Bot ID")
                                         except Exception as e:
-                                            self.log.error(f"[时间:{readable_time}] 设置Bot ID时出错: {str(e)}")
+                                            self.log.error(f"设置Bot ID时出错: {str(e)}")
                                             # 不抛出异常，让监控器继续运行
                                     else:
-                                        self.log.warning(f"[时间:{readable_time}] 连接未就绪，将在下次检查时尝试设置Bot ID")
+                                        self.log.warning("连接未就绪，将在下次检查时尝试设置Bot ID")
                             except RuntimeError as e:
                                 # 特别处理"Cannot connect while not disconnected"错误
                                 if "Cannot connect while not disconnected" in str(e):
-                                    self.log.error(f"[时间:{readable_time}] 连接状态错误: {str(e)}，尝试强制重置客户端...")
+                                    self.log.error(f"连接状态错误: {str(e)}，尝试强制重置客户端...")
                                     # 强制重置SignalR客户端
                                     try:
                                         # 创建新的客户端实例
@@ -867,27 +727,27 @@ class CrewMonitor:
                                         # 尝试连接
                                         await asyncio.sleep(1)  # 短暂等待确保状态稳定
                                         await self.signalr_client.connect_with_retry()
-                                        self.log.info(f"[时间:{readable_time}] 已成功重置并重连SignalR客户端")
+                                        self.log.info("已成功重置并重连SignalR客户端")
 
                                         # 如果有Bot ID，设置它
                                         if self.bot_id:
                                             await asyncio.sleep(2)  # 等待连接稳定
                                             if self.signalr_client._connected:
                                                 await self.signalr_client.set_bot_id(UUID(self.bot_id))
-                                                self.log.info(f"[时间:{readable_time}] 已在重置后设置Bot ID")
+                                                self.log.info("已在重置后设置Bot ID")
                                     except Exception as inner_e:
-                                        self.log.error(f"[时间:{readable_time}] 重置SignalR客户端时出错: {str(inner_e)}")
+                                        self.log.error(f"重置SignalR客户端时出错: {str(inner_e)}")
                                 else:
-                                    self.log.error(f"[时间:{readable_time}] 重新连接SignalR客户端时出错: {str(e)}")
+                                    self.log.error(f"重新连接SignalR客户端时出错: {str(e)}")
                             except Exception as e:
-                                self.log.error(f"[时间:{readable_time}] 重新连接SignalR客户端时出错: {str(e)}")
+                                self.log.error(f"重新连接SignalR客户端时出错: {str(e)}")
                         else:
                             self.log.debug(
-                                f"[时间:{readable_time}] 需要重连但在冷却期内，距离上次重连: {time_since_last_reconnect:.0f}秒，冷却期: {self.restart_cooldown}秒"
+                                f"需要重连但在冷却期内，距离上次重连: {time_since_last_reconnect:.0f}秒，冷却期: {self.restart_cooldown}秒"
                             )
 
         except Exception as e:
-            self.log.error(f"[时间:{readable_time}] 检查Monitor状态时出错: {str(e)}")
+            self.log.error(f"检查Monitor状态时出错: {str(e)}")
 
     async def _periodic_check(self, monitor_interval: int = 60, bot_interval: int = 300):
         """定期检查Bot状态
@@ -911,54 +771,3 @@ class CrewMonitor:
 
             # 等待下一次Monitor检查
             await asyncio.sleep(monitor_interval)
-
-
-async def main():
-    # 获取logger实例
-    setup_logger(name="main")
-    log = get_logger(__name__, log_file="logs/main.log")
-    # 为main函数创建新的trace_id
-    log = get_logger_with_trace_id()
-
-    try:
-        # 创建并启动监控器
-        monitor = CrewMonitor()
-        await monitor.start()
-
-        # 启动定期检查任务
-        check_task = asyncio.create_task(
-            monitor._periodic_check(
-                monitor_interval=30,
-                bot_interval=60,
-            )
-        )
-
-        # 保持主程序运行
-        while True:
-            await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        log.info("收到中断信号，正在停止...")
-        # 取消定期检查任务
-        check_task.cancel()
-        # 停止监控器
-        await monitor.stop()
-        log.info("程序已停止")
-    except Exception as e:
-        log.error(f"程序运行出错: {str(e)}")
-        # 取消定期检查任务
-        if "check_task" in locals() and not check_task.done():
-            check_task.cancel()
-        # 停止监控器
-        if "monitor" in locals():
-            await monitor.stop()
-        raise
-
-if __name__ == "__main__":
-    # 设置多进程启动方法
-    multiprocessing.set_start_method('spawn')
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        # 获取logger实例
-        log = get_logger(__name__, log_file="logs/main.log")
-        log.error(f"主程序异常退出: {str(e)}")
