@@ -1,7 +1,7 @@
 import pytest
 import unittest.mock as mock
 from uuid import UUID
-from src.core.entrypoints.crew_manager_main import CrewMonitor, MANAGER_ROLE_FILTER, RUNNER_ROLE_FILTER, MONITOR_ROLE_FILTER
+from src.core.crew_bots.crew_monitor import CrewMonitor, MANAGER_ROLE_FILTER, RUNNER_ROLE_FILTER, MONITOR_ROLE_FILTER
 from src.opera_service.signalr_client.opera_signalr_client import OperaCreatedArgs
 import types
 
@@ -10,10 +10,10 @@ class TestCrewMonitor:
     @pytest.fixture
     def monitor(self):
         """创建测试用的CrewMonitor实例"""
-        with mock.patch("src.core.entrypoints.crew_manager_main.OperaSignalRClient"):
-            with mock.patch("src.core.entrypoints.crew_manager_main.BotTool") as mock_bot_tool_class:
-                with mock.patch("src.core.entrypoints.crew_manager_main.StaffTool") as mock_staff_tool_class:
-                    with mock.patch("src.core.entrypoints.crew_manager_main.ApiResponseParser"):
+        with mock.patch("src.core.crew_bots.crew_monitor.OperaSignalRClient"):
+            with mock.patch("src.core.crew_bots.crew_monitor.BotTool") as mock_bot_tool_class:
+                with mock.patch("src.core.crew_bots.crew_monitor.StaffTool") as mock_staff_tool_class:
+                    with mock.patch("src.core.crew_bots.crew_monitor.ApiResponseParser"):
                         # 创建Mock实例
                         mock_bot_tool = mock.MagicMock()
                         mock_staff_tool = mock.MagicMock()
@@ -34,7 +34,7 @@ class TestCrewMonitor:
     async def test_init_existing_bots(self, monitor: CrewMonitor):
         """测试初始化现有Bot的功能"""
         # 增加MANAGER_ROLE_FILTER常量的模拟，确保与代码匹配
-        with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
+        with mock.patch("src.core.crew_bots.crew_monitor.MANAGER_ROLE_FILTER", "CrewManager"):
             # 模拟BotTool.run返回值
             monitor.bot_tool.run.return_value = "mock_result"
             monitor.bot_tool._run.return_value = "mock_result"
@@ -62,9 +62,9 @@ class TestCrewMonitor:
     async def test_on_opera_created_no_existing_bot_register_existing(self, monitor: CrewMonitor):
         """测试收到Opera创建事件，Opera没有符合条件的crew_manager_bots作为staff时使用现有Bot注册"""
         # 模拟MANAGER_ROLE_FILTER常量
-        with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
+        with mock.patch("src.core.crew_bots.crew_monitor.MANAGER_ROLE_FILTER", "CrewManager"):
             # 模拟 StaffInvitationForCreation
-            with mock.patch("src.core.entrypoints.crew_manager_main.StaffInvitationForCreation") as mock_staff_creation:
+            with mock.patch("src.core.crew_bots.crew_monitor.StaffInvitationForCreation") as mock_staff_creation:
                 # 配置 mock_staff_creation 返回一个有效的模拟对象
                 mock_staff_obj = mock.MagicMock()
                 mock_staff_creation.return_value = mock_staff_obj
@@ -117,7 +117,7 @@ class TestCrewMonitor:
     async def test_on_opera_created_no_matching_existing_bot(self, monitor):
         """测试收到Opera创建事件，没有符合条件的现有Bot可用于注册的情况"""
         # 模拟MANAGER_ROLE_FILTER常量
-        with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
+        with mock.patch("src.core.crew_bots.crew_monitor.MANAGER_ROLE_FILTER", "CrewManager"):
             # 创建测试用Opera事件
             opera_args = OperaCreatedArgs(
                 opera_id=UUID("12345678-1234-5678-1234-567812345678"),
@@ -155,9 +155,9 @@ class TestCrewMonitor:
     async def test_on_opera_created_with_empty_roles(self, monitor):
         """测试收到Opera创建事件，Opera有staff但roles为空的情况"""
         # 模拟MANAGER_ROLE_FILTER常量
-        with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
+        with mock.patch("src.core.crew_bots.crew_monitor.MANAGER_ROLE_FILTER", "CrewManager"):
             # 模拟 StaffInvitationForCreation
-            with mock.patch("src.core.entrypoints.crew_manager_main.StaffInvitationForCreation") as mock_staff_creation:
+            with mock.patch("src.core.crew_bots.crew_monitor.StaffInvitationForCreation") as mock_staff_creation:
                 # 配置 mock_staff_creation 返回一个有效的模拟对象
                 mock_staff_obj = mock.MagicMock()
                 mock_staff_creation.return_value = mock_staff_obj
@@ -229,7 +229,7 @@ class TestCrewMonitor:
     async def test_on_opera_created_existing_bot(self, monitor):
         """测试收到Opera创建事件，Opera已有符合条件的crew_manager_bots作为staff的情况"""
         # 模拟MANAGER_ROLE_FILTER常量
-        with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
+        with mock.patch("src.core.crew_bots.crew_monitor.MANAGER_ROLE_FILTER", "CrewManager"):
             # 创建测试用Opera事件
             opera_args = OperaCreatedArgs(
                 opera_id=UUID("12345678-1234-5678-1234-567812345678"),
@@ -271,7 +271,7 @@ class TestCrewMonitor:
     async def test_on_opera_created_with_existing_managed_bot(self, monitor):
         """测试收到Opera创建事件，Opera已有符合条件的且已被管理的crew_manager_bots作为staff的情况"""
         # 模拟MANAGER_ROLE_FILTER常量
-        with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
+        with mock.patch("src.core.crew_bots.crew_monitor.MANAGER_ROLE_FILTER", "CrewManager"):
             # 创建测试用Opera事件
             opera_args = OperaCreatedArgs(
                 opera_id=UUID("12345678-1234-5678-1234-567812345678"),
@@ -317,7 +317,7 @@ class TestCrewMonitor:
     async def test_on_opera_created_api_error(self, monitor):
         """测试当API调用失败时的情况"""
         # 模拟MANAGER_ROLE_FILTER常量
-        with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
+        with mock.patch("src.core.crew_bots.crew_monitor.MANAGER_ROLE_FILTER", "CrewManager"):
             # 创建测试用Opera事件
             opera_args = OperaCreatedArgs(
                 opera_id=UUID("12345678-1234-5678-1234-567812345678"),
@@ -502,7 +502,7 @@ class TestCrewMonitor:
     async def test_check_bots(self, monitor: CrewMonitor):
         """测试检查新Bot功能及检查已管理但非活跃Bot的功能"""
         # 增加MANAGER_ROLE_FILTER常量的模拟，确保与代码匹配
-        with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
+        with mock.patch("src.core.crew_bots.crew_monitor.MANAGER_ROLE_FILTER", "CrewManager"):
             # 模拟当前时间
             current_time = 1000.0
             with mock.patch("asyncio.get_event_loop") as mock_loop:
@@ -593,7 +593,7 @@ class TestCrewMonitor:
     async def test_check_bots_deleted_bots(self, monitor: CrewMonitor):
         """测试检查已被删除的Bot功能"""
         # 增加MANAGER_ROLE_FILTER常量的模拟，确保与代码匹配
-        with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
+        with mock.patch("src.core.crew_bots.crew_monitor.MANAGER_ROLE_FILTER", "CrewManager"):
             # 模拟当前时间
             current_time = 1000.0
             with mock.patch("asyncio.get_event_loop") as mock_loop:
@@ -672,7 +672,7 @@ class TestCrewMonitor:
     async def test_check_bots_no_inactive_managed_bots(self, monitor):
         """测试当没有已管理但变为非活跃的Bot时的情况"""
         # 增加MANAGER_ROLE_FILTER常量的模拟，确保与代码匹配
-        with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
+        with mock.patch("src.core.crew_bots.crew_monitor.MANAGER_ROLE_FILTER", "CrewManager"):
             # 模拟当前时间
             current_time = 1000.0
             with mock.patch("asyncio.get_event_loop") as mock_loop:
@@ -712,7 +712,7 @@ class TestCrewMonitor:
     async def test_check_bots_cooldown_period(self, monitor: CrewMonitor):
         """测试Bot冷却期功能"""
         # 增加MANAGER_ROLE_FILTER常量的模拟，确保与代码匹配
-        with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
+        with mock.patch("src.core.crew_bots.crew_monitor.MANAGER_ROLE_FILTER", "CrewManager"):
             # 模拟当前时间
             current_time = 1000.0
             with mock.patch("asyncio.get_event_loop") as mock_loop:
@@ -829,7 +829,7 @@ class TestCrewMonitor:
     async def test_on_opera_created_with_mixed_role_staffs(self, monitor):
         """测试收到Opera创建事件，Opera有多个staff但只有部分具有CrewManager角色的情况"""
         # 模拟MANAGER_ROLE_FILTER常量
-        with mock.patch("src.core.entrypoints.crew_manager_main.MANAGER_ROLE_FILTER", "CrewManager"):
+        with mock.patch("src.core.crew_bots.crew_monitor.MANAGER_ROLE_FILTER", "CrewManager"):
             # 创建测试用Opera事件
             opera_args = OperaCreatedArgs(
                 opera_id=UUID("12345678-1234-5678-1234-567812345678"),
@@ -887,7 +887,7 @@ class TestCrewMonitor:
     async def test_check_bots_with_runner_bots(self, monitor: CrewMonitor):
         """测试检查CrewRunner类型的Bot"""
         # 模拟RUNNER_ROLE_FILTER常量
-        with mock.patch("src.core.entrypoints.crew_manager_main.RUNNER_ROLE_FILTER", "CrewRunner"):
+        with mock.patch("src.core.crew_bots.crew_monitor.RUNNER_ROLE_FILTER", "CrewRunner"):
             # 模拟当前时间
             current_time = 1000.0
             with mock.patch("asyncio.get_event_loop") as mock_loop:
@@ -930,7 +930,7 @@ class TestCrewMonitor:
     async def test_check_bots_inactive_runner_bot(self, monitor: CrewMonitor):
         """测试处理变为非活跃的Runner Bot"""
         # 模拟RUNNER_ROLE_FILTER常量
-        with mock.patch("src.core.entrypoints.crew_manager_main.RUNNER_ROLE_FILTER", "CrewRunner"):
+        with mock.patch("src.core.crew_bots.crew_monitor.RUNNER_ROLE_FILTER", "CrewRunner"):
             # 模拟当前时间
             current_time = 1000.0
             with mock.patch("asyncio.get_event_loop") as mock_loop:

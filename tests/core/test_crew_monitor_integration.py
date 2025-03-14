@@ -2,7 +2,7 @@ import pytest
 import asyncio
 import unittest.mock as mock
 from uuid import UUID
-from src.core.entrypoints.crew_manager_main import CrewMonitor, MANAGER_ROLE_FILTER, RUNNER_ROLE_FILTER, MONITOR_ROLE_FILTER
+from src.core.crew_bots.crew_monitor import CrewMonitor, MANAGER_ROLE_FILTER, RUNNER_ROLE_FILTER, MONITOR_ROLE_FILTER
 from src.opera_service.signalr_client.opera_signalr_client import OperaCreatedArgs
 import types
 
@@ -13,9 +13,9 @@ class TestCrewMonitorIntegration:
     async def setup_monitor(self):
         """设置测试环境并创建CrewMonitor实例"""
         # 模拟外部依赖
-        with mock.patch("src.core.entrypoints.crew_manager_main.OperaSignalRClient"):
-            with mock.patch("src.core.entrypoints.crew_manager_main.BotTool"):
-                with mock.patch("src.core.entrypoints.crew_manager_main.ApiResponseParser"):
+        with mock.patch("src.core.crew_bots.crew_monitor.OperaSignalRClient"):
+            with mock.patch("src.core.crew_bots.crew_monitor.BotTool"):
+                with mock.patch("src.core.crew_bots.crew_monitor.ApiResponseParser"):
                     with mock.patch("multiprocessing.Process"):
                         # 创建监控器
                         monitor = CrewMonitor()
@@ -173,7 +173,7 @@ class TestCrewMonitorIntegration:
                 monitor._get_crew_manager_bots = mock_get_crew_manager_bots
 
                 # 模拟 StaffInvitationForCreation 调用
-                with mock.patch("src.core.entrypoints.crew_manager_main.StaffInvitationForCreation") as mock_staff_creation:
+                with mock.patch("src.core.crew_bots.crew_monitor.StaffInvitationForCreation") as mock_staff_creation:
                     # 配置 mock_staff_creation 返回一个有效的模拟对象
                     mock_staff_obj = mock.MagicMock()
                     mock_staff_creation.return_value = mock_staff_obj
@@ -375,7 +375,7 @@ class TestCrewMonitorIntegration:
     async def test_main_function(self):
         """测试main函数"""
         # 模拟所有依赖
-        with mock.patch("src.core.entrypoints.crew_manager_main.CrewMonitor") as mock_monitor_class:
+        with mock.patch("src.core.crew_bots.crew_monitor.CrewMonitor") as mock_monitor_class:
             monitor_instance = mock.MagicMock()
             mock_monitor_class.return_value = monitor_instance
 
@@ -390,7 +390,7 @@ class TestCrewMonitorIntegration:
             # 更简单的测试方法：不使用任何asyncio.sleep
             with mock.patch("asyncio.create_task") as mock_create_task:
                 # 创建监控器实例（这会调用mock_monitor_class）
-                from src.core.entrypoints.crew_manager_main import CrewMonitor
+                from src.core.crew_bots.crew_monitor import CrewMonitor
 
                 monitor = CrewMonitor()
 
@@ -601,7 +601,7 @@ class TestCrewMonitorIntegration:
         original_on_opera_created = monitor._on_opera_created
 
         # 模拟 StaffInvitationForCreation 调用
-        with mock.patch("src.core.entrypoints.crew_manager_main.StaffInvitationForCreation") as mock_staff_creation:
+        with mock.patch("src.core.crew_bots.crew_monitor.StaffInvitationForCreation") as mock_staff_creation:
             # 配置 mock_staff_creation 返回一个有效的模拟对象
             mock_staff_obj = mock.MagicMock()
             mock_staff_creation.return_value = mock_staff_obj
