@@ -25,9 +25,9 @@ MONITOR_ROLE_FILTER = os.environ.get("MONITOR_ROLE_FILTER", "CrewMonitor")  # �
 class CrewMonitor:
     """监控器类，用于监听新的Opera和Bot创建事件，并动态启动相应的进程"""
 
-    def __init__(self, signalr_url: str = "http://opera.nti56.com/signalRService"):
+    def __init__(self):
         self.log = get_logger_with_trace_id()
-        self.signalr_client = OperaSignalRClient(url=signalr_url)
+        self.signalr_client = OperaSignalRClient()
         self.bot_tool = BotTool()
         self.staff_tool = StaffTool()
         self.staff_invitation_tool = StaffInvitationTool()

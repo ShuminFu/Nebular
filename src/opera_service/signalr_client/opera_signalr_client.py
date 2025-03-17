@@ -66,8 +66,18 @@ class MessageReceivedArgs:
 
 
 class OperaSignalRClient:
-    def __init__(self, url: str = "http://opera.nti56.com/signalRService", bot_id: Optional[str] = None):
-        self.url = url
+    def __init__(self, url: str = None, bot_id: Optional[str] = None):
+        # 优先使用传入的URL，其次使用OperaWebApiAddress环境变量，最后使用容器内部地址
+        base_url = url or os.getenv("OperaWebApiAddress", "http://opera:8080")
+        # 确保URL以"/"结尾，然后添加"signalr"路径
+        if not base_url.endswith("/"):
+            base_url += "/"
+        self.url = f"{base_url}signalr"
+
+        # 兼容旧版环境变量配置
+        if not url and os.getenv("SIGNALR_SERVICE_URL"):
+            self.url = os.getenv("SIGNALR_SERVICE_URL")
+
         self.client = SignalRClient(self.url)
         self.bot_id = UUID(bot_id) if bot_id else None
         self.snitch_mode: bool = False
@@ -112,6 +122,8 @@ class OperaSignalRClient:
         self.callback_timeout = 130
         self._connection_task = None
         self._health_check_task = None
+
+        self.log.info(f"SignalR客户端初始化完成，服务端URL: {self.url}")  # 添加日志确认最终使用的URL
 
     async def _on_open(self) -> None:
         self.log.info(

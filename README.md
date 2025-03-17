@@ -38,7 +38,8 @@ B --> F[Resource Management]
 
 - [ ] Refactor by MQ + FastAPI + Celery
 - [ ] MCP support
-- [ ] Recurring summon opera
+- [ ] Agent Monitoring with OpenLIT/LangFuse, leveraged by crewai integration
+- [ ] Recurring summon opera in complex flow
 - [x] Implement Hierarchical Process based on CrewAI ✅
 - [x] Basic process management framework ✅
 - [x] Init Prompt Template by CrewManager Spawning

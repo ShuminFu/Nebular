@@ -13,6 +13,8 @@ dependencies = [
     "backoff>=2.2.1,<3",
     "httpx>=0.27.2",
     "crewai>=0.105.0,<0.106",
+    "langfuse>=2.59.7",
+    "openlit>=1.33.18",
 ]
 
 [project.optional-dependencies]
