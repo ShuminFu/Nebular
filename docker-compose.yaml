@@ -1,0 +1,17 @@
+services:
+  nebular:
+    image: ghcr.io/shuminfu/nebular:latest
+    restart: always
+    environment:
+      OperaWebApiAddress: http://opera:8080
+      OTEL_SDK_DISABLED: "true"
+    volumes:
+      - ./nebular/logs:/app/logs
+      - ./nebular/src:/app/src
+      - ./nebular/pyproject.toml:/app/pyproject.toml
+    ports:
+      - 18085:8080
+    depends_on:
+      - opera
+    # 覆盖Dockerfile中的CMD
+    command: ["python", "-m", "src.core.entrypoints.bots_main"] 
