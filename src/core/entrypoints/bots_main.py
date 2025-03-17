@@ -1,12 +1,11 @@
 import asyncio
 import multiprocessing
 import os
-import openlit
 import base64
 from dotenv import load_dotenv
 from src.core.logger_config import get_logger, get_logger_with_trace_id
 from src.core.crew_bots.crew_monitor import CrewMonitor
-
+import litellm
 
 async def main():
     # 加载.env文件中的环境变量
@@ -20,13 +19,23 @@ async def main():
     enable_opentelemetry = os.environ.get("ENABLE_OPENTELEMETRY", "false").lower()
     if enable_opentelemetry in ("true", "1", "yes", "y"):
         log.info("OpenTelemetry已启用，初始化openlit")
-        openlit.init()
-        LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY")
-        LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY")
-        LANGFUSE_AUTH = base64.b64encode(f"{LANGFUSE_PUBLIC_KEY}:{LANGFUSE_SECRET_KEY}".encode()).decode()
-        log.info(f"LANGFUSE_AUTH: {LANGFUSE_AUTH}")
-        OTEL_EXPORTER_OTLP_ENDPOINT = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-        OTEL_EXPORTER_OTLP_HEADERS = f"Authorization=Basic {LANGFUSE_AUTH}"
+        try:
+            import openlit
+
+            openlit.init()
+            LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY")
+            LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY")
+            LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST")
+            LANGFUSE_AUTH = base64.b64encode(f"{LANGFUSE_PUBLIC_KEY}:{LANGFUSE_SECRET_KEY}".encode()).decode()
+            litellm.success_callback = ["langfuse"]
+            litellm.failure_callback = ["langfuse"]
+            log.info(f"LANGFUSE_AUTH: {LANGFUSE_AUTH}")
+            # OTEL_EXPORTER_OTLP_ENDPOINT = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+
+            # OTEL_EXPORTER_OTLP_HEADERS = f"Authorization=Basic {LANGFUSE_AUTH}"
+        except ImportError as e:
+            log.error(f"OpenTelemetry初始化失败: {str(e)}")
+            log.info("程序将继续运行，但没有遥测功能")
     else:
         log.info("OpenTelemetry未启用，跳过openlit初始化")
 
