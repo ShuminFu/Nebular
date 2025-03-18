@@ -650,7 +650,7 @@ class CrewMonitor:
                         self.log.warning("原Monitor Bot不存在，将在下次检查时寻找新的Bot")
                     elif monitor_bot and monitor_bot["isActive"]:
                         # Bot活跃状态正常，不需要重连
-                        self.log.info(f"Monitor Bot状态正常：{monitor_bot['name']} (ID: {self.bot_id})")
+                        self.log.trace(f"Monitor Bot状态正常：{monitor_bot['name']} (ID: {self.bot_id})")
 
                     # 如果需要重连，并且不在冷却期内
                     if need_reconnect:

@@ -477,7 +477,7 @@ wheels = [
 
 [[package]]
 name = "crewai"
-version = "0.105.0"
+version = "0.108.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "appdirs" },
@@ -504,9 +504,9 @@ dependencies = [
     { name = "tomli-w" },
     { name = "uv" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/68/9e/0be0c8183cc6032a73502a26ad934567ef70e1ccade016084a0bf0269def/crewai-0.105.0.tar.gz", hash = "sha256:e8c2873db672de21d850f1975b51b6b50fc7b5df07436fb82c5c0b630de5908f", size = 25399720 }
+sdist = { url = "https://files.pythonhosted.org/packages/0d/3f/26e81b5c14c0591bd73e3bed4c91d7263c07b74a4b4d97baaac17761d9a6/crewai-0.108.0.tar.gz", hash = "sha256:cd7b18f1b1164716bd29fe7562890f101d67d2551258e9ead3c8f4e4027bbe30", size = 25858553 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b6/ae/cb6c7edfa8e8ef275894ed8cbdb0b2a2e6e8f7431a308a657e482794bb93/crewai-0.105.0-py3-none-any.whl", hash = "sha256:2ec8e6941cb97269bec5aa15f3e119928e2e5e694dad01006fc7d0f0681979e1", size = 252089 },
+    { url = "https://files.pythonhosted.org/packages/32/21/461fb300afd721ff585484d12cc783f8edde5561b527ae5e632386a339fb/crewai-0.108.0-py3-none-any.whl", hash = "sha256:9d3d45efe3cb763f9c0399f3eda743c9f0a8d57101d93161b9c3d70aa4bb71d0", size = 265271 },
 ]
 
 [[package]]
@@ -1965,8 +1965,8 @@ dev = [
 requires-dist = [
     { name = "backoff", specifier = ">=2.2.1,<3" },
     { name = "cohere", specifier = ">=5.14.0" },
-    { name = "crewai", specifier = ">=0.105.0,<0.106" },
-    { name = "crewai", marker = "extra == 'crewai'", specifier = ">=0.105.0,<0.106" },
+    { name = "crewai", specifier = ">=0.108.0,<0.109" },
+    { name = "crewai", marker = "extra == 'crewai'", specifier = ">=0.108.0,<0.109" },
     { name = "crewai-tools", marker = "extra == 'crewai'", specifier = ">=0.25.0,<0.26" },
     { name = "fastapi", specifier = ">=0.115.2,<0.116" },
     { name = "httpx", specifier = ">=0.27.2" },
