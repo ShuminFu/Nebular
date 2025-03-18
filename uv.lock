@@ -1974,7 +1974,7 @@ requires-dist = [
     { name = "langfuse", specifier = ">=2.59.7" },
     { name = "loguru", specifier = ">=0.7.2,<0.8" },
     { name = "openlit", specifier = ">=1.33.18" },
-    { name = "opentelemetry-sdk", specifier = ">=1.27.0" },
+    { name = "opentelemetry-sdk", specifier = ">=1.27.0,<1.31.0" },
     { name = "pylint", marker = "extra == 'dev'", specifier = ">=3.3.4,<4" },
     { name = "pysignalr", specifier = ">=1.0.0,<2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.3,<9" },
