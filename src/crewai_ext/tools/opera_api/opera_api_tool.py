@@ -85,7 +85,10 @@ class OperaTool(BaseApiTool):
     }
     """
     args_schema: Type[BaseModel] = OperaToolSchema
-    base_url: str = "http://opera.nti56.com/Opera"
+
+    def _get_base_url(self) -> str:
+        """获取基础URL"""
+        return f"{self._get_api_base_url()}/Opera"
 
     def _run(self, *args, **kwargs) -> str:
         try:
@@ -99,38 +102,36 @@ class OperaTool(BaseApiTool):
             parent_id = kwargs.get("parent_id")
             data = kwargs.get("data")
 
+            base_url = self._get_base_url()
+
             if action == "get_all":
                 params = {"parent_id": parent_id} if parent_id else None
-                result = self._make_request("GET", self.base_url, params=params)
+                result = self._make_request("GET", base_url, params=params)
                 return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 
             elif action == "get":
                 if not opera_id:
                     raise ValueError("获取Opera需要提供opera_id")
-                result = self._make_request("GET", f"{self.base_url}/{opera_id}")
+                result = self._make_request("GET", f"{base_url}/{opera_id}")
                 return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 
             elif action == "create":
                 if not data:
                     raise ValueError("创建Opera需要提供data")
-                result = self._make_request("POST", self.base_url, json=data.model_dump(by_alias=True))
+                result = self._make_request("POST", base_url, json=data.model_dump(by_alias=True))
                 return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 
             elif action == "update":
                 if not opera_id or not data:
                     raise ValueError("更新Opera需要提供opera_id和data")
-                result = self._make_request(
-                    "PUT",
-                    f"{self.base_url}/{opera_id}",
-                    json=data.model_dump(by_alias=True)
-                )
+                result = self._make_request("PUT", f"{base_url}/{opera_id}", json=data.model_dump(by_alias=True))
                 return f"状态码: {result['status_code']}, " + (
                     "Opera更新成功" if result['data'] is None else f"详细内容: {str(result['data'])}")
 
             elif action == "delete":
                 if not opera_id:
                     raise ValueError("删除Opera需要提供opera_id")
-                result = self._make_request("DELETE", f"{self.base_url}/{opera_id}")
+                result = self._make_request("DELETE", f"{base_url}/{opera_id}")
                 return f"状态码: {result['status_code']}, Opera删除成功"
 
             else:

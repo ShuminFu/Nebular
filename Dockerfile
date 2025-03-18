@@ -13,6 +13,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # 安装 uv
 RUN pip install --no-cache-dir uv
 
+# 安装curl用于调试
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # 复制 pyproject.toml 和 README.md 文件
 COPY pyproject.toml README.md ./
 

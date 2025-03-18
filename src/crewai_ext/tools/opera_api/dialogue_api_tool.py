@@ -112,7 +112,7 @@ class DialogueTool(BaseApiTool):
 
     def _get_base_url(self, opera_id: UUID) -> str:
         """获取基础URL"""
-        return f"http://opera.nti56.com/Opera/{opera_id}/Dialogue"
+        return f"{self._get_api_base_url()}/Opera/{opera_id}/Dialogue"
 
     def _run(self, *args, **kwargs) -> str:
         try:

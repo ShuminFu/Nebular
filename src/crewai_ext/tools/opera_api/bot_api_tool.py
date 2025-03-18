@@ -93,7 +93,10 @@ class BotTool(BaseApiTool):
     }
     """
     args_schema: Type[BaseModel] = BotToolSchema
-    base_url: str = "http://opera.nti56.com/Bot"
+
+    def _get_base_url(self) -> str:
+        """获取基础URL"""
+        return f"{self._get_api_base_url()}/Bot"
 
     def _run(self, *args, **kwargs) -> str:
         try:
@@ -106,6 +109,8 @@ class BotTool(BaseApiTool):
             bot_id = kwargs.get("bot_id")
             data = kwargs.get("data")
 
+            base_url = self._get_base_url()
+
             if action == "get_all_staffs":
                 if not bot_id:
                     raise ValueError("获取Bot的Staff信息需要提供bot_id")
@@ -116,44 +121,36 @@ class BotTool(BaseApiTool):
                     'needStaffInvitations': data.get('need_staff_invitations', 1)
                 }
                 # 这里因为没有写BotForGetAllStaffs，所以需要手动构造params
-                result = self._make_request(
-                    "GET", 
-                    f"{self.base_url}/{bot_id}/GetAllStaffs",
-                    params=params
-                )
+                result = self._make_request("GET", f"{base_url}/{bot_id}/GetAllStaffs", params=params)
                 return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 
             elif action == "get_all":
-                result = self._make_request("GET", self.base_url)
+                result = self._make_request("GET", base_url)
                 return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 
             elif action == "get":
                 if not bot_id:
                     raise ValueError("获取Bot需要提供bot_id")
-                result = self._make_request("GET", f"{self.base_url}/{bot_id}")
+                result = self._make_request("GET", f"{base_url}/{bot_id}")
                 return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 
             elif action == "create":
                 if not data:
                     raise ValueError("创建Bot需要提供data")
-                result = self._make_request("POST", self.base_url, json=data.model_dump(by_alias=True))
+                result = self._make_request("POST", base_url, json=data.model_dump(by_alias=True))
                 return f"状态码: {result['status_code']}, 详细内容: {str(result['data'])}"
 
             elif action == "update":
                 if not bot_id or not data:
                     raise ValueError("更新Bot需要提供bot_id和data")
-                result = self._make_request(
-                    "PUT",
-                    f"{self.base_url}/{bot_id}",
-                    json=data.model_dump(by_alias=True)
-                )
+                result = self._make_request("PUT", f"{base_url}/{bot_id}", json=data.model_dump(by_alias=True))
                 return f"状态码: {result['status_code']}, " + (
                     "Bot更新成功" if result['data'] is None else f"详细内容: {str(result['data'])}")
 
             elif action == "delete":
                 if not bot_id:
                     raise ValueError("删除Bot需要提供bot_id")
-                result = self._make_request("DELETE", f"{self.base_url}/{bot_id}")
+                result = self._make_request("DELETE", f"{base_url}/{bot_id}")
                 return f"状态码: {result['status_code']}, Bot删除成功"
 
             else:

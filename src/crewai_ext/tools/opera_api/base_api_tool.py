@@ -10,7 +10,7 @@ import time
 import httpx
 from pydantic import BaseModel, Field
 from crewai.tools.base_tool import BaseTool
-
+import os
 
 class RetryConfig(BaseModel):
     """重试配置类"""
@@ -32,6 +32,10 @@ class BaseApiTool(BaseTool):
     args_schema: Type[BaseModel] = BaseModel
     base_url: str = ""  # 子类需要覆盖这个属性
     retry_config: RetryConfig = RetryConfig()
+
+    def _get_api_base_url(self) -> str:
+        """获取API基础URL，从环境变量中读取，如果不存在则使用默认值"""
+        return os.environ.get("OperaWebApiAddress", "http://opera.nti56.com")
 
     def _make_request(self, method: str, url: str, json: Optional[Dict[str, Any]] = None,
                       params: Optional[Dict[str, Any]] = None, 

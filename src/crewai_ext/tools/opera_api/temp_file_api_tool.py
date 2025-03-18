@@ -1,6 +1,6 @@
 """提供临时文件管理功能的API工具，支持文件的上传、追加和删除操作。"""
 
-from typing import Optional, Type, ClassVar
+from typing import Optional, Type
 from uuid import UUID
 from pydantic import BaseModel, Field
 from src.crewai_ext.tools.opera_api.base_api_tool import BaseApiTool
@@ -57,7 +57,10 @@ class TempFileTool(BaseApiTool):
     - 当临时文件被用作资源文件时会被移出临时目录
     """
     args_schema: Type[BaseModel] = TempFileToolSchema
-    BASE_URL: ClassVar[str] = "http://opera.nti56.com/TempFile"
+
+    def _get_base_url(self) -> str:
+        """获取基础URL"""
+        return f"{self._get_api_base_url()}/TempFile"
 
     def _run(self, *args, **kwargs) -> str:
         """执行临时文件操作
@@ -73,10 +76,12 @@ class TempFileTool(BaseApiTool):
             temp_file_id = kwargs.get("temp_file_id")
             content = kwargs.get("content")
 
+            base_url = self._get_base_url()
+
             if operation == "upload":
                 if not content:
                     raise ValueError("上传操作需要提供文件数据")
-                url = self.BASE_URL
+                url = base_url
                 if temp_file_id:
                     url = f"{url}?id={temp_file_id}"
                 response = self._make_request(
@@ -92,21 +97,14 @@ class TempFileTool(BaseApiTool):
                     raise ValueError("追加操作需要提供临时文件ID")
                 if not content:
                     raise ValueError("追加操作需要提供文件数据")
-                response = self._make_request(
-                    method="POST",
-                    url=f"{self.BASE_URL}/{temp_file_id}",
-                    content=content
-                )
+                response = self._make_request(method="POST", url=f"{base_url}/{temp_file_id}", content=content)
                 result = response['data']
                 return f"成功追加数据到临时文件，ID: {result['id']}, 当前总长度: {result['length']} 字节"
 
             elif operation == "delete":
                 if not temp_file_id:
                     raise ValueError("删除操作需要提供临时文件ID")
-                self._make_request(
-                    method="DELETE",
-                    url=f"{self.BASE_URL}/{temp_file_id}"
-                )
+                self._make_request(method="DELETE", url=f"{base_url}/{temp_file_id}")
                 return f"成功删除临时文件，ID: {temp_file_id}"
 
             else:
