@@ -72,7 +72,7 @@ class OperaSignalRClient:
         # 确保URL以"/"结尾，然后添加"signalr"路径
         if not base_url.endswith("/"):
             base_url += "/"
-        self.url = f"{base_url}signalr"
+        self.url = f"{base_url}signalRService"
 
         # 兼容旧版环境变量配置
         if not url and os.getenv("SIGNALR_SERVICE_URL"):
