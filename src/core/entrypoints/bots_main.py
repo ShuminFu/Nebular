@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from src.core.logger_config import get_logger, get_logger_with_trace_id
 from src.core.crew_bots.crew_monitor import CrewMonitor
 import litellm
-
 async def main():
     # 加载.env文件中的环境变量
     load_dotenv()
@@ -30,9 +29,8 @@ async def main():
             litellm.success_callback = ["langfuse"]
             litellm.failure_callback = ["langfuse"]
             log.info(f"LANGFUSE_AUTH: {LANGFUSE_AUTH}")
-            # OTEL_EXPORTER_OTLP_ENDPOINT = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-
-            # OTEL_EXPORTER_OTLP_HEADERS = f"Authorization=Basic {LANGFUSE_AUTH}"
+            os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = os.environ.get("LANGFUSE_HOST")
+            os.environ["OTEL_EXPORTER_OTLP_HEADERS"] = f"Authorization=Basic {LANGFUSE_AUTH}"
         except ImportError as e:
             log.error(f"OpenTelemetry初始化失败: {str(e)}")
             log.info("程序将继续运行，但没有遥测功能")
