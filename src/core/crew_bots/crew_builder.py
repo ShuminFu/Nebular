@@ -39,9 +39,9 @@ coding_task = Task(
     1. Navigate to the project directory: 
        cd /workspace/my-vue2-project
     2. Install project dependencies using:
-       npm install --force || yarn install --force
+       pnpm install --force
     3. Execute the build process:
-       npm run build || yarn build
+       pnpm run build
     4. Verify build success by checking dist directory:
        ls -l dist/ && [ -d dist ] && echo "Build successful" || echo "Build failed"
     5. Generate file structure report:
