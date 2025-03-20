@@ -13,16 +13,15 @@ from src.crewai_ext.config.llm_setup import llm
 from crewai_tools import CodeInterpreterTool
 
 # 使用相对路径
-dockerfile_rel_path = "src/crewai_ext/config/dockers/FE.Dockerfile"
+dockerfile_rel_path = "src/crewai_ext/config/dockers/"
 user_dockerfile_path = os.path.join(project_root, dockerfile_rel_path)
 if not os.path.exists(user_dockerfile_path):
     raise FileNotFoundError(f"Dockerfile not found in {user_dockerfile_path}")
 
 # Initialize the tool
-code_interpreter = CodeInterpreterTool(
-    user_dockerfile_path=user_dockerfile_path,
-)
-
+code_interpreter = CodeInterpreterTool()
+code_interpreter.user_dockerfile_path = user_dockerfile_path
+code_interpreter.default_image_tag = "vue2-builder:latest"
 # Define an agent that focuses on Vue2 project compilation
 programmer_agent = Agent(
     role="Vue2 Build Engineer",
@@ -36,12 +35,19 @@ programmer_agent = Agent(
 # Task to compile the Vue2 project and return file structure
 coding_task = Task(
     description="""
-    Using the Docker container configured with FE.Dockerfile:
-    1. Compile the Vue2 project located at /workspace/my-vue2-project or /app/project/my-vue2-project
-    2. Execute the build process using 'yarn build' or 'npm run build'
-    3. After compilation, list and return the complete file structure of the output in the dist directory
-    4. Analyze the compiled assets including JS, CSS, and HTML files
-    5. Provide a detailed summary of the build output and file structure
+    Using the Docker container FROM node:18-alpine:
+    1. Navigate to the project directory: 
+       cd /workspace/my-vue2-project
+    2. Install project dependencies using:
+       npm install --force || yarn install --force
+    3. Execute the build process:
+       npm run build || yarn build
+    4. Verify build success by checking dist directory:
+       ls -l dist/ && [ -d dist ] && echo "Build successful" || echo "Build failed"
+    5. Generate file structure report:
+       find dist -type f -exec ls -lh {} \; || tree -L 5 dist
+    6. Analyze compiled assets (JS/CSS/HTML) sizes and dependencies
+    7. Provide exact file paths and their content hashes，DO NOT mock or hallucinate or guess the expected file structure.
     
     The Dockerfile has been configured to automatically display the compiled file structure.
     """,
